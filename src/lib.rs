@@ -1,52 +1,143 @@
-pub mod lexer;
-pub mod tokenizer;
 pub mod spec;
+pub mod tokenizer;
+pub mod lexer;
+pub mod parser;
+pub mod syntax;
 
 #[cfg(test)]
 mod tests {
-    //extension
-    mod rv32i {
-        /* lui, auipc, addi, andi, ori, xori, add, sub, and, or, xor, sll, srl, sra, fence, slti, sltiu, slli, srli, srai, slt, sltu, lw, sw */
-
+    //intel syntax
+    mod intel {
         use super::super::*;
-        
+
         #[test]
-        fn get_tokens_intel_0() {
+        fn tokenize_ignore_comments(){
+            let code = "
+                //this is gonna be great\n
+
+                //awesome
+            ";
+            let expected: Vec<String> = vec![];
+            let tokenizer = syntax::intel::Tokenizer;
+            let res: Vec<String> = tokenizer::get_tokens(&tokenizer, code);
+            assert_eq!(res, expected);
+        }
+        #[test]
+        fn tokenize_words(){
+            let code = "abc paulista oloco";
+            let expected = [
+                "abc", "paulista", "oloco",
+            ].map(|s| String::from(s));
+            let tokenizer = syntax::intel::Tokenizer;
+            let res: Vec<String> = tokenizer::get_tokens(&tokenizer, code);
+            assert_eq!(res, expected);
+        }
+
+        #[test]
+        fn tokenize_commas_parenthesis(){
+            let code = "a, b, c(d, e(f)g, h";
+            let expected: Vec<String> = 
+                code.chars()
+                .filter(|ch| !matches!(ch, ' ' | '\n') )
+                .map(|ch| String::from(ch))
+                .collect();
+            let tokenizer = syntax::intel::Tokenizer;
+            let res: Vec<String> = tokenizer::get_tokens(&tokenizer, code);
+            assert_eq!(res, expected);
+        }
+
+        #[test]
+        fn tokenize_labels(){
+            let code = "
+                main:
+                loop2:
+            ";
+            let expected: Vec<String> = vec![String::from("main:"), String::from("loop2:")];
+            let tokenizer = syntax::intel::Tokenizer;
+            let res: Vec<String> = tokenizer::get_tokens(&tokenizer, code);
+            assert_eq!(res, expected);
+        }
+
+        #[test]
+        fn tokenize_sections(){
+            let code = "
+                .globl
+                .text
+            ";
+            let expected: Vec<String> = vec![String::from(".globl"), String::from(".text")];
+            let tokenizer = syntax::intel::Tokenizer;
+            let res: Vec<String> = tokenizer::get_tokens(&tokenizer, code);
+            assert_eq!(res, expected);
+        }
+
+        #[test]
+        fn tokenize_numbers(){
+            let code = "-1 +3 -66 1000";
+            let expected: Vec<String> = vec![
+                String::from("-1"),
+                String::from("+3"),
+                String::from("-66"),
+                String::from("1000")
+            ];
+            let tokenizer = syntax::intel::Tokenizer;
+            let res: Vec<String> = tokenizer::get_tokens(&tokenizer, code);
+            assert_eq!(res, expected);
+        }
+    
+        #[test]
+        fn tokenize_binary_ops(){
+            let code = "
+                loop:   beq  x11, x0,  exit
+                        add  x11, x5 + 5,  x0
+                        beq  x0,  3 + -9,  loop
+            ";
+            let expected = [
+                "loop:", "beq", "x11", ",", "x0", ",", "exit",
+                "add", "x11", ",", "x5", "+", "5", ",", "x0",
+                "beq", "x0", ",", "3", "+", "-9", ",", "loop",
+            ].map(|s| String::from(s));
+            let tokenizer = syntax::intel::Tokenizer;
+            let res: Vec<String> = tokenizer::get_tokens(&tokenizer, code);
+            assert_eq!(res, expected);
+        }
+
+        /* lui, auipc, addi, andi, ori, xori, add, sub, and, or, xor, sll, srl, sra, fence, slti, sltiu, slli, srli, srai, slt, sltu, lw, sw */
+        #[test]
+        #[ignore]
+        fn tokenize_rv32i(){
+            todo!();
+        }
+
+        #[test]
+        fn tokenize_strings(){
+            let code = "\"isso ai\"  \"esse \\\"cara\\\"\"";
+            let expected = [
+                "\"isso ai\"", "\"esse \\\"cara\\\"\"",
+            ].map(|s| String::from(s));
+            let tokenizer = syntax::intel::Tokenizer;
+            let res: Vec<String> = tokenizer::get_tokens(&tokenizer, code);
+            assert_eq!(res, expected);
+        }
+
+        #[test]
+        fn tokenize_code0() {
             let code = "
                 loop:   beq  x11, x0,  exit
                         add  x11, x5,  x0
                         beq  x0,  x0,  loop
             ";
-
-            let expected = vec![
-                String::from("loop:"),
-                String::from("beq"),
-                String::from("x11"),
-                String::from(","),
-                String::from("x0"),
-                String::from(","),
-                String::from("exit"),
-                String::from("add"),
-                String::from("x11"),
-                String::from(","),
-                String::from("x5"),
-                String::from(","),
-                String::from("x0"),
-                String::from("beq"),
-                String::from("x0"),
-                String::from(","),
-                String::from("x0"),
-                String::from(","),
-                String::from("loop"),
-            ];
-
-            let intel_tokenizer = tokenizer::IntelTokenizer{};
-            let v: Vec<String> = tokenizer::get_tokens(&intel_tokenizer, code);
-            assert_eq!(v, expected);
+            let expected = [
+                "loop:", "beq", "x11", ",", "x0", ",", "exit",
+                "add", "x11", ",", "x5", ",", "x0",
+                "beq", "x0", ",", "x0", ",", "loop",
+            ].map(|s| String::from(s));
+            let tokenizer = syntax::intel::Tokenizer;
+            let res: Vec<String> = tokenizer::get_tokens(&tokenizer, code);
+            assert_eq!(res, expected);
         }
 
         #[test]
-        fn get_tokens_intel_1() {
+        fn tokenize_code1() {
             let code = "
                     .text
                     .globl main
@@ -56,51 +147,25 @@ mod tests {
                     sw   s0, 8(sp)
                     addi s0, sp, 16
             ";
-
-            let expected = vec![
-                String::from(".text"),
-                String::from(".globl"),
-                String::from("main"),
-                String::from("main:"),
-                String::from("addi"),
-                String::from("sp"),
-                String::from(","),
-                String::from("sp"),
-                String::from(","),
-                String::from("-16"),
-                String::from("sw"),
-                String::from("ra"),
-                String::from(","),
-                String::from("12"),
-                String::from("("),
-                String::from("sp"),
-                String::from(")"),
-                String::from("sw"),
-                String::from("s0"),
-                String::from(","),
-                String::from("8"),
-                String::from("("),
-                String::from("sp"),
-                String::from(")"),
-                String::from("addi"),
-                String::from("s0"),
-                String::from(","),
-                String::from("sp"),
-                String::from(","),
-                String::from("16"),
-            ];
-
-            let intel_tokenizer = tokenizer::IntelTokenizer{};
-            let v: Vec<String> = tokenizer::get_tokens(&intel_tokenizer, code);
-            assert_eq!(v, expected);
+            let expected = [
+                ".text",
+                ".globl", "main",
+                "main:",
+                "addi", "sp", ",", "sp", ",", "-16",
+                "sw", "ra", ",", "12", "(", "sp", ")",
+                "sw", "s0", ",", "8", "(", "sp", ")",
+                "addi", "s0", ",", "sp", ",", "16",
+            ].map(|s| String::from(s));
+            let tokenizer = syntax::intel::Tokenizer;
+            let res: Vec<String> = tokenizer::get_tokens(&tokenizer, code);
+            assert_eq!(res, expected);
         }
 
         #[test]
-        fn get_tokens_intel_2() {
+        fn tokenize_code2() {
             let code = "
                     .text
-                    .globl main
-                //this is gonna be great\n
+                    .globl main //this is gonna be great\n
                 main:
                     li   a0, 0
 
@@ -109,133 +174,19 @@ mod tests {
                     addi sp, sp, 16
                     ret
             ";
-
-            let expected = vec![
-                String::from(".text"),
-                String::from(".globl"),
-                String::from("main"),
-                String::from("main:"),
-                String::from("li"),
-                String::from("a0"),
-                String::from(","),
-                String::from("0"),
-                String::from("lw"),
-                String::from("ra"),
-                String::from(","),
-                String::from("12"),
-                String::from("("),
-                String::from("sp"),
-                String::from(")"),
-                String::from("lw"),
-                String::from("s0"),
-                String::from(","),
-                String::from("8"),
-                String::from("("),
-                String::from("sp"),
-                String::from(")"),
-                String::from("addi"),
-                String::from("sp"),
-                String::from(","),
-                String::from("sp"),
-                String::from(","),
-                String::from("16"),
-                String::from("ret"),
-            ];
-
-            let intel_tokenizer = tokenizer::IntelTokenizer{};
-            let v: Vec<String> = tokenizer::get_tokens(&intel_tokenizer, code);
-            assert_eq!(v, expected);
-        }
-
-        #[test]
-        fn get_tokens_intel_3() {
-            let code = "
-                    .text
-                    .globl main
-                //this is gonna be great\n
-                main:
-                    li   a0, 0
-
-                    lw   ra, 12(sp)
-                    lw   s0, 8(sp)
-                    addi sp, sp, 16
-                    ret
-            ";
-
-            let expected = vec![
-                String::from(".text"),
-                String::from(".globl"),
-                String::from("main"),
-                String::from("main:"),
-                String::from("li"),
-                String::from("a0"),
-                String::from(","),
-                String::from("0"),
-                String::from("lw"),
-                String::from("ra"),
-                String::from(","),
-                String::from("12"),
-                String::from("("),
-                String::from("sp"),
-                String::from(")"),
-                String::from("lw"),
-                String::from("s0"),
-                String::from(","),
-                String::from("8"),
-                String::from("("),
-                String::from("sp"),
-                String::from(")"),
-                String::from("addi"),
-                String::from("sp"),
-                String::from(","),
-                String::from("sp"),
-                String::from(","),
-                String::from("16"),
-                String::from("ret"),
-            ];
-
-            let intel_tokenizer = tokenizer::IntelTokenizer{};
-            let v: Vec<String> = tokenizer::get_tokens(&intel_tokenizer, code);
-            assert_eq!(v, expected);
-        }
-        
-        #[test]
-        fn get_tokens_intel_4() {
-            let code = "
-                loop:   beq  x11, x0,  exit
-                        add  x11, x5 + 5,  x0
-                        beq  x0,  3 + -9,  loop
-            ";
-
-            let expected = vec![
-                String::from("loop:"),
-                String::from("beq"),
-                String::from("x11"),
-                String::from(","),
-                String::from("x0"),
-                String::from(","),
-                String::from("exit"),
-                String::from("add"),
-                String::from("x11"),
-                String::from(","),
-                String::from("x5"),
-                String::from("+"),
-                String::from("5"),
-                String::from(","),
-                String::from("x0"),
-                String::from("beq"),
-                String::from("x0"),
-                String::from(","),
-                String::from("3"),
-                String::from("+"),
-                String::from("-9"),
-                String::from(","),
-                String::from("loop"),
-            ];
-
-            let intel_tokenizer = tokenizer::IntelTokenizer{};
-            let v: Vec<String> = tokenizer::get_tokens(&intel_tokenizer, code);
-            assert_eq!(v, expected);
+            let expected = [
+                ".text",
+                ".globl", "main",
+                "main:",
+                "li", "a0", ",", "0",
+                "lw", "ra", ",", "12", "(", "sp", ")",
+                "lw", "s0", ",", "8", "(", "sp", ")",
+                "addi", "sp", ",", "sp", ",", "16",
+                "ret",
+            ].map(|s| String::from(s));
+            let tokenizer = syntax::intel::Tokenizer;
+            let res: Vec<String> = tokenizer::get_tokens(&tokenizer, code);
+            assert_eq!(res, expected);
         }
     }
 }

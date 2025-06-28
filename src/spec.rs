@@ -35,10 +35,10 @@ pub enum Register {
     PC,
 }
 
-//all extensions should come here
+//all extensions should go here
 pub mod extensions {
     pub mod rv32i {
-        #[derive(Debug)]
+        #[derive(Debug, Copy, Clone)]
         pub enum Opcode {
             LUI,
             AUIPC,
@@ -67,3 +67,4 @@ pub mod extensions {
         }
     }
 }
+

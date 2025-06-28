@@ -1,21 +1,13 @@
-mod lexer;
-mod tokenizer;
 mod spec;
+mod tokenizer;
+mod lexer;
+mod parser;
+mod syntax;
+
 use lexer::Lexer;
+use crate::parser::Parser;
 
 fn main() {
-    // if let Some(word) = std::env::args().nth(1) {
-    //     let pat = Regex::new(r"[a-zA-Z_]+").unwrap();
-    //     println!("{}", pat.is_match(&word));
-    // }
-
-    // let a: Vec<&str> = RISCV32_ASSEMBLY.split_whitespace().collect();
-    // println!("{a:?}");
-
-    // let mut keys = HashMap::new();
-    // keys.insert(',', ());
-
-    let tokenizer = tokenizer::IntelTokenizer;
     let code = "
             .text
             .globl main
@@ -28,8 +20,14 @@ fn main() {
             addi x3, sp, 16 + 9
             ret
     ";
-    let lexer = lexer::IntelLexer;
-    let lexemes = lexer.parse(&tokenizer, code);
-    println!("{:?}", lexemes);
-    // lexer::parse(&tokenizer, code);
+
+    let tokenizer = syntax::intel::Tokenizer;
+    let lexer = syntax::intel::Lexer;
+    let parser = syntax::intel::Parser;
+
+    let tokens = tokenizer::get_tokens(&tokenizer, code);
+    let lexemes = lexer.parse(tokens);
+    let stats = parser.get_instructions(&lexemes);
+
+    println!("{:?}", stats);
 }
