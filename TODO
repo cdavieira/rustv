@@ -1,1 +1,266 @@
 read syntax.rs TODOs (line 83 and others)
+
+lexer isnt really a lexer, more like a categorizer/classifier/parser
+
+
+//lexer.rs
+//TODO: one improvement to this would be to require the 'Token' type used by this lexer to be an
+//Enum/Struct which implements the 'classify' method (a trait which has this method, you know),
+//which would basically do what all 'is_*' methods currently do, but in a single place. This would
+//allow to rewrite 'str_to_token'
+
+//TODO: maybe i could separate the Lexer trait into two: one very simple, which has the
+//signature/definition of str_to_token and parse; another one which has the signatures/definitions
+//of 'is_*' and 'str_to_*' and which actually uses a predefined enum also declared here which has
+//the variants 'Number, String, Symbol, ...'. The implementation of this lexer would then have the
+//job to map the words from the tokenizer into that Enum.
+
+// pub trait OldLexer {
+//     type Token;
+//
+//     //if the parser does not support one of these features, it can then issue this by returning
+//     //false for each 'is_*' method associated
+//     fn is_number(&self, token: &str) -> bool {
+//         token.parse::<i32>().is_ok()
+//     }
+//     fn is_string(&self, token: &str) -> bool {
+//         token.starts_with('"') && token.ends_with('"')
+//     }
+//     fn is_symbol(&self, token: &str) -> bool;
+//     fn is_register(&self, token: &str) -> bool;
+//     fn is_opcode(&self, token: &str) -> bool;
+//     fn is_identifier(&self, token: &str) -> bool;
+//     fn is_section(&self, token: &str) -> bool;
+//     fn is_directive(&self, token: &str) -> bool;
+//     fn is_custom(&self, token: &str) -> bool;
+//     fn is_label(&self, token: &str) -> bool;
+//
+//     fn str_to_number(&self, token: &str) -> Option<Self::Token>;
+//     fn str_to_string(&self, token: &str) -> Option<Self::Token>;
+//     fn str_to_symbol(&self, token: &str) -> Option<Self::Token>;
+//     fn str_to_register(&self, token: &str) -> Option<Self::Token>;
+//     fn str_to_opcode(&self, token: &str) -> Option<Self::Token>;
+//     fn str_to_identifier(&self, token: &str) -> Option<Self::Token>;
+//     fn str_to_section(&self, token: &str) -> Option<Self::Token>;
+//     fn str_to_directive(&self, token: &str) -> Option<Self::Token>;
+//     fn str_to_custom(&self, token: &str) -> Option<Self::Token>;
+//     fn str_to_label(&self, token: &str) -> Option<Self::Token>;
+//
+//     //this can be reimplemented to prioritize these categories differently
+//     fn str_to_token(&self, token: &str) -> Self::Token {
+//         let sanitized = token.trim().to_lowercase();
+//         if self.is_opcode(&sanitized) {
+//             self.str_to_opcode(token).expect("str2opcode")
+//         }
+//         else if self.is_custom(&sanitized) {
+//             self.str_to_custom(token).expect("str2custom")
+//         }
+//         else if self.is_symbol(token) {
+//             self.str_to_symbol(token).expect("str2symbol")
+//         }
+//         else if self.is_number(&sanitized) {
+//             self.str_to_number(token).expect("str2number")
+//         }
+//         else if self.is_section(token) {
+//             self.str_to_section(token).expect("str2section")
+//         }
+//         else if self.is_label(token)  {
+//             self.str_to_label(token).expect("str2label")
+//         }
+//         else if self.is_string(token) {
+//             self.str_to_string(token).expect("str2string")
+//         }
+//         else if self.is_register(&sanitized)   {
+//             self.str_to_register(token).expect("str2register")
+//         }
+//         else if self.is_identifier(token) {
+//             self.str_to_identifier(token).expect("str2id")
+//         }
+//         else if self.is_directive(token)  {
+//             self.str_to_directive(token).expect("str2directive")
+//         }
+//         else {
+//             panic!("no conversion from str '{}' to token", token);
+//         }
+//     }
+//     fn parse(&self, tokens: Vec<String>) -> Vec<Self::Token> {
+//         let mut lexemes = Vec::new();
+//
+//         for token in tokens {
+//             lexemes.push(self.str_to_token(&token));
+//         }
+//
+//         lexemes
+//     }
+// }
+
+
+//syntax.rs
+    impl lexer::OldLexer for Lexer {
+        type Token = Token;
+
+        fn is_symbol(&self, token: &str) -> bool {
+            matches!(token, "," | "(" | ")" | "+" | "-" | "ret")
+        }
+
+        fn is_register(&self, token: &str) -> bool {
+            let is_xreg = register_matches(token, "x", 0..32);
+            let is_treg = register_matches(token, "t", 0..7);
+            let is_areg = register_matches(token, "a", 0..8);
+            let is_sreg = register_matches(token, "s", 0..12);
+            let is_symbolic = ["zero", "ra", "sp", "gp", "tp", "fp", "pc"].contains(&token);
+            is_xreg || is_treg || is_areg || is_sreg || is_symbolic
+        }
+
+        fn is_opcode(&self, token: &str) -> bool {
+            let rv32i = ["sw", "lw", "addi"];
+            rv32i.contains(&token)
+        }
+
+        fn is_identifier(&self, token: &str) -> bool {
+            let mut chs = token.chars();
+            let f: char = chs.nth(0).unwrap_or(' ');
+            if f.is_numeric() {
+                return false;
+            }
+            for ch in chs {
+                if !ch.is_ascii_alphanumeric() {
+                    return false;
+                }
+            }
+            true
+        }
+
+        fn is_section(&self, token: &str) -> bool {
+            token.starts_with('.')
+        }
+
+        fn is_directive(&self, _: &str) -> bool {
+            false
+        }
+
+        fn is_custom(&self, token: &str) -> bool {
+            let pseudo = ["li"];
+            pseudo.contains(&token)
+        }
+
+        fn is_label(&self, token: &str) -> bool {
+            token.ends_with(':')
+        }
+
+        fn str_to_number(&self, token: &str) -> Option<Self::Token> {
+            let Ok(n) = token.parse::<i32>() else {
+                return None;
+            };
+            Some(Token::NUMBER(n))
+        }
+
+        fn str_to_string(&self, token: &str) -> Option<Self::Token> {
+            Some(Token::STR(token.trim_matches('"').to_string()))
+        }
+
+        fn str_to_symbol(&self, token: &str) -> Option<Self::Token> {
+            match token {
+                "ret" => Some(Token::RET),
+                "," => Some(Token::COMMA),
+                "(" => Some(Token::LPAR),
+                ")" => Some(Token::RPAR),
+                "+" => Some(Token::PLUS),
+                "-" => Some(Token::MINUS),
+                _ => None
+            }
+        }
+
+        fn str_to_opcode(&self, token: &str) -> Option<Self::Token> {
+            match token {
+                "addi" => Some(Token::OP(Opcode::RV32I(extensions::rv32i::Opcode::ADDI))),
+                "sw"   => Some(Token::OP(Opcode::RV32I(extensions::rv32i::Opcode::SW))),
+                "lw"   => Some(Token::OP(Opcode::RV32I(extensions::rv32i::Opcode::LW))),
+                _ => None
+            }
+        }
+
+        fn str_to_identifier(&self, token: &str) -> Option<Self::Token> {
+            Some(Token::NAME(token.to_string()))
+        }
+
+        fn str_to_section(&self, token: &str) -> Option<Self::Token> {
+            Some(Token::SECTION(token[1..].to_string()))
+        }
+
+        fn str_to_directive(&self, _: &str) -> Option<Self::Token> {
+            None
+        }
+
+        fn str_to_register(&self, token: &str) -> Option<Self::Token> {
+            let reg = match token.trim().to_lowercase().as_str() {
+                "x0" | "zero" => Some(Register::X0),
+                "x1" | "ra"   => Some(Register::X1),
+                "x2" | "sp"   => Some(Register::X2),
+                "x3" | "gp"   => Some(Register::X3),
+                "x4" | "tp"   => Some(Register::X4),
+                "x5" | "t0"   => Some(Register::X5),
+                "x6" | "t1"   => Some(Register::X6),
+                "x7" | "t2"   => Some(Register::X7),
+                "x8" | "s0" | "fp" => Some(Register::X8),
+                "x9" | "s1"   => Some(Register::X9),
+                "x10" | "a0"  => Some(Register::X10),
+                "x11" | "a1"  => Some(Register::X11),
+                "x12" | "a2"  => Some(Register::X12),
+                "x13" | "a3"  => Some(Register::X13),
+                "x14" | "a4"  => Some(Register::X14),
+                "x15" | "a5"  => Some(Register::X15),
+                "x16" | "a6"  => Some(Register::X16),
+                "x17" | "a7"  => Some(Register::X17),
+                "x18" | "s2"  => Some(Register::X18),
+                "x19" | "s3"  => Some(Register::X19),
+                "x20" | "s4"  => Some(Register::X20),
+                "x21" | "s5"  => Some(Register::X21),
+                "x22" | "s6"  => Some(Register::X22),
+                "x23" | "s7"  => Some(Register::X23),
+                "x24" | "s8"  => Some(Register::X24),
+                "x25" | "s9"  => Some(Register::X25),
+                "x26" | "s10" => Some(Register::X26),
+                "x27" | "s11" => Some(Register::X27),
+                "x28" | "t3"  => Some(Register::X27),
+                "x29" | "t4"  => Some(Register::X27),
+                "x30" | "t5"  => Some(Register::X30),
+                "x31" | "t6"  => Some(Register::X31),
+                "pc" => Some(Register::PC),
+                _ => None
+            };
+            let Some(reg) = reg else {
+                return None;
+            };
+            Some(Token::REG(reg))
+        }
+
+        fn str_to_custom(&self, token: &str) -> Option<Self::Token> {
+            match token {
+                "li" => Some(Token::PSEUDO(Pseudo::LI)),
+                _ => None
+            }
+        }
+
+        fn str_to_label(&self, token: &str) -> Option<Self::Token> {
+            Some(Token::LABEL(token.trim_end_matches(':').to_string()))
+        }
+    }
+
+
+
+pub trait Lexer: Classifier<Token = <Self as Lexer>::Token> {
+    type Token;
+
+    fn parse(&self, tokens: Vec<String>) -> Vec<<Self as Lexer>::Token> {
+        let mut lexemes = Vec::new();
+
+        for token in tokens {
+            if let Some(lex) = self.str_to_token(&token) {
+                lexemes.push(lex);
+            }
+        }
+
+        lexemes
+    }
+}
