@@ -25,9 +25,9 @@ mod tests {
         #[test]
         fn tokenize_words(){
             let code = "abc paulista oloco";
-            let expected = [
-                "abc", "paulista", "oloco",
-            ].map(|s| String::from(s));
+            let expected: Vec<String> = code
+                .split_whitespace()
+                .map(|s| String::from(s)).collect();
             let tokenizer = syntax::intel::Tokenizer;
             let res: Vec<String> = tokenizer::get_tokens(&tokenizer, code);
             assert_eq!(res, expected);
@@ -36,8 +36,7 @@ mod tests {
         #[test]
         fn tokenize_commas_parenthesis(){
             let code = "a, b, c(d, e(f)g, h";
-            let expected: Vec<String> = 
-                code.chars()
+            let expected: Vec<String> = code.chars()
                 .filter(|ch| !matches!(ch, ' ' | '\n') )
                 .map(|ch| String::from(ch))
                 .collect();
@@ -73,12 +72,7 @@ mod tests {
         #[test]
         fn tokenize_numbers(){
             let code = "-1 +3 -66 1000";
-            let expected: Vec<String> = vec![
-                String::from("-1"),
-                String::from("+3"),
-                String::from("-66"),
-                String::from("1000")
-            ];
+            let expected: Vec<String> = code.split_whitespace().map(|s| String::from(s)).collect();
             let tokenizer = syntax::intel::Tokenizer;
             let res: Vec<String> = tokenizer::get_tokens(&tokenizer, code);
             assert_eq!(res, expected);

@@ -20,12 +20,7 @@ pub mod intel {
         }
 
         fn is_unit(&self, ch: char) -> bool {
-            // matches!(ch, ',' | '(' |')');
-            match ch {
-                // ':' | ',' | '.' | '(' | ')' | '+' | '-' => true,
-                ',' | '(' | ')' => true,
-                _ => false
-            }
+            matches!(ch, ',' | '(' |')')
         }
 
         fn is_comment(&self, ch: char) -> bool {
@@ -80,19 +75,26 @@ pub mod intel {
 
     /* Lexer */
 
+    //TODO: how to simplify the process of extending supported specifications?
+    //should i perhaps use interfaces for that? if so, how?
+    //Maybe i could implement methods into the enum to do that....
     #[derive(Debug)]
-
     pub enum Pseudo {
         LI,
     }
 
-    #[derive(Debug)]
+    #[derive(Debug, Copy, Clone)]
+    pub enum Opcode {
+        RV32I(extensions::rv32i::Opcode),
+    }
 
+    #[derive(Debug)]
     pub enum Token {
-        OP(extensions::rv32i::Opcode),
+        OP(Opcode),
         PSEUDO(Pseudo),
         REG(Register),
         NAME(String),
+        STR(String),
         SECTION(String),
         LABEL(String),
         NUMBER(i32),
@@ -104,55 +106,54 @@ pub mod intel {
         COMMA,
     }
 
-    impl Lexer {
-        fn is_register(raw: &str) -> bool {
-            let s = raw.trim().to_lowercase();
-            let is_xreg = {
-                let x = &s[0..1];
-                let n = &s[1..];
-                x.to_lowercase() == "x" && n.parse::<i32>().is_ok()
-            };
-            let is_pc = s == "pc";
-            is_xreg || is_pc
-        }
+    //TODO: create interface for this?
+    fn is_register(raw: &str) -> bool {
+        let s = raw.trim().to_lowercase();
+        let is_xreg = {
+            let x = &s[0..1];
+            let n = &s[1..];
+            x == "x" && n.parse::<i32>().is_ok()
+        };
+        let is_pc = s == "pc";
+        is_xreg || is_pc
+    }
 
-        fn str_to_register(s: &str) -> Option<Register> {
-            match s.trim().to_lowercase().as_str() {
-                "x0" => Some(Register::X0),
-                "x1" => Some(Register::X1),
-                "x2" => Some(Register::X2),
-                "x3" => Some(Register::X3),
-                "x4" => Some(Register::X4),
-                "x5" => Some(Register::X5),
-                "x6" => Some(Register::X6),
-                "x7" => Some(Register::X7),
-                "x8" => Some(Register::X8),
-                "x9" => Some(Register::X9),
-                "x10" => Some(Register::X10),
-                "x11" => Some(Register::X11),
-                "x12" => Some(Register::X12),
-                "x13" => Some(Register::X13),
-                "x14" => Some(Register::X14),
-                "x15" => Some(Register::X15),
-                "x16" => Some(Register::X16),
-                "x17" => Some(Register::X17),
-                "x18" => Some(Register::X18),
-                "x19" => Some(Register::X19),
-                "x20" => Some(Register::X20),
-                "x21" => Some(Register::X21),
-                "x22" => Some(Register::X22),
-                "x23" => Some(Register::X23),
-                "x24" => Some(Register::X24),
-                "x25" => Some(Register::X25),
-                "x26" => Some(Register::X26),
-                "x27" => Some(Register::X27),
-                "x28" => Some(Register::X28),
-                "x29" => Some(Register::X29),
-                "x30" => Some(Register::X30),
-                "x31" => Some(Register::X31),
-                "pc" => Some(Register::PC),
-                _ => None
-            }
+    fn str_to_register(s: &str) -> Option<Register> {
+        match s.trim().to_lowercase().as_str() {
+            "x0" => Some(Register::X0),
+            "x1" => Some(Register::X1),
+            "x2" => Some(Register::X2),
+            "x3" => Some(Register::X3),
+            "x4" => Some(Register::X4),
+            "x5" => Some(Register::X5),
+            "x6" => Some(Register::X6),
+            "x7" => Some(Register::X7),
+            "x8" => Some(Register::X8),
+            "x9" => Some(Register::X9),
+            "x10" => Some(Register::X10),
+            "x11" => Some(Register::X11),
+            "x12" => Some(Register::X12),
+            "x13" => Some(Register::X13),
+            "x14" => Some(Register::X14),
+            "x15" => Some(Register::X15),
+            "x16" => Some(Register::X16),
+            "x17" => Some(Register::X17),
+            "x18" => Some(Register::X18),
+            "x19" => Some(Register::X19),
+            "x20" => Some(Register::X20),
+            "x21" => Some(Register::X21),
+            "x22" => Some(Register::X22),
+            "x23" => Some(Register::X23),
+            "x24" => Some(Register::X24),
+            "x25" => Some(Register::X25),
+            "x26" => Some(Register::X26),
+            "x27" => Some(Register::X27),
+            "x28" => Some(Register::X28),
+            "x29" => Some(Register::X29),
+            "x30" => Some(Register::X30),
+            "x31" => Some(Register::X31),
+            "pc" => Some(Register::PC),
+            _ => None
         }
     }
 
@@ -161,9 +162,9 @@ pub mod intel {
 
         fn str_to_token(&self, token: &str) -> Token {
             match token.to_lowercase().as_str() {
-                "addi" => Token::OP(extensions::rv32i::Opcode::ADDI),
-                "sw" => Token::OP(extensions::rv32i::Opcode::SW),
-                "lw" => Token::OP(extensions::rv32i::Opcode::LW),
+                "addi" => Token::OP(Opcode::RV32I(extensions::rv32i::Opcode::ADDI)),
+                "sw" => Token::OP(Opcode::RV32I(extensions::rv32i::Opcode::SW)),
+                "lw" => Token::OP(Opcode::RV32I(extensions::rv32i::Opcode::LW)),
                 "li" => Token::PSEUDO(Pseudo::LI),
                 "ret" => Token::RET,
                 "," => Token::COMMA,
@@ -179,9 +180,9 @@ pub mod intel {
                     } else if token.ends_with(':') {
                         Token::LABEL(token.trim_end_matches(':').to_string())
                     } else if token.starts_with('"') && token.ends_with('"') {
-                        Token::NAME(token.trim_matches('"').to_string())
-                    } else if Self::is_register(token) {
-                        Token::REG(Self::str_to_register(token).unwrap())
+                        Token::STR(token.trim_matches('"').to_string())
+                    } else if is_register(token) {
+                        Token::REG(str_to_register(token).unwrap())
                     } else {
                         Token::NAME(token.to_string())
                     }
@@ -196,7 +197,7 @@ pub mod intel {
 
     #[derive(Debug)]
     pub enum Statement {
-        Instruction{opcode: extensions::rv32i::Opcode, args: Vec<Token>},
+        Instruction{opcode: Opcode, args: Vec<Token>},
         Directive(String),
         Label(String),
     }
@@ -208,7 +209,12 @@ pub mod intel {
 
         fn token_to_stat(&self, token: &Self::Token) -> Option<Self::Statement> {
             match token {
-                Token::OP(opcode) => Some(Statement::Instruction { opcode: *opcode, args: vec![] }),
+                Token::OP(opcode) => {
+                    Some(Statement::Instruction {
+                        opcode: *opcode,
+                        args: vec![]
+                    })
+                }
                 Token::LABEL(l) => Some(Statement::Label(String::from(l))),
                 Token::SECTION(s) => Some(Statement::Directive(String::from(s))),
                 _ => None
@@ -222,7 +228,7 @@ pub mod intel {
             match s {
                 Statement::Instruction{opcode, args} => {
                     match opcode {
-                        extensions::rv32i::Opcode::ADD => {
+                        Opcode::RV32I(extensions::rv32i::Opcode::ADD) => {
                             //first param: read until field separator (comma)
                             //second param: read until 'token_to_stat' returns something other than None
                             todo!();
