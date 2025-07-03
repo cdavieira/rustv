@@ -3,8 +3,11 @@ mod tokenizer;
 mod lexer;
 mod parser;
 mod syntax;
+mod machine;
+mod reader;
 
 use lexer::Lexer;
+use tokenizer::Tokenizer;
 use crate::parser::Parser;
 
 fn main() {
@@ -21,11 +24,11 @@ fn main() {
             ret
     ";
 
-    let tokenizer = syntax::intel::Tokenizer;
+    let mut tokenizer = syntax::intel::Tokenizer;
     let lexer = syntax::intel::Lexer;
     let parser = syntax::intel::Parser;
 
-    let tokens = tokenizer::get_tokens(&tokenizer, code);
+    let tokens = tokenizer.get_tokens(code);
     let lexemes = lexer.parse(tokens);
     let stats = parser.get_instructions(&lexemes);
 

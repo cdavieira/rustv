@@ -1,7 +1,8 @@
-use crate::tokenizer;
+use crate::tokenizer::{self, CommonClassifier};
 use crate::lexer::{self, Classifier};
 use crate::parser;
 use crate::spec::{extensions, Register};
+use crate::reader;
 
 pub mod intel {
     use std::ops::Range;
@@ -14,13 +15,13 @@ pub mod intel {
 
     /* Tokenizer */
 
-    impl tokenizer::Tokenizer for Tokenizer {
-        fn needs_lookahead(&self, ch: char) -> bool {
+    impl tokenizer::CommonClassifier for Tokenizer {
+        fn is_ambiguous(&self, ch: char) -> bool {
             ch == '+' || ch == '-'
+            
         }
 
         fn is_unit(&self, ch: char) -> bool {
-            // matches!(ch, ',' | '(' | ')' | '.' | ':')
             matches!(ch, ',' | '(' |')')
         }
 
@@ -28,8 +29,7 @@ pub mod intel {
             ch == '/'
         }
 
-        fn is_name(&self, ch: char) -> bool {
-            // ch.is_ascii_alphabetic()
+        fn is_identifier(&self, ch: char) -> bool {
             ch.is_ascii_alphabetic() || ch == '.' || ch == ':'
         }
 
@@ -45,10 +45,9 @@ pub mod intel {
             opt
         }
 
-        fn handle_name(&self, it: &mut impl Iterator<Item = char>, name: &mut String) -> Option<char> {
+        fn handle_identifier(&self, it: &mut impl Iterator<Item = char>, name: &mut String) -> Option<char> {
             let mut opt = it.next();
             while let Some(ch) = opt {
-                // if !ch.is_ascii_alphanumeric() {
                 if ch != ':' && ch != '.' && !ch.is_ascii_alphanumeric() {
                     break;
                 }
@@ -58,7 +57,7 @@ pub mod intel {
             opt
         }
 
-        fn handle_lookahead(&self, it: &mut impl Iterator<Item = char>, s: &mut String) -> Option<char> {
+        fn handle_ambiguous(&self, it: &mut impl Iterator<Item = char>, s: &mut String) -> Option<char> {
             let mut ch = it.next();
             while let Some(lookahead) = ch {
                 if !self.is_number(lookahead) {
@@ -71,14 +70,17 @@ pub mod intel {
         }
     }
 
+    impl tokenizer::Tokenizer for Tokenizer {
+        fn get_tokens(&mut self, buffer: &str) -> Vec<String> {
+            // let mut it = reader::SimpleReader::new(buffer);
+            let mut it = buffer.chars();
+            tokenizer::get_tokens(&mut it, self)
+        }
+    }
+
 
 
     /* Lexer */
-    const SYMBOLIC_REGISTERS: [&str; 7] = ["zero", "ra", "sp", "gp", "tp", "fp", "pc"];
-    const OPCODE_CORE: [&str; 1] = ["ret"];
-    const OPCODE_RV32I: [&str; 3] = ["sw", "addi", "lw"];
-    const PSEUDO: [&str; 1] = ["li"];
-
     #[derive(Debug, Copy, Clone)]
     pub enum Pseudo {
         LI,
@@ -116,6 +118,11 @@ pub mod intel {
             false
         }
     }
+
+    const SYMBOLIC_REGISTERS: [&str; 7] = ["zero", "ra", "sp", "gp", "tp", "fp", "pc"];
+    const OPCODE_CORE: [&str; 1] = ["ret"];
+    const OPCODE_RV32I: [&str; 3] = ["sw", "addi", "lw"];
+    const PSEUDO: [&str; 1] = ["li"];
 
     impl lexer::Classifier for Lexer {
         type Token = Token;
@@ -262,15 +269,7 @@ pub mod intel {
         type Token = Token;
 
         fn parse(&self, tokens: Vec<String>) -> Vec<Token> {
-            let mut lexemes = Vec::new();
-
-            for token in tokens {
-                if let Some(lex) = self.str_to_token(&token) {
-                    lexemes.push(lex);
-                }
-            }
-
-            lexemes
+            lexer::parse(self, tokens)
         }
     }
 

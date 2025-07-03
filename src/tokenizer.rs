@@ -1,74 +1,55 @@
+pub trait Tokenizer {
+    fn get_tokens(&mut self, buffer: &str) -> Vec<String> ;
+}
+
+
+
+/* The following code was written to ease the process of implementing the 'Tokenizer' trait. */
+
 use std::iter::Iterator;
 
-pub trait Tokenizer {
-    fn needs_lookahead(&self, ch: char) -> bool ;
+pub enum CommonClass {
+    COMMENT,
+    NUMBER,
+    STRING,
+    IDENTIFIER,
+    UNIT,
+    IGNORE,
+    AMBIGUOUS
+}
 
-    //single characters which are tokens by themselves (ex: '(', ')', ...)
+/**
+Any entity which implements the 'tokenizer::CommonClassifier' trait can then use the function 'tokenizer::get_tokens' as the backend for the implementation of 'Tokenizer::get_tokens'
+
+'tokenizer::CommonClassifier': a tokenization strategy where N chars can be mapped to one of the categories/variants stored in enum 'CommonClass'. The implementor is responsible for the mapping
+
+OBS: 'get_tokens' can be overriden to use more complex/useful iterators
+*/
+pub trait CommonClassifier {
+    fn is_ambiguous(&self, ch: char) -> bool ;
     fn is_unit(&self, ch: char) -> bool;
-
     fn is_comment(&self, ch: char) -> bool;
-
-    fn is_name(&self, ch: char) -> bool;
-
-    fn is_whitespace(&self, ch: char) -> bool {
-        ch.is_whitespace()
-    }
-
-    fn is_hexadecimal(&self, ch: char) -> bool {
-        ch.is_digit(16)
-    }
-
-    fn is_decimal(&self, ch: char) -> bool {
-        ch.is_digit(10)
-    }
-
+    fn is_identifier(&self, ch: char) -> bool;
     fn is_string(&self, ch: char) -> bool {
         ch == '"'
     }
-
+    fn is_ignore(&self, ch: char) -> bool {
+        ch.is_whitespace()
+    }
+    //all numbers usually begin with digits 0 to 9 (ex: 0x1, 2, 0o4, 0b0101, ...)
     fn is_number(&self, ch: char) -> bool {
-        self.is_decimal(ch) || self.is_hexadecimal(ch)
+        ch.is_digit(10)
     }
 
-    
+    fn handle_ambiguous(&self, it: &mut impl Iterator<Item = char>, s: &mut String) -> Option<char>;
     fn handle_comment(&self, it: &mut impl Iterator<Item = char>) -> Option<char>;
-
-    fn handle_name(&self, it: &mut impl Iterator<Item = char>, name: &mut String) -> Option<char>;
-
-    fn handle_lookahead(&self, it: &mut impl Iterator<Item = char>, s: &mut String) -> Option<char>;
-
+    fn handle_identifier(&self, it: &mut impl Iterator<Item = char>, name: &mut String) -> Option<char>;
     fn handle_unit(&self, it: &mut impl Iterator<Item = char>) -> Option<char> {
         it.next()
     }
-
-    fn handle_whitespace(&self, it: &mut impl Iterator<Item = char>) -> Option<char> {
+    fn handle_ignore(&self, it: &mut impl Iterator<Item = char>) -> Option<char> {
         it.next()
     }
-
-    fn handle_hexadecimal(&self, it: &mut impl Iterator<Item = char>, n: &mut String) -> Option<char> {
-        let mut opt = it.next();
-        while let Some(ch) = opt {
-            if !ch.is_ascii_hexdigit() {
-                break;
-            }
-            n.push(ch);
-            opt = it.next();
-        }
-        opt
-    }
-
-    fn handle_decimal(&self, it: &mut impl Iterator<Item = char>, n: &mut String) -> Option<char> {
-        let mut opt = it.next();
-        while let Some(ch) = opt {
-            if !ch.is_digit(10) {
-                break;
-            }
-            n.push(ch);
-            opt = it.next();
-        }
-        opt
-    }
-
     fn handle_number(&self, it: &mut impl Iterator<Item = char>, number: &mut String) -> Option<char> {
         let mut opt: Option<char>;
         if number == "0" {
@@ -77,11 +58,11 @@ pub trait Tokenizer {
                 match ch {
                     'x'|'X' => {
                         number.push(ch);
-                        opt = self.handle_hexadecimal(it, number);
+                        opt = handle_hexadecimal(it, number);
                     },
                     digit if ch.is_ascii_digit() => {
                         number.push(digit);
-                        opt = self.handle_decimal(it, number);
+                        opt = handle_decimal(it, number);
                     },
                     _ => {
                         opt = it.next();
@@ -90,11 +71,10 @@ pub trait Tokenizer {
             }
         }
         else {
-            opt = self.handle_decimal(it, number);
+            opt = handle_decimal(it, number);
         }
         opt
     }
-
     //TODO: test this
     fn handle_string(&self, it: &mut impl Iterator<Item = char>, s: &mut String) -> Option<char> {
         let mut opt = it.next();
@@ -128,40 +108,43 @@ pub trait Tokenizer {
     }
 }
 
-pub fn get_tokens(tokenizer: &impl Tokenizer, buffer: &str) -> Vec<String> {
+pub fn get_tokens(
+    it: &mut impl Iterator<Item = char>,
+    classifier: &impl CommonClassifier
+) -> Vec<String>
+{
     let mut tokens = Vec::new();
-    let mut it = buffer.chars();
 
     let mut opt = it.next();
     while let Some(ch) = opt {
-        if tokenizer.needs_lookahead(ch) {
+        if classifier.is_ambiguous(ch) {
             let mut s = String::from(ch);
-            opt = tokenizer.handle_lookahead(&mut it, &mut s);
+            opt = classifier.handle_ambiguous(it, &mut s);
             tokens.push(s);
         }
-        else if tokenizer.is_unit(ch) {
+        else if classifier.is_unit(ch) {
             tokens.push(String::from(ch));
-            opt = tokenizer.handle_unit(&mut it);
+            opt = classifier.handle_unit(it);
         }
-        else if tokenizer.is_comment(ch) {
-            opt = tokenizer.handle_comment(&mut it);
+        else if classifier.is_comment(ch) {
+            opt = classifier.handle_comment(it);
         }
-        else if tokenizer.is_string(ch) {
+        else if classifier.is_string(ch) {
             let mut s = String::from(ch);
-            opt = tokenizer.handle_string(&mut it, &mut s);
+            opt = classifier.handle_string(it, &mut s);
             tokens.push(s);
         }
-        else if tokenizer.is_whitespace(ch) {
-            opt = tokenizer.handle_whitespace(&mut it);
+        else if classifier.is_ignore(ch) {
+            opt = classifier.handle_ignore(it);
         }
-        else if tokenizer.is_decimal(ch) {
+        else if classifier.is_number(ch) {
             let mut number = String::from(ch);
-            opt = tokenizer.handle_number(&mut it, &mut number);
+            opt = classifier.handle_number(it, &mut number);
             tokens.push(number);
         }
-        else if tokenizer.is_name(ch){
+        else if classifier.is_identifier(ch){
             let mut s = String::from(ch);
-            opt = tokenizer.handle_name(&mut it, &mut s);
+            opt = classifier.handle_identifier(it, &mut s);
             tokens.push(s);
         }
         else {
@@ -171,4 +154,24 @@ pub fn get_tokens(tokenizer: &impl Tokenizer, buffer: &str) -> Vec<String> {
     }
 
     tokens
+}
+
+fn handle_number(it: &mut impl Iterator<Item = char>, n: &mut String, is_valid: impl Fn(char) -> bool) -> Option<char>{
+        let mut opt = it.next();
+        while let Some(ch) = opt {
+            if !is_valid(ch) {
+                break;
+            }
+            n.push(ch);
+            opt = it.next();
+        }
+        opt
+}
+
+fn handle_hexadecimal(it: &mut impl Iterator<Item = char>, n: &mut String) -> Option<char> {
+    handle_number(it, n, |ch| ch.is_ascii_hexdigit())
+}
+
+fn handle_decimal(it: &mut impl Iterator<Item = char>, n: &mut String) -> Option<char> {
+    handle_number(it, n, |ch| ch.is_digit(10))
 }

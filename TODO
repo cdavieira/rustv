@@ -2,6 +2,22 @@ read syntax.rs TODOs (line 83 and others)
 
 lexer isnt really a lexer, more like a categorizer/classifier/parser
 
+tokenizer -> indicate (row, col) error
+> see reader.rs for the implementation of a custom Iterator to do just that
+
+use Result to wrap return types where needed (tokenizer, lexer, parser, ...)
+
+save the tokenizer classification and maybe reuse it later in the lexer
+> the same thing could be done with the lexer
+
+write cpu class and tests for that
+> read and write a register
+
+write simple field evaluator
+
+write memory class and tests for that
+
+
 
 //lexer.rs
 //TODO: one improvement to this would be to require the 'Token' type used by this lexer to be an

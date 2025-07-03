@@ -3,6 +3,10 @@ pub trait Lexer {
     fn parse(&self, tokens: Vec<String>) -> Vec<<Self as Lexer>::Token> ;
 }
 
+
+
+/* The following code was written to ease the process of implementing the 'Lexer' trait. */
+
 pub enum TokenClass {
     NUMBER,
     STRING,
@@ -17,6 +21,11 @@ pub enum TokenClass {
     IGNORE
 }
 
+/**
+Any entity which implements the 'lexer::Classifier' trait can then use the function 'lexer::parse' as the backend for the implementation of 'Lexer::parse'
+
+'lexer::Classifier': a strategy where N chars can be mapped to one of the categories/variants stored in enum 'TokenClass'. The implementor is responsible for the mapping
+*/
 pub trait Classifier {
     type Token;
 
@@ -127,4 +136,16 @@ pub trait Classifier {
             }
         }
     }
+}
+
+pub fn parse<T>(lexer: & impl Classifier<Token = T>, tokens: Vec<String>) -> Vec<T> {
+    let mut lexemes = Vec::new();
+
+    for token in tokens {
+        if let Some(lex) = lexer.str_to_token(&token) {
+            lexemes.push(lex);
+        }
+    }
+
+    lexemes
 }
