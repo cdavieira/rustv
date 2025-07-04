@@ -4,7 +4,7 @@ pub trait Tokenizer {
 
 
 
-/* The following code was written to ease the process of implementing the 'Tokenizer' trait. */
+/* The following code was written to ease the implementation of the 'Tokenizer' trait. */
 
 use std::iter::Iterator;
 

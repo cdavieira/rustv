@@ -4,6 +4,11 @@ pub mod lexer;
 pub mod parser;
 pub mod syntax;
 pub mod reader;
+pub mod isa;
+pub mod cpu;
+pub mod memory;
+pub mod machine;
+pub mod executor;
 
 #[cfg(test)]
 mod tests {

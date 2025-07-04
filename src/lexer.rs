@@ -22,11 +22,11 @@ pub enum TokenClass {
 }
 
 /**
-Any entity which implements the 'lexer::Classifier' trait can then use the function 'lexer::parse' as the backend for the implementation of 'Lexer::parse'
+Any entity which implements the 'lexer::TokenClassifier' trait can then use the function 'lexer::parse' as the backend for the implementation of 'Lexer::parse'
 
-'lexer::Classifier': a strategy where N chars can be mapped to one of the categories/variants stored in enum 'TokenClass'. The implementor is responsible for the mapping
+'lexer::TokenClassifier': a strategy where N chars can be mapped to one of the categories/variants stored in enum 'TokenClass'. The implementor is responsible for the mapping
 */
-pub trait Classifier {
+pub trait TokenClassifier {
     type Token;
 
     fn is_symbol(&self, token: &str) -> bool ;
@@ -138,7 +138,7 @@ pub trait Classifier {
     }
 }
 
-pub fn parse<T>(lexer: & impl Classifier<Token = T>, tokens: Vec<String>) -> Vec<T> {
+pub fn parse<T>(lexer: & impl TokenClassifier<Token = T>, tokens: Vec<String>) -> Vec<T> {
     let mut lexemes = Vec::new();
 
     for token in tokens {

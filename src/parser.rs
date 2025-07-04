@@ -1,12 +1,12 @@
 pub trait Parser<'a> {
     type Token;
-    type Statement;
+    type Instruction;
 
-    fn token_to_stat(&self, token: &Self::Token) ->  Option<Self::Statement>;
+    fn to_instruction(&self, token: &Self::Token) ->  Option<Self::Instruction>;
 
-    fn handle_stat(&self,
+    fn handle_instruction(&self,
         it: &mut impl Iterator<Item = &'a Self::Token>,
-        s: &mut Self::Statement
+        s: &mut Self::Instruction
     ) -> Option<&'a Self::Token> ;
 
     fn read_instruction(
@@ -17,7 +17,7 @@ pub trait Parser<'a> {
     {
         let mut opt = it.next();
         while let Some(tok) = opt {
-            match self.token_to_stat(&tok) {
+            match self.to_instruction(&tok) {
                 Some(_) => break,
                 None => {
                     v.push(&tok);
@@ -28,13 +28,13 @@ pub trait Parser<'a> {
         opt
     }
 
-    fn get_instructions(&self, token: &'a Vec<Self::Token>) -> Vec<Self::Statement> {
+    fn parse(&self, token: &'a Vec<Self::Token>) -> Vec<Self::Instruction> {
         let mut v = Vec::new();
         let mut it = token.iter();
         let mut opt = it.next();
         while let Some(token) = opt {
-            if let Some(mut st) = self.token_to_stat(&token) {
-                opt = self.handle_stat(&mut it, &mut st);
+            if let Some(mut st) = self.to_instruction(&token) {
+                opt = self.handle_instruction(&mut it, &mut st);
                 v.push(st);
             }
             else {
@@ -44,6 +44,9 @@ pub trait Parser<'a> {
         v
     }
 }
+
+
+
 
 // Generic driver to read instruction maybe?
 // fn read_instruction_args<'a>(

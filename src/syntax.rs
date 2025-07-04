@@ -1,5 +1,5 @@
 use crate::tokenizer::{self, CommonClassifier};
-use crate::lexer::{self, Classifier};
+use crate::lexer::{self, TokenClassifier};
 use crate::parser;
 use crate::spec::{extensions, Register};
 use crate::reader;
@@ -124,7 +124,7 @@ pub mod intel {
     const OPCODE_RV32I: [&str; 3] = ["sw", "addi", "lw"];
     const PSEUDO: [&str; 1] = ["li"];
 
-    impl lexer::Classifier for Lexer {
+    impl lexer::TokenClassifier for Lexer {
         type Token = Token;
 
         fn is_register(&self, token: &str) -> bool {
@@ -294,9 +294,9 @@ pub mod intel {
     impl<'a> parser::Parser<'a> for Parser {
         type Token = Token;
     
-        type Statement = Statement<'a>;
+        type Instruction = Statement<'a>;
 
-        fn token_to_stat(&self, token: &Self::Token) -> Option<Self::Statement> {
+        fn to_instruction(&self, token: &Self::Token) -> Option<Self::Instruction> {
             match token {
                 Token::OP(opcode) => {
                     Some(Statement::Instruction {
@@ -322,9 +322,9 @@ pub mod intel {
             }
         }
         
-        fn handle_stat(&self,
+        fn handle_instruction(&self,
             it: &mut impl Iterator<Item = &'a Self::Token>,
-            s: &mut Self::Statement
+            s: &mut Self::Instruction
         ) -> Option<&'a Self::Token> {
             match s {
                 Statement::Instruction{opcode: _, args} => {
