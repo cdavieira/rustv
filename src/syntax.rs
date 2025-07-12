@@ -1,24 +1,18 @@
-use crate::tokenizer::{self, CommonClassifier};
-use crate::lexer::{self, TokenClassifier};
-use crate::parser;
-use crate::spec::{extensions, Register};
-use crate::reader;
-
 pub mod intel {
-    use std::ops::Range;
-    use super::*;
+    use crate::tokenizer::{self, CommonClassifier};
+    use crate::lexer::{self, TokenClassifier, ToExtension, ToRegister, ToPseudo};
+    use crate::parser;
+    use crate::spec::{Extension, Register, RV32I};
 
     pub struct Tokenizer ;
     pub struct Lexer;
     pub struct Parser;
 
-
     /* Tokenizer */
 
-    impl tokenizer::CommonClassifier for Tokenizer {
+    impl CommonClassifier for Tokenizer {
         fn is_ambiguous(&self, ch: char) -> bool {
             ch == '+' || ch == '-'
-            
         }
 
         fn is_unit(&self, ch: char) -> bool {
@@ -30,7 +24,7 @@ pub mod intel {
         }
 
         fn is_identifier(&self, ch: char) -> bool {
-            ch.is_ascii_alphabetic() || ch == '.' || ch == ':'
+            ch.is_ascii_alphanumeric() || ch == '.' || ch == ':'
         }
 
         fn handle_comment(&self, it: &mut impl Iterator<Item = char>) -> Option<char> {
@@ -48,7 +42,7 @@ pub mod intel {
         fn handle_identifier(&self, it: &mut impl Iterator<Item = char>, name: &mut String) -> Option<char> {
             let mut opt = it.next();
             while let Some(ch) = opt {
-                if ch != ':' && ch != '.' && !ch.is_ascii_alphanumeric() {
+                if !self.is_identifier(ch) {
                     break;
                 }
                 name.push(ch);
@@ -84,17 +78,12 @@ pub mod intel {
     #[derive(Debug, Copy, Clone)]
     pub enum Pseudo {
         LI,
-    }
-
-    //TODO: how to simplify the process of extending supported specifications? trait objects?
-    #[derive(Debug, Copy, Clone)]
-    pub enum Opcode {
-        RV32I(extensions::rv32i::Opcode),
+        RET,
     }
 
     #[derive(Debug)]
     pub enum Token {
-        OP(Opcode),
+        OP(Box<dyn Extension>),
         PSEUDO(Pseudo),
         REG(Register),
         NAME(String),
@@ -102,7 +91,6 @@ pub mod intel {
         SECTION(String),
         LABEL(String),
         NUMBER(i32),
-        RET,
         PLUS,
         MINUS,
         LPAR,
@@ -110,108 +98,9 @@ pub mod intel {
         COMMA,
     }
 
-    fn register_matches(token: &str, prefix: &str, range: Range<i32>) -> bool {
-        if let Ok(n) = token[1..].parse::<i32>() {
-            &token[0..1] == prefix && range.contains(&n)
-        }
-        else {
-            false
-        }
-    }
-
-    const SYMBOLIC_REGISTERS: [&str; 7] = ["zero", "ra", "sp", "gp", "tp", "fp", "pc"];
-    const OPCODE_CORE: [&str; 1] = ["ret"];
-    const OPCODE_RV32I: [&str; 3] = ["sw", "addi", "lw"];
-    const PSEUDO: [&str; 1] = ["li"];
-
-    impl lexer::TokenClassifier for Lexer {
-        type Token = Token;
-
-        fn is_register(&self, token: &str) -> bool {
-            let is_xreg = register_matches(token, "x", 0..32);
-            let is_treg = register_matches(token, "t", 0..7);
-            let is_areg = register_matches(token, "a", 0..8);
-            let is_sreg = register_matches(token, "s", 0..12);
-            let is_symbolic = SYMBOLIC_REGISTERS.contains(&token);
-            is_xreg || is_treg || is_areg || is_sreg || is_symbolic
-        }
-
-        fn is_symbol(&self, token: &str) -> bool{
-            matches!(token, "," | "(" | ")" | "+" | "-")
-        }
-
-        fn is_opcode(&self, token: &str) -> bool {
-            OPCODE_CORE.contains(&token) || OPCODE_RV32I.contains(&token)
-        }
-
-        fn is_identifier(&self, token: &str) -> bool {
-            let mut chs = token.chars();
-            let f: char = chs.nth(0).unwrap_or(' ');
-            f.is_ascii_alphabetic() && chs.all(|ch| ch.is_ascii_alphanumeric())
-        }
-
-        fn is_section(&self, token: &str) -> bool {
-            token.starts_with('.')
-        }
-
-        fn is_directive(&self, _: &str) -> bool {
-            false
-        }
-
-        fn is_label(&self, token: &str) -> bool {
-            token.ends_with(':')
-        }
-
-        fn is_custom(&self, token: &str) -> bool {
-            PSEUDO.contains(&token)
-        }
-
-        fn str_to_number(&self, token: &str) -> Option<Self::Token> {
-            let Ok(n) = token.parse::<i32>() else {
-                return None;
-            };
-            Some(Token::NUMBER(n))
-        }
-
-        fn str_to_string(&self, token: &str) -> Option<Self::Token> {
-            Some(Token::STR(token.trim_matches('"').to_string()))
-        }
-
-        fn str_to_symbol(&self, token: &str) -> Option<Self::Token> {
+    impl ToRegister<&str> for Lexer {
+        fn to_register(&self, token: &str) -> Option<crate::spec::Register>  {
             match token {
-                "," => Some(Token::COMMA),
-                "(" => Some(Token::LPAR),
-                ")" => Some(Token::RPAR),
-                "+" => Some(Token::PLUS),
-                "-" => Some(Token::MINUS),
-                _ => None
-            }
-        }
-
-        fn str_to_opcode(&self, token: &str) -> Option<Self::Token> {
-            match token {
-                "ret" => Some(Token::RET),
-                "addi" => Some(Token::OP(Opcode::RV32I(extensions::rv32i::Opcode::ADDI))),
-                "sw"   => Some(Token::OP(Opcode::RV32I(extensions::rv32i::Opcode::SW))),
-                "lw"   => Some(Token::OP(Opcode::RV32I(extensions::rv32i::Opcode::LW))),
-                _ => None
-            }
-        }
-
-        fn str_to_identifier(&self, token: &str) -> Option<Self::Token> {
-            Some(Token::NAME(token.to_string()))
-        }
-
-        fn str_to_section(&self, token: &str) -> Option<Self::Token> {
-            Some(Token::SECTION(token[1..].to_string()))
-        }
-
-        fn str_to_directive(&self, _: &str) -> Option<Self::Token> {
-            None
-        }
-
-        fn str_to_register(&self, token: &str) -> Option<Self::Token> {
-            let reg = match token.trim().to_lowercase().as_str() {
                 "x0" | "zero" => Some(Register::X0),
                 "x1" | "ra"   => Some(Register::X1),
                 "x2" | "sp"   => Some(Register::X2),
@@ -246,18 +135,156 @@ pub mod intel {
                 "x31" | "t6"  => Some(Register::X31),
                 "pc" => Some(Register::PC),
                 _ => None
+            }
+        }
+    }
+
+    impl ToPseudo<&str, Token> for Lexer {
+        fn to_pseudo(&self, token: &str) -> Option<Token>  {
+            match token {
+                "ret" => Some(Token::PSEUDO(Pseudo::RET)),
+                "li" => Some(Token::PSEUDO(Pseudo::LI)),
+                _ => None
+            }
+        }
+    }
+
+    //TODO: add more extensions, see if that works and test it
+    impl ToExtension<&str> for Lexer {
+        fn to_extension(&self, token: &str) -> Option<Box<dyn Extension>> {
+            match token {
+                "lui"   => Some(Box::new(RV32I::LUI))  ,
+                "auipc" => Some(Box::new(RV32I::AUIPC)),
+                "addi"  => Some(Box::new(RV32I::ADDI)) ,
+                "andi"  => Some(Box::new(RV32I::ANDI)) ,
+                "ori"   => Some(Box::new(RV32I::ORI))  ,
+                "xori"  => Some(Box::new(RV32I::XORI)) ,
+                "add"   => Some(Box::new(RV32I::ADD))  ,
+                "sub"   => Some(Box::new(RV32I::SUB))  ,
+                "and"   => Some(Box::new(RV32I::AND))  ,
+                "or"    => Some(Box::new(RV32I::OR))   ,
+                "xor"   => Some(Box::new(RV32I::XOR))  ,
+                "sll"   => Some(Box::new(RV32I::SLL))  ,
+                "srl"   => Some(Box::new(RV32I::SRL))  ,
+                "sra"   => Some(Box::new(RV32I::SRA))  ,
+                "fence" => Some(Box::new(RV32I::FENCE)),
+                "slti"  => Some(Box::new(RV32I::SLTI)) ,
+                "sltiu" => Some(Box::new(RV32I::SLTIU)),
+                "slli"  => Some(Box::new(RV32I::SLLI)) ,
+                "srli"  => Some(Box::new(RV32I::SRLI)) ,
+                "srai"  => Some(Box::new(RV32I::SRAI)) ,
+                "slt"   => Some(Box::new(RV32I::SLT))  ,
+                "sltu"  => Some(Box::new(RV32I::SLTU)) ,
+                "lw"    => Some(Box::new(RV32I::LW))   ,
+                "lh"    => Some(Box::new(RV32I::LH))   ,
+                "lhu"   => Some(Box::new(RV32I::LHU))  ,
+                "lb"    => Some(Box::new(RV32I::LB))   ,
+                "lbu"   => Some(Box::new(RV32I::LBU))  ,
+                "sw"    => Some(Box::new(RV32I::SW))   ,
+                "sh"    => Some(Box::new(RV32I::SH))   ,
+                "sb"    => Some(Box::new(RV32I::SB))   ,
+                "jal"   => Some(Box::new(RV32I::JAL))  ,
+                "jalr"  => Some(Box::new(RV32I::JALR)) ,
+                "beq"   => Some(Box::new(RV32I::BEQ))  ,
+                "bne"   => Some(Box::new(RV32I::BNE))  ,
+                "blt"   => Some(Box::new(RV32I::BLT))  ,
+                "bltu"  => Some(Box::new(RV32I::BLTU)) ,
+                "bge"   => Some(Box::new(RV32I::BGE))  ,
+                "bgeu"  => Some(Box::new(RV32I::BGEU)) ,
+                _ => None,
+            }
+        }
+    }
+
+    impl TokenClassifier for Lexer {
+        type Token = Token;
+
+        fn is_register(&self, token: &str) -> bool {
+            ToRegister::is_register(self, token)
+        }
+
+        fn is_symbol(&self, token: &str) -> bool{
+            matches!(token, "," | "(" | ")" | "+" | "-")
+        }
+
+        fn is_opcode(&self, token: &str) -> bool {
+            self.in_extension(token)
+        }
+
+        fn is_identifier(&self, token: &str) -> bool {
+            let mut chs = token.chars();
+            let f: char = chs.nth(0).unwrap_or(' ');
+            f.is_ascii_alphabetic() && chs.all(|ch| ch.is_ascii_alphanumeric())
+        }
+
+        fn is_section(&self, token: &str) -> bool {
+            token.starts_with('.')
+        }
+
+        fn is_directive(&self, _: &str) -> bool {
+            false
+        }
+
+        fn is_label(&self, token: &str) -> bool {
+            token.ends_with(':')
+        }
+
+        fn is_custom(&self, token: &str) -> bool {
+            ToPseudo::is_pseudo(self, token)
+        }
+
+        fn str_to_number(&self, token: &str) -> Option<Self::Token> {
+            let Ok(n) = token.parse::<i32>() else {
+                return None;
             };
-            let Some(reg) = reg else {
+            Some(Token::NUMBER(n))
+        }
+
+        fn str_to_string(&self, token: &str) -> Option<Self::Token> {
+            Some(Token::STR(token.trim_matches('"').to_string()))
+        }
+
+        fn str_to_symbol(&self, token: &str) -> Option<Self::Token> {
+            match token {
+                "," => Some(Token::COMMA),
+                "(" => Some(Token::LPAR),
+                ")" => Some(Token::RPAR),
+                "+" => Some(Token::PLUS),
+                "-" => Some(Token::MINUS),
+                _ => None
+            }
+        }
+
+        fn str_to_opcode(&self, token: &str) -> Option<Self::Token> {
+            match self.to_extension(token) {
+                Some(e) => {
+                    Some(Token::OP(e))
+                },
+                None => None
+            }
+        }
+
+        fn str_to_identifier(&self, token: &str) -> Option<Self::Token> {
+            Some(Token::NAME(token.to_string()))
+        }
+
+        fn str_to_section(&self, token: &str) -> Option<Self::Token> {
+            Some(Token::SECTION(token[1..].to_string()))
+        }
+
+        fn str_to_directive(&self, _: &str) -> Option<Self::Token> {
+            None
+        }
+
+        fn str_to_register(&self, token: &str) -> Option<Self::Token> {
+            let Some(reg) = ToRegister::to_register(self, token.trim().to_lowercase().as_str()) else {
                 return None;
             };
             Some(Token::REG(reg))
         }
 
         fn str_to_custom(&self, token: &str) -> Option<Self::Token> {
-            match token {
-                "li" => Some(Token::PSEUDO(Pseudo::LI)),
-                _ => None
-            }
+            ToPseudo::to_pseudo(self, token)
         }
 
         fn str_to_label(&self, token: &str) -> Option<Self::Token> {
@@ -278,65 +305,44 @@ pub mod intel {
     /* Parser */
 
     #[derive(Debug)]
-    pub enum Command {
-        OP(Opcode),
-        PSEUDO(Pseudo),
-        RET
+    pub enum Statement<'a> {
+        PseudoInstruction{opcode: &'a Pseudo, args: Vec<&'a Token>},
+        Instruction{opcode: &'a Box<dyn Extension>, args: Vec<&'a Token>},
+        Directive(&'a String),
+        Label(&'a String),
     }
 
-    #[derive(Debug)]
-    pub enum Statement<'a> {
-        Instruction{opcode: Command, args: Vec<&'a Token>},
-        Directive(String),
-        Label(String),
+    impl parser::IsInstruction for Parser {
+        type Token = Token;
+
+        fn is_instruction(&self, token: &Self::Token) -> bool {
+            match token {
+                Token::OP(_)      => true,
+                Token::PSEUDO(_)  => true,
+                Token::SECTION(_) => true,
+                Token::LABEL(_)   => true,
+                _                 => false
+            }
+        }
     }
 
     impl<'a> parser::Parser<'a> for Parser {
         type Token = Token;
-    
-        type Instruction = Statement<'a>;
+        type Output = Statement<'a>;
 
-        fn to_instruction(&self, token: &Self::Token) -> Option<Self::Instruction> {
-            match token {
-                Token::OP(opcode) => {
-                    Some(Statement::Instruction {
-                        opcode: Command::OP(*opcode),
-                        args: vec![]
-                    })
-                },
-                Token::PSEUDO(pseudo) => {
-                    Some(Statement::Instruction {
-                        opcode: Command::PSEUDO(*pseudo),
-                        args: vec![]
-                    })
-                },
-                Token::RET => {
-                    Some(Statement::Instruction {
-                        opcode: Command::RET,
-                        args: vec![]
-                    })
-                },
-                Token::LABEL(l) => Some(Statement::Label(String::from(l))),
-                Token::SECTION(s) => Some(Statement::Directive(String::from(s))),
-                _ => None
+        fn parse(&'a self, tokens: &'a Vec<Self::Token>) -> Vec<Self::Output>  {
+            let insts = parser::get_instructions(self, tokens);
+            let mut v = Vec::new();
+            for parser::Instruction{keyword, args} in insts {
+                match keyword {
+                    Token::OP(extension)  => v.push(Statement::Instruction { opcode: extension, args }),
+                    Token::PSEUDO(pseudo) => v.push(Statement::PseudoInstruction { opcode: pseudo, args }),
+                    Token::SECTION(sec) => v.push(Statement::Label(sec)),
+                    Token::LABEL(label) => v.push(Statement::Label(label)),
+                    _ => {}
+                }
             }
-        }
-        
-        fn handle_instruction(&self,
-            it: &mut impl Iterator<Item = &'a Self::Token>,
-            s: &mut Self::Instruction
-        ) -> Option<&'a Self::Token> {
-            match s {
-                Statement::Instruction{opcode: _, args} => {
-                    self.read_instruction(it, args)
-                },
-                Statement::Directive(_) => {
-                    it.next()
-                },
-                Statement::Label(_) => {
-                    it.next()
-                },
-            }
+            v
         }
     }
 }

@@ -1,0 +1,41 @@
+add a second extension to see if everythings is working and to see how hard it is to add new extensions
+
+maybe review how pseudo instructions can be added (they differ slightly from
+Extensions, because Extensions are meant to be a set of real instructions,
+whilst pseudos are a set of instructions, which are then a set of real
+instructions)
+
+write docs for parser.rs
+
+add tests to the intel syntax implementation
+
+write simple field evaluator
+
+read syntax.rs TODOs (line 83 and others)
+
+lexer isnt really a lexer, more like a categorizer/classifier/parser
+
+tokenizer -> indicate (row, col) error
+> see reader.rs for the implementation of a custom Iterator to do just that
+
+use Result to wrap return types where needed (tokenizer, lexer, parser, ...)
+
+save the tokenizer classification and maybe reuse it later in the lexer
+> the same thing could be done with the lexer
+
+write cpu class and tests for that
+> read and write a register
+
+write memory class and tests for that
+
+======================
+
+reduzir o args a um vetor com 0, 1, 2 ou 3 argumentos
+
+interface onde o implementador diz o que cada token do args eh (funct7, funct3, imm1, imm2)
+
+//add, and, or (R), lui (U), jal (J), addi, andi, ori, lw (I), sw (S), beq, blt (B)
+
+rs1, rs2, rd, imm, offset
+sw - rs1, rs2, offset
+addi - rd, rs1, imm

@@ -3,17 +3,13 @@ mod tokenizer;
 mod lexer;
 mod parser;
 mod syntax;
-mod machine;
 mod reader;
-mod executor;
-mod cpu;
-mod memory;
 
 use lexer::Lexer;
-use executor::Executor;
+use rustv::spec::{Instruction, RV32I, Extension};
 use tokenizer::Tokenizer;
 use parser::Parser;
-use syntax::intel::{Statement::Instruction, Command, Opcode};
+use syntax::intel::{Statement};
 
 fn main() {
     let code = "
@@ -42,7 +38,7 @@ fn main() {
     let tokens = t.get_tokens(code);
     let lexemes = l.parse(tokens);
     let stats = p.parse(&lexemes);
-    // println!("{:?}", stats);
+    println!("{:?}", stats);
 
     let tokens = t.get_tokens(li);
     let lexemes = l.parse(tokens);
@@ -52,32 +48,12 @@ fn main() {
     let lexemes = l.parse(tokens);
     let addi = p.parse(&lexemes);
 
-    let mut m = machine::BasicMachine::new();
-    let e = executor::StatementExecutor;
-    // let addi = stats.iter().find(|s| {
-    //     if let Instruction { opcode, .. } = s {
-    //         if let Command::OP(Opcode::RV32I(o)) = opcode {
-    //             match o {
-    //                 crate::spec::extensions::rv32i::Opcode::ADDI => {
-    //                     true
-    //                 },
-    //                 _ => {
-    //                     false
-    //                 }
-    //             }
-    //
-    //         }
-    //         else {
-    //             false
-    //         }
-    //     }
-    //     else {
-    //         false
-    //     }
-    // }).unwrap();
-
-    m.info();
-    e.execute(&mut m.cpu, addi.get(0).unwrap());
-    e.execute(&mut m.cpu, li.get(0).unwrap());
-    m.info();
+    //ori 5,5,0x800
+    // let i: u32 = RV32I::ORI.get_bytes(5, 0, 5, 0x800, 0);
+    // println!("ORI (bin): {i:b}");
+    // println!("ORI (hex): {i:x}");
+    //sw 5,0x3(6)
+    // let i: u32 = RV32I::SW.get_bytes(6, 5, 0, 0, 3);
+    // println!("SW (bin):  {i:b}");
+    // println!("SW (hex):  {i:x}");
 }

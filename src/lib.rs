@@ -4,11 +4,6 @@ pub mod lexer;
 pub mod parser;
 pub mod syntax;
 pub mod reader;
-pub mod isa;
-pub mod cpu;
-pub mod memory;
-pub mod machine;
-pub mod executor;
 
 #[cfg(test)]
 mod tests {
@@ -88,6 +83,17 @@ mod tests {
             let expected: Vec<String> = code.split_whitespace().map(|s| String::from(s)).collect();
             let mut tokenizer = syntax::intel::Tokenizer;
             // let res: Vec<String> = tokenizer::get_tokens(&tokenizer, code);
+            let res: Vec<String> = tokenizer.get_tokens(code);
+            assert_eq!(res, expected);
+        }
+
+        #[test]
+        fn tokenize_hex_offset(){
+            let code = "sw 5,0x3(6)";
+            let expected = [
+                "sw", "5", ",", "0x3", "(", "6", ")"
+            ].map(|s| String::from(s));
+            let mut tokenizer = syntax::intel::Tokenizer;
             let res: Vec<String> = tokenizer.get_tokens(code);
             assert_eq!(res, expected);
         }

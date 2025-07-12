@@ -1,0 +1,33 @@
+the tokenizer turns a buffer into a stream of grouped caracteres (or a word for
+short), which have no indication of which line/column they occurred
+
+since the lexer has no positional information of each word, it has to somehow
+'know' what each caracter is in order to make a token out of it
+
+this design inherently forces the lexer to 'know' what each word is. My attempt
+to create a Classifier trait is one way of creating common grounds for doing just that. But this creates a problem
+when it comes down to extending the support of the lexer for different opcodes.
+
+You see, the code required for the lexer becomes proportional with the number
+of words which have to be mapped to a token.
+
+This creates the need for rewritting parts of the lexer whenever new extensions
+of the riscv specification are added/deprecated/changed
+
+Not only that, but later on we also have to somehow spot/tag important tokens among
+those the lexer has generated. This is not that hard, since those tokens will
+be enums, whose important variants can be pattern matched
+
+At some point, these opcodes will have to somehow provide what they are actually
+intended for (summing, subtracting, reading from, writing to) and how they
+should be used (1 parameter, no params, two parameters, ...)
+
+if we interpret that an extension is a vector/collection of opcodes, we could
+create a trait which would force implementors to define methods to map a string
+slice to an opcode. But then, all implementations of Lexers would have to
+implement those interfaces/traits in order to bring bridge the lexical space of
+the language to the functionality expected for each opcode
+
+we could create something which is independent from the actual string
+representing that opcode. Then the implementors job would only be to map the
+string slice to the entity for that extension.

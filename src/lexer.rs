@@ -44,16 +44,16 @@ pub trait TokenClassifier {
         token.starts_with('"') && token.ends_with('"')
     }
 
-    fn str_to_number(&self, token: &str) -> Option<Self::Token>;
-    fn str_to_string(&self, token: &str) -> Option<Self::Token>;
-    fn str_to_symbol(&self, token: &str) -> Option<Self::Token>;
-    fn str_to_register(&self, token: &str) -> Option<Self::Token>;
-    fn str_to_opcode(&self, token: &str) -> Option<Self::Token>;
-    fn str_to_identifier(&self, token: &str) -> Option<Self::Token>;
-    fn str_to_section(&self, token: &str) -> Option<Self::Token>;
-    fn str_to_directive(&self, token: &str) -> Option<Self::Token>;
-    fn str_to_custom(&self, token: &str) -> Option<Self::Token>;
-    fn str_to_label(&self, token: &str) -> Option<Self::Token>;
+    fn str_to_number(&self, token: &str) -> Option<Self::Token> ;
+    fn str_to_string(&self, token: &str) -> Option<Self::Token> ;
+    fn str_to_symbol(&self, token: &str) -> Option<Self::Token> ;
+    fn str_to_register(&self, token: &str) -> Option<Self::Token> ;
+    fn str_to_opcode(&self, token: &str) -> Option<Self::Token> ;
+    fn str_to_identifier(&self, token: &str) -> Option<Self::Token> ;
+    fn str_to_section(&self, token: &str) -> Option<Self::Token> ;
+    fn str_to_directive(&self, token: &str) -> Option<Self::Token> ;
+    fn str_to_custom(&self, token: &str) -> Option<Self::Token> ;
+    fn str_to_label(&self, token: &str) -> Option<Self::Token> ;
 
     fn classify(&self, token: &str) -> TokenClass {
         if self.is_symbol(token) {
@@ -135,6 +135,48 @@ pub trait TokenClassifier {
                 None
             }
         }
+    }
+}
+
+/**
+This trait allows implementers to link arbitrary data to Extensions
+
+The implementer of this trait has the ability to choose which instructions from the extension are
+going to be supported or not. If the method 'to_instruction' returns the None variant for some
+token, then it isn't supported.
+
+Additionally, entities which implement this trait might as well use it to implement
+'TokenClassifier::is_opcode' and 'TokenClassifier::str_to_opcode' in one go
+*/
+pub trait ToExtension<T> {
+    fn to_extension(&self, token: T) -> Option<Box<dyn crate::spec::Extension>> ;
+
+    fn in_extension(&self, token: T) -> bool {
+        self.to_extension(token).is_some()
+    }
+}
+
+/**
+Additionally, entities which implement this trait might as well use it to implement
+'TokenClassifier::is_register' and 'TokenClassifier::str_to_register' in one go
+*/
+pub trait ToRegister<T> {
+    fn to_register(&self, token: T) -> Option<crate::spec::Register> ;
+
+    fn is_register(&self, token: T) -> bool {
+        self.to_register(token).is_some()
+    }
+}
+
+/**
+Additionally, entities which implement this trait might as well use it to implement
+'TokenClassifier::is_custom' and 'TokenClassifier::str_to_custom' in one go
+*/
+pub trait ToPseudo<T, P> {
+    fn to_pseudo(&self, token: T) -> Option<P> ;
+
+    fn is_pseudo(&self, token: T) -> bool {
+        self.to_pseudo(token).is_some()
     }
 }
 
