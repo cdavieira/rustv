@@ -1,5 +1,5 @@
 all:
-	riscv32-unknown-linux-gnu-as sw.s
+	riscv32-unknown-linux-gnu-as addi.s
 	@echo "hexdump a.out" > info.txt
 	hexdump a.out        >> info.txt
 	@echo -e "\n\n\n"    >> info.txt

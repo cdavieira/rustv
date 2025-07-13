@@ -1,8 +1,8 @@
 pub trait Parser<'a> {
     type Token;
-    type Output;
+    type Statement;
 
-    fn parse(&'a self, token: &'a Vec<Self::Token>) -> Vec<Self::Output> ;
+    fn parse(&'a self, token: &'a Vec<Self::Token>) -> Vec<Self::Statement> ;
 }
 
 

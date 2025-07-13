@@ -4,6 +4,7 @@ pub mod lexer;
 pub mod parser;
 pub mod syntax;
 pub mod reader;
+pub mod assembler;
 
 #[cfg(test)]
 mod tests {
@@ -22,7 +23,6 @@ mod tests {
             ";
             let expected: Vec<String> = vec![];
             let mut tokenizer = syntax::intel::Tokenizer;
-            // let res: Vec<String> = tokenizer::get_tokens(&tokenizer, code);
             let res: Vec<String> = tokenizer.get_tokens(code);
             assert_eq!(res, expected);
         }
@@ -33,7 +33,6 @@ mod tests {
                 .split_whitespace()
                 .map(|s| String::from(s)).collect();
             let mut tokenizer = syntax::intel::Tokenizer;
-            // let res: Vec<String> = tokenizer::get_tokens(&tokenizer, code);
             let res: Vec<String> = tokenizer.get_tokens(code);
             assert_eq!(res, expected);
         }
@@ -46,7 +45,6 @@ mod tests {
                 .map(|ch| String::from(ch))
                 .collect();
             let mut tokenizer = syntax::intel::Tokenizer;
-            // let res: Vec<String> = tokenizer::get_tokens(&tokenizer, code);
             let res: Vec<String> = tokenizer.get_tokens(code);
             assert_eq!(res, expected);
         }
@@ -59,7 +57,6 @@ mod tests {
             ";
             let expected: Vec<String> = vec![String::from("main:"), String::from("loop2:")];
             let mut tokenizer = syntax::intel::Tokenizer;
-            // let res: Vec<String> = tokenizer::get_tokens(&tokenizer, code);
             let res: Vec<String> = tokenizer.get_tokens(code);
             assert_eq!(res, expected);
         }
@@ -72,7 +69,6 @@ mod tests {
             ";
             let expected: Vec<String> = vec![String::from(".globl"), String::from(".text")];
             let mut tokenizer = syntax::intel::Tokenizer;
-            // let res: Vec<String> = tokenizer::get_tokens(&tokenizer, code);
             let res: Vec<String> = tokenizer.get_tokens(code);
             assert_eq!(res, expected);
         }
@@ -82,7 +78,6 @@ mod tests {
             let code = "-1 +3 -66 1000";
             let expected: Vec<String> = code.split_whitespace().map(|s| String::from(s)).collect();
             let mut tokenizer = syntax::intel::Tokenizer;
-            // let res: Vec<String> = tokenizer::get_tokens(&tokenizer, code);
             let res: Vec<String> = tokenizer.get_tokens(code);
             assert_eq!(res, expected);
         }
@@ -111,7 +106,6 @@ mod tests {
                 "beq", "x0", ",", "3", "+", "-9", ",", "loop",
             ].map(|s| String::from(s));
             let mut tokenizer = syntax::intel::Tokenizer;
-            // let res: Vec<String> = tokenizer::get_tokens(&tokenizer, code);
             let res: Vec<String> = tokenizer.get_tokens(code);
             assert_eq!(res, expected);
         }
@@ -130,7 +124,6 @@ mod tests {
                 "\"isso ai\"", "\"esse \\\"cara\\\"\"",
             ].map(|s| String::from(s));
             let mut tokenizer = syntax::intel::Tokenizer;
-            // let res: Vec<String> = tokenizer::get_tokens(&tokenizer, code);
             let res: Vec<String> = tokenizer.get_tokens(code);
             assert_eq!(res, expected);
         }
@@ -148,7 +141,6 @@ mod tests {
                 "beq", "x0", ",", "x0", ",", "loop",
             ].map(|s| String::from(s));
             let mut tokenizer = syntax::intel::Tokenizer;
-            // let res: Vec<String> = tokenizer::get_tokens(&tokenizer, code);
             let res: Vec<String> = tokenizer.get_tokens(code);
             assert_eq!(res, expected);
         }
@@ -174,7 +166,6 @@ mod tests {
                 "addi", "s0", ",", "sp", ",", "16",
             ].map(|s| String::from(s));
             let mut tokenizer = syntax::intel::Tokenizer;
-            // let res: Vec<String> = tokenizer::get_tokens(&tokenizer, code);
             let res: Vec<String> = tokenizer.get_tokens(code);
             assert_eq!(res, expected);
         }
@@ -203,7 +194,6 @@ mod tests {
                 "ret",
             ].map(|s| String::from(s));
             let mut tokenizer = syntax::intel::Tokenizer;
-            // let res: Vec<String> = tokenizer::get_tokens(&tokenizer, code);
             let res: Vec<String> = tokenizer.get_tokens(code);
             assert_eq!(res, expected);
         }

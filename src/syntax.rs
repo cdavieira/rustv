@@ -1,4 +1,5 @@
 pub mod intel {
+    use crate::assembler::{self, HandleArg};
     use crate::tokenizer::{self, CommonClassifier};
     use crate::lexer::{self, TokenClassifier, ToExtension, ToRegister, ToPseudo};
     use crate::parser;
@@ -7,6 +8,7 @@ pub mod intel {
     pub struct Tokenizer ;
     pub struct Lexer;
     pub struct Parser;
+    pub struct Assembler;
 
     /* Tokenizer */
 
@@ -129,8 +131,8 @@ pub mod intel {
                 "x25" | "s9"  => Some(Register::X25),
                 "x26" | "s10" => Some(Register::X26),
                 "x27" | "s11" => Some(Register::X27),
-                "x28" | "t3"  => Some(Register::X27),
-                "x29" | "t4"  => Some(Register::X27),
+                "x28" | "t3"  => Some(Register::X28),
+                "x29" | "t4"  => Some(Register::X29),
                 "x30" | "t5"  => Some(Register::X30),
                 "x31" | "t6"  => Some(Register::X31),
                 "pc" => Some(Register::PC),
@@ -328,9 +330,9 @@ pub mod intel {
 
     impl<'a> parser::Parser<'a> for Parser {
         type Token = Token;
-        type Output = Statement<'a>;
+        type Statement = Statement<'a>;
 
-        fn parse(&'a self, tokens: &'a Vec<Self::Token>) -> Vec<Self::Output>  {
+        fn parse(&'a self, tokens: &'a Vec<Self::Token>) -> Vec<Self::Statement>  {
             let insts = parser::get_instructions(self, tokens);
             let mut v = Vec::new();
             for parser::Instruction{keyword, args} in insts {
@@ -343,6 +345,52 @@ pub mod intel {
                 }
             }
             v
+        }
+    }
+
+
+
+    /* Assembler */
+    impl<'a, 'b> HandleArg<'a, 'b> for Assembler {
+        type Token = Token;
+
+        fn is_register(&self, token: &Self::Token) -> bool {
+            match token {
+                Token::REG(register) => true,
+                _ => false,
+            }
+        }
+
+        fn is_offset(&self, token: &Self::Token) -> bool {
+            match token {
+                // Token::LABEL(_) => todo!(),
+                Token::NUMBER(_) => true,
+                _ => false,
+            }
+        }
+
+        fn is_immediate(&self, token: &Self::Token) -> bool {
+            match token {
+                Token::NUMBER(_) => true,
+                _ => false,
+            }
+        }
+
+        fn get_number(&self, token: &Self::Token) -> i32 {
+            match token {
+                Token::REG(register) => register.id().into(),
+                // Token::LABEL(_) => todo!(),
+                Token::NUMBER(n) => *n,
+                _ => 0,
+            }
+        }
+    }
+
+    impl<'a> assembler::Assembler<'a> for Assembler {
+        type Output = Statement<'a>;
+
+        fn to_words(&self, instructions: Vec<&'a Self::Output>) -> Vec<u32>  {
+            assembler::to_words(self, instructions)
         }
     }
 }

@@ -39,3 +39,5 @@ interface onde o implementador diz o que cada token do args eh (funct7, funct3, 
 rs1, rs2, rd, imm, offset
 sw - rs1, rs2, offset
 addi - rd, rs1, imm
+
+create tests for checking if the intel assembler is assembling the write instructions
