@@ -1,11 +1,14 @@
+src := x.s
+obj := $(src:.s=.o)
+log := $(src:.s=.txt)
 all:
-	riscv32-unknown-linux-gnu-as addi.s
-	@echo "hexdump a.out" > info.txt
-	hexdump a.out        >> info.txt
-	@echo -e "\n\n\n"    >> info.txt
-	@echo "riscv32-unknown-linux-gnu-readelf -a a.out" >> info.txt
-	riscv32-unknown-linux-gnu-readelf -a a.out         >> info.txt
-	@echo -e "\n\n\n"    >> info.txt
-	@echo "riscv32-unknown-linux-gnu-objdump -d a.out" >> info.txt
-	riscv32-unknown-linux-gnu-objdump -d a.out         >> info.txt
-	@echo -e "\n\n\n"    >> info.txt
+	riscv32-unknown-linux-gnu-as $(src) -o $(obj)
+	@echo "hexdump $(obj)" > $(log)
+	hexdump $(obj)        >> $(log)
+	@echo -e "\n\n\n"     >> $(log)
+	@echo "riscv32-unknown-linux-gnu-readelf -a $(obj)" >> $(log)
+	riscv32-unknown-linux-gnu-readelf -a $(obj)         >> $(log)
+	@echo -e "\n\n\n"     >> $(log)
+	@echo "riscv32-unknown-linux-gnu-objdump -d $(obj)" >> $(log)
+	riscv32-unknown-linux-gnu-objdump -d $(obj)         >> $(log)
+	@echo -e "\n\n\n"     >> $(log)

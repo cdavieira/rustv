@@ -77,7 +77,6 @@ pub enum Instruction {
 }
 
 impl Instruction {
-    //add, and, or (R), lui (U), jal (J), addi, andi, ori, lw (I), sw (S), beq, blt (B)
     pub fn get_bytes(&self) -> u32 {
         match self {
             Instruction::R { funct7, rs2, rs1, funct3, rd, opcode } => {
@@ -215,8 +214,8 @@ impl Extension for RV32I {
             RV32I::SRA   => Instruction::R { funct7: 0b0100000, rs2, rs1, funct3: 0b101, rd, opcode: 0b0110011 },
             RV32I::SLT   => Instruction::R { funct7: 0b0000000, rs2, rs1, funct3: 0b010, rd, opcode: 0b0110011 },
             RV32I::SLTU  => Instruction::R { funct7: 0b0000000, rs2, rs1, funct3: 0b011, rd, opcode: 0b0110011 },
-            RV32I::LUI   => Instruction::U { imm: imm_to_u(imm), rd, opcode: 0b01101 },
-            RV32I::AUIPC => Instruction::U { imm: imm_to_u(imm), rd, opcode: 0b00101 },
+            RV32I::LUI   => Instruction::U { imm: imm_to_u(imm), rd, opcode: 0b0110111 },
+            RV32I::AUIPC => Instruction::U { imm: imm_to_u(imm), rd, opcode: 0b0010111 },
             RV32I::JAL   => Instruction::J { imm: imm_to_j(imm), rd, opcode: 0b1101111 },
             RV32I::JALR  => Instruction::I { imm: imm_to_i(imm), rs1, funct3: 0b000, rd, opcode: 0b1101111 },
             RV32I::ADDI  => Instruction::I { imm: imm_to_i(imm), rs1, funct3: 0b000, rd, opcode: 0b0010011 },
@@ -333,8 +332,10 @@ fn imm_to_s(imm: i32) -> (i32, i32) {
 }
 
 fn imm_to_b(imm: i32) -> (i32, i32) {
-    let imm1 = (imm & 0b1111_111_00000) >> 5;
-    let imm2 = (imm & 0b11110) | ((imm & 0b1000_0000_0000) >> 11);
+    let bit12 = imm & 0b100_000_000_000;
+    let bit13 = imm & 0b1_000_000_000_000;
+    let imm1 = ((imm & 0b111111_00000) >> 5) | (bit13 >> 6);
+    let imm2 = (imm & 0b11110) | (bit12 >> 11);
     (imm1, imm2)
 }
 
@@ -343,9 +344,15 @@ fn imm_to_u(imm: i32) -> i32 {
 }
 
 fn imm_to_j(imm: i32) -> i32 {
-    let p1 = (imm & 0b1111_1111_0000_0000_0000) >> 12;
-    let p2 = (imm & 0b0000_0000_1000_0000_0000) >> 12;
-    let p3 = (imm & 0b11110) >> 1;
-    let p4 = (imm & 0b1_11111_00000) >> 5;
-    ((p4 << 12) | (p3 << 8) | (p2 << 7) | p1) << 1
+    let p1 = (imm >> 12) & 0b1111_1111;
+    let p2 = (imm >> 11) & 1;
+    let p3 = (imm >> 1)  & 0b11111_11111;
+    let p4 = (imm >> 20) & 1;
+    ((p4 << 18) | (p3 << 9) | (p2 << 8) | p1) << 1
+}
+
+
+
+//Pseudo Instruction
+pub struct PseudoInstruction {
 }

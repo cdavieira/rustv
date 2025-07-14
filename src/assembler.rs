@@ -59,43 +59,13 @@ pub fn to_words<'a, 'b: 'a>(handler: &impl HandleArg<'a, 'b, Token = Token>, sta
                     crate::spec::Syntax::N0 => todo!(),
                     crate::spec::Syntax::N1(field) => todo!(),
                     crate::spec::Syntax::N2(field, field1) => {
+                        let fields = vec![field, field1];
+                        let (rs1, rs2, rd, imm) = get_args(handler, fields, args);
+                        v.push(opcode.get_instruction(rs1, rs2, rd, imm).get_bytes());
                     },
                     crate::spec::Syntax::N3(field, field1, field2) => {
-                        let fields = [field, field1, field2];
-                        let mut args_it = args.iter();
-                        let mut rs1: i32 = 0;
-                        let mut rs2: i32 = 0;
-                        let mut rd: i32 = 0;
-                        let mut imm: i32 = 0;
-                        for f in fields {
-                            match f {
-                                Field::RS1 => {
-                                    if let Some(reg) = handler.read_register(&mut args_it) {
-                                        rs1 = handler.get_number(&reg);
-                                    }
-                                },
-                                Field::RS2 => {
-                                    if let Some(reg) = handler.read_register(&mut args_it) {
-                                        rs2 = handler.get_number(&reg);
-                                    }
-                                },
-                                Field::RD => {
-                                    if let Some(reg) = handler.read_register(&mut args_it) {
-                                        rd = handler.get_number(&reg);
-                                    }
-                                },
-                                Field::IMM => {
-                                    if let Some(n) = handler.read_immediate(&mut args_it) {
-                                        imm = handler.get_number(&n);
-                                    }
-                                },
-                                Field::OFF => {
-                                    if let Some(o) = handler.read_offset(&mut args_it) {
-                                        imm = handler.get_number(&o);
-                                    }
-                                },
-                            }
-                        }
+                        let fields = vec![field, field1, field2];
+                        let (rs1, rs2, rd, imm) = get_args(handler, fields, args);
                         v.push(opcode.get_instruction(rs1, rs2, rd, imm).get_bytes());
                     },
                     crate::spec::Syntax::N4(field, field1, field2, field3) => todo!(),
@@ -107,4 +77,47 @@ pub fn to_words<'a, 'b: 'a>(handler: &impl HandleArg<'a, 'b, Token = Token>, sta
         opt = it.next();
     }
     v
+}
+
+fn get_args<'a, 'b: 'a>(
+    handler: &impl HandleArg<'a, 'b, Token = Token>,
+    fields: Vec<Field>,
+    args: &'a Vec<&'b Token>
+) -> (i32, i32, i32, i32)
+{
+    let mut args_it = args.iter();
+    let mut rs1: i32 = 0;
+    let mut rs2: i32 = 0;
+    let mut rd: i32 = 0;
+    let mut imm: i32 = 0;
+    for f in fields {
+        match f {
+            Field::RS1 => {
+                if let Some(reg) = handler.read_register(&mut args_it) {
+                    rs1 = handler.get_number(&reg);
+                }
+            },
+            Field::RS2 => {
+                if let Some(reg) = handler.read_register(&mut args_it) {
+                    rs2 = handler.get_number(&reg);
+                }
+            },
+            Field::RD => {
+                if let Some(reg) = handler.read_register(&mut args_it) {
+                    rd = handler.get_number(&reg);
+                }
+            },
+            Field::IMM => {
+                if let Some(n) = handler.read_immediate(&mut args_it) {
+                    imm = handler.get_number(&n);
+                }
+            },
+            Field::OFF => {
+                if let Some(o) = handler.read_offset(&mut args_it) {
+                    imm = handler.get_number(&o);
+                }
+            },
+        }
+    }
+    (rs1, rs2, rd, imm)
 }

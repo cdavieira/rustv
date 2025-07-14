@@ -11,8 +11,6 @@ main:
 	lw	s0, 8(sp)
 	addi	sp, sp, 16
 
-
-	addi    t3, t2, 8
-
+	addi	t3,t2,8
 
 	ret

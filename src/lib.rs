@@ -11,6 +11,9 @@ mod tests {
     //intel syntax
     mod intel {
         use crate::tokenizer::Tokenizer;
+        use crate::lexer::Lexer;
+        use crate::parser::Parser;
+        use crate::assembler::Assembler;
 
         use super::super::*;
 
@@ -110,11 +113,41 @@ mod tests {
             assert_eq!(res, expected);
         }
 
-        /* lui, auipc, addi, andi, ori, xori, add, sub, and, or, xor, sll, srl, sra, fence, slti, sltiu, slli, srli, srai, slt, sltu, lw, sw */
         #[test]
-        #[ignore]
-        fn tokenize_rv32i(){
-            todo!();
+        // #[ignore]
+        //add, and, or (R), lui (U), jal (J), addi, andi, ori, lw (I), sw (S), beq, blt (B)
+        fn tokenize_rv32i_subset0(){
+            let code = "
+                addi    sp, sp, 16
+                andi    sp, sp, 16
+                ori     sp, sp, 16
+                sw      t0,3(t1)
+                beq     t1,t2,0x900
+                blt     t1,t2,0x900
+                lui     t3,25
+                add     t3,t2,t1
+                or      t3,t2,t1
+                and     t3,t2,t1
+                jal     t4,0x1000
+                lw      ra, -12(sp)
+            ";
+            let expected = [
+                "addi", "sp", ",", "sp", ",", "16",
+                "andi", "sp", ",", "sp", ",", "16",
+                "ori", "sp", ",", "sp", ",", "16",
+                "sw", "t0", ",", "3", "(", "t1", ")",
+                "beq", "t1", ",", "t2", ",", "0x900",
+                "blt", "t1", ",", "t2", ",", "0x900",
+                "lui", "t3", ",", "25",
+                "add", "t3", ",", "t2", ",", "t1",
+                "or", "t3", ",", "t2", ",", "t1",
+                "and", "t3", ",", "t2", ",", "t1",
+                "jal", "t4", ",", "0x1000",
+                "lw", "ra", ",", "-12", "(", "sp", ")",
+            ].map(|s| String::from(s));
+            let mut tokenizer = syntax::intel::Tokenizer;
+            let res: Vec<String> = tokenizer.get_tokens(code);
+            assert_eq!(res, expected);
         }
 
         #[test]
@@ -196,6 +229,81 @@ mod tests {
             let mut tokenizer = syntax::intel::Tokenizer;
             let res: Vec<String> = tokenizer.get_tokens(code);
             assert_eq!(res, expected);
+        }
+
+        fn encode_single_instruction(code: &str) -> u32 {
+            let mut tokenizer = syntax::intel::Tokenizer;
+            let lexer = syntax::intel::Lexer;
+            let parser = syntax::intel::Parser;
+            let assembler = syntax::intel::Assembler;
+            let tokens = tokenizer.get_tokens(code);
+            let lexemes = lexer.parse(tokens);
+            let stats = parser.parse(&lexemes);
+            let stats: Vec<&syntax::intel::Statement> = stats.iter().map(|e| e).collect();
+            let res = assembler.to_words(stats);
+            *res.get(0).unwrap()
+        }
+
+        #[test]
+        fn encode_addi() {
+            let code = "addi  sp, sp, 16";
+            let expected: u32 = 0x01010113;
+            let res = encode_single_instruction(code);
+            assert_eq!(res, expected, "LEFT: {res:x}, RIGHT: {expected:x}");
+        }
+
+        #[test]
+        fn encode_sw() {
+            let code = "sw t0,3(t1)";
+            let expected: u32 = 0x005321a3;
+            let res = encode_single_instruction(code);
+            assert_eq!(res, expected, "LEFT: {res:x}, RIGHT: {expected:x}");
+        }
+
+        #[test]
+        #[ignore]
+        //OBS: the 'as' assembler uses two instructions to encode bne: 'beq' followed by a 'j'.
+        //For this reason, the offset given in the instruction isn't the exact same generated in
+        //the bytecode, because the encoded offset jumps PC to the position of the consecutive 'j'
+        //instruction. For that reason, in this test the offset 10 gets encoded as 8.
+        fn encode_bne() {
+            let code = "bne t1,t2,10";
+            let expected: u32 = 0x00731463;
+            let res = encode_single_instruction(code);
+            assert_eq!(res, expected, "LEFT: {res:x}, RIGHT: {expected:x}");
+        }
+
+        #[test]
+        fn encode_lui() {
+            let code = "lui t3,25";
+            let expected: u32 = 0x00019e37;
+            let res = encode_single_instruction(code);
+            assert_eq!(res, expected, "LEFT: {res:x}, RIGHT: {expected:x}");
+        }
+
+        #[test]
+        fn encode_lw() {
+            let code = "lw ra,-12(sp)";
+            let expected: u32 = 0xff412083;
+            let res = encode_single_instruction(code);
+            assert_eq!(res, expected, "LEFT: {res:x}, RIGHT: {expected:x}");
+        }
+
+        #[test]
+        fn encode_add() {
+            let code = "add t3,t2,t1";
+            let expected: u32 = 0x00638e33;
+            let res = encode_single_instruction(code);
+            assert_eq!(res, expected, "LEFT: {res:x}, RIGHT: {expected:x}");
+        }
+
+        #[test]
+        #[ignore]
+        fn encode_jal() {
+            let code = "jal t4,0x900";
+            let expected: u32 = 0x00000eef;
+            let res = encode_single_instruction(code);
+            assert_eq!(res, expected, "LEFT: {res:x}, RIGHT: {expected:x}");
         }
     }
 }
