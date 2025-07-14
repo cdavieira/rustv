@@ -1,9 +1,9 @@
 pub mod intel {
-    use crate::assembler::{self, HandleArg};
+    use crate::assembler::{self};
     use crate::tokenizer::{self, CommonClassifier};
     use crate::lexer::{self, TokenClassifier, ToExtension, ToRegister, ToPseudo};
-    use crate::parser;
-    use crate::spec::{Extension, Register, RV32I};
+    use crate::parser::{self, WhichKeyword, Keyword};
+    use crate::spec::{Arg, Extension, Register, WhichArg, RV32I };
 
     pub struct Tokenizer ;
     pub struct Lexer;
@@ -100,6 +100,15 @@ pub mod intel {
         COMMA,
     }
 
+    // impl Clone for Token {
+    //     fn clone(&self) -> Self {
+    //         match self {
+    //             Token::OP(extension) => Token::OP(extension.clone()),
+    //             token => token.clone()
+    //         }
+    //     }
+    // }
+
     impl ToRegister<&str> for Lexer {
         fn to_register(&self, token: &str) -> Option<crate::spec::Register>  {
             match token {
@@ -151,7 +160,6 @@ pub mod intel {
         }
     }
 
-    //TODO: add more extensions, see if that works and test it
     impl ToExtension<&str> for Lexer {
         fn to_extension(&self, token: &str) -> Option<Box<dyn Extension>> {
             match token {
@@ -306,91 +314,86 @@ pub mod intel {
 
     /* Parser */
 
-    #[derive(Debug)]
-    pub enum Statement<'a> {
-        PseudoInstruction{opcode: &'a Pseudo, args: Vec<&'a Token>},
-        Instruction{opcode: &'a Box<dyn Extension>, args: Vec<&'a Token>},
-        Directive(&'a String),
-        Label(&'a String),
-    }
-
-    impl parser::IsInstruction for Parser {
+    impl<'a> WhichKeyword<'a> for Parser {
         type Token = Token;
 
-        fn is_instruction(&self, token: &Self::Token) -> bool {
+        fn which_keyword(&self, token: &'a Self::Token) -> Option<Keyword<'a>>  {
             match token {
-                Token::OP(_)      => true,
-                Token::PSEUDO(_)  => true,
-                Token::SECTION(_) => true,
-                Token::LABEL(_)   => true,
-                _                 => false
+                Token::OP(e) => Some(Keyword::INSTRUCTION(e)),
+                Token::PSEUDO(_) => Some(Keyword::PSEUDO),
+                Token::SECTION(s) => Some(Keyword::SECTION(s.clone())),
+                Token::LABEL(s) => Some(Keyword::LABEL(s.clone())),
+                _ => None,
+            }
+        }
+    }
+
+    impl WhichArg for Parser {
+        type Token = Token;
+
+        fn which_arg(&self, token: &Self::Token) -> Option<Arg>  {
+            match token {
+                Token::REG(register) => Some(Arg::REG(register.id().into())),
+                // Token::NAME(_) => todo!(),
+                // Token::SECTION(_) => todo!(),
+                // Token::LABEL(_) => todo!(),
+                Token::NUMBER(n) => Some(Arg::NUMBER(*n)),
+                _ => None
             }
         }
     }
 
     impl<'a> parser::Parser<'a> for Parser {
         type Token = Token;
-        type Statement = Statement<'a>;
+        type Statement = (&'a Box<dyn Extension>, Vec<Arg>);
 
         fn parse(&'a self, tokens: &'a Vec<Self::Token>) -> Vec<Self::Statement>  {
-            let insts = parser::get_instructions(self, tokens);
-            let mut v = Vec::new();
-            for parser::Instruction{keyword, args} in insts {
-                match keyword {
-                    Token::OP(extension)  => v.push(Statement::Instruction { opcode: extension, args }),
-                    Token::PSEUDO(pseudo) => v.push(Statement::PseudoInstruction { opcode: pseudo, args }),
-                    Token::SECTION(sec) => v.push(Statement::Label(sec)),
-                    Token::LABEL(label) => v.push(Statement::Label(label)),
-                    _ => {}
-                }
-            }
-            v
+            parser::parse(self, tokens)
         }
     }
 
 
 
     /* Assembler */
-    impl<'a, 'b> HandleArg<'a, 'b> for Assembler {
-        type Token = Token;
 
-        fn is_register(&self, token: &Self::Token) -> bool {
-            match token {
-                Token::REG(register) => true,
-                _ => false,
-            }
-        }
-
-        fn is_offset(&self, token: &Self::Token) -> bool {
-            match token {
-                // Token::LABEL(_) => todo!(),
-                Token::NUMBER(_) => true,
-                _ => false,
-            }
-        }
-
-        fn is_immediate(&self, token: &Self::Token) -> bool {
-            match token {
-                Token::NUMBER(_) => true,
-                _ => false,
-            }
-        }
-
-        fn get_number(&self, token: &Self::Token) -> i32 {
-            match token {
-                Token::REG(register) => register.id().into(),
-                // Token::LABEL(_) => todo!(),
-                Token::NUMBER(n) => *n,
-                _ => 0,
-            }
-        }
-    }
+    // impl<'a> TranslatePseudo<'a> for Assembler {
+    //     type Token = Token;
+    //
+    //     fn translate_pseudo(&self, stat: &Vec<&Self::Token>, pseudo_stat: &'a mut Vec<Self::Token>) -> Option<Vec<Vec<&'a Self::Token>>>{
+    //         if let Token::PSEUDO(pseudo) = stat.get(0).unwrap() {
+    //             match pseudo {
+    //                 Pseudo::LI => {
+    //                     let arg1 = stat.get(1).unwrap();
+    //                     let arg2 = stat.get(2).unwrap();
+    //                     // lui x7 2
+    //                     // addi x7 x7 -2048
+    //                     let mut v = Vec::new();
+    //                     let mut i = Vec::new();
+    //
+    //                     pseudo_stat.push(Token::OP(Box::new(RV32I::LUI)));
+    //                     i.push(pseudo_stat.last().unwrap());
+    //                     v.push(i);
+    //
+    //                     Some(v)
+    //                 },
+    //                 Pseudo::RET => {
+    //                     let v = vec![
+    //                     ];
+    //                     Some(v)
+    //                 },
+    //             }
+    //         }
+    //         else {
+    //             None
+    //         }
+    //     }
+    // }
 
     impl<'a> assembler::Assembler<'a> for Assembler {
-        type Output = Statement<'a>;
+        type Output = (&'a Box<dyn Extension>, Vec<Arg>);
 
-        fn to_words(&self, instructions: Vec<&'a Self::Output>) -> Vec<u32>  {
-            assembler::to_words(self, instructions)
+        fn to_words(&self, instructions: &'a Vec<Self::Output>) -> Vec<u32>  {
+            assembler::to_u32(instructions)
         }
     }
 }

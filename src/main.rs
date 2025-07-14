@@ -11,7 +11,6 @@ use lexer::Lexer;
 use rustv::spec::{Instruction, RV32I, Extension};
 use tokenizer::Tokenizer;
 use parser::Parser;
-use syntax::intel::{Statement};
 
 fn main() {
     let code = "
@@ -40,23 +39,26 @@ fn main() {
 
     let tokens = t.get_tokens(code);
     let lexemes = l.parse(tokens);
-    let stats = p.parse(&lexemes);
+    // let stats = p.parse(&lexemes);
 
     let tokens = t.get_tokens(li);
     let lexemes = l.parse(tokens);
-    let li = p.parse(&lexemes);
+    // let li = p.parse(&lexemes);
 
     let tokens = t.get_tokens(addi);
     let lexemes = l.parse(tokens);
     let addi = p.parse(&lexemes);
     println!("{:?}", addi);
 
-    let m: Vec<&Statement> = addi.iter().map(|e| e).collect();
-    let b = s.to_words(m);
-    for bits in b {
-        println!("{bits:b}");
-        println!("{bits:x}");
-    }
+    let bits = s.to_words(&addi);
+    println!("{:?}", bits);
+
+    // let m: Vec<&Statement> = addi.iter().map(|e| e).collect();
+    // let b = s.to_words(m);
+    // for bits in b {
+    //     println!("{bits:b}");
+    //     println!("{bits:x}");
+    // }
 
     // //ori 5,5,0x800
     // let i: u32 = RV32I::ORI.get_instruction(5, 0, 5, 0x800).get_bytes();

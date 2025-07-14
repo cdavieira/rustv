@@ -50,7 +50,18 @@ impl Register {
 
 // Instruction Formats
 
-pub enum Field {
+#[derive(Debug, Clone, Copy)]
+pub enum Arg {
+    NUMBER(i32),
+    REG(i32),
+}
+
+pub trait WhichArg {
+    type Token;
+    fn which_arg(&self, token: &Self::Token) -> Option<Arg> ;
+}
+
+pub enum SyntaxField {
     RS1,
     RS2,
     RD,
@@ -60,10 +71,10 @@ pub enum Field {
 
 pub enum Syntax {
     N0,
-    N1(Field),
-    N2(Field, Field),
-    N3(Field, Field, Field),
-    N4(Field, Field, Field, Field),
+    N1(SyntaxField),
+    N2(SyntaxField, SyntaxField),
+    N3(SyntaxField, SyntaxField, SyntaxField),
+    N4(SyntaxField, SyntaxField, SyntaxField, SyntaxField),
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -175,7 +186,14 @@ enum whose variants are then linked to some specific instruction format.
 pub trait Extension: std::fmt::Debug {
     fn get_instruction(&self, rs1: i32, rs2: i32, rd: i32, imm: i32) -> Instruction ;
     fn get_syntax(&self) -> Syntax ;
+    // fn clone_box(&self) -> Box<dyn Extension> ;
 }
+
+// impl Clone for Box<dyn Extension> {
+//     fn clone(&self) -> Self {
+//         self.clone_box()
+//     }
+// }
 
 
 
@@ -274,46 +292,50 @@ impl Extension for RV32I {
 
     fn get_syntax(&self) -> Syntax {
         match self {
-            RV32I::ADD   => Syntax::N3(Field::RD, Field::RS1, Field::RS2),
-            RV32I::SUB   => Syntax::N3(Field::RD, Field::RS1, Field::RS2),
-            RV32I::AND   => Syntax::N3(Field::RD, Field::RS1, Field::RS2),
-            RV32I::OR    => Syntax::N3(Field::RD, Field::RS1, Field::RS2),
-            RV32I::XOR   => Syntax::N3(Field::RD, Field::RS1, Field::RS2),
-            RV32I::SLL   => Syntax::N3(Field::RD, Field::RS1, Field::RS2),
-            RV32I::SRL   => Syntax::N3(Field::RD, Field::RS1, Field::RS2),
-            RV32I::SRA   => Syntax::N3(Field::RD, Field::RS1, Field::RS2),
-            RV32I::SLT   => Syntax::N3(Field::RD, Field::RS1, Field::RS2),
-            RV32I::SLTU  => Syntax::N3(Field::RD, Field::RS1, Field::RS2),
-            RV32I::LUI   => Syntax::N2(Field::RD, Field::IMM),
-            RV32I::AUIPC => Syntax::N2(Field::RD, Field::IMM),
-            RV32I::JAL   => Syntax::N2(Field::RD, Field::OFF),
-            RV32I::JALR  => Syntax::N3(Field::RD, Field::RS1, Field::OFF),
-            RV32I::ADDI  => Syntax::N3(Field::RD, Field::RS1, Field::IMM),
-            RV32I::ANDI  => Syntax::N3(Field::RD, Field::RS1, Field::IMM),
-            RV32I::ORI   => Syntax::N3(Field::RD, Field::RS1, Field::IMM),
-            RV32I::XORI  => Syntax::N3(Field::RD, Field::RS1, Field::IMM),
-            RV32I::SLTI  => Syntax::N3(Field::RD, Field::RS1, Field::IMM),
-            RV32I::SLTIU => Syntax::N3(Field::RD, Field::RS1, Field::IMM),
-            RV32I::SLLI  => Syntax::N3(Field::RD, Field::RS1, Field::IMM),
-            RV32I::SRLI  => Syntax::N3(Field::RD, Field::RS1, Field::IMM),
-            RV32I::SRAI  => Syntax::N3(Field::RD, Field::RS1, Field::IMM),
-            RV32I::LW    => Syntax::N3(Field::RD, Field::OFF, Field::RS1),
-            RV32I::LH    => Syntax::N3(Field::RD, Field::OFF, Field::RS1),
-            RV32I::LB    => Syntax::N3(Field::RD, Field::OFF, Field::RS1),
-            RV32I::LHU   => Syntax::N3(Field::RD, Field::OFF, Field::RS1),
-            RV32I::LBU   => Syntax::N3(Field::RD, Field::OFF, Field::RS1),
-            RV32I::SW    => Syntax::N3(Field::RS2, Field::OFF, Field::RS1),
-            RV32I::SH    => Syntax::N3(Field::RS2, Field::OFF, Field::RS1),
-            RV32I::SB    => Syntax::N3(Field::RS2, Field::OFF, Field::RS1),
-            RV32I::BEQ   => Syntax::N3(Field::RS1, Field::RS2, Field::OFF),
-            RV32I::BNE   => Syntax::N3(Field::RS1, Field::RS2, Field::OFF),
-            RV32I::BLT   => Syntax::N3(Field::RS1, Field::RS2, Field::OFF),
-            RV32I::BLTU  => Syntax::N3(Field::RS1, Field::RS2, Field::OFF),
-            RV32I::BGE   => Syntax::N3(Field::RS1, Field::RS2, Field::OFF),
-            RV32I::BGEU  => Syntax::N3(Field::RS1, Field::RS2, Field::OFF),
+            RV32I::ADD   => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::RS2),
+            RV32I::SUB   => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::RS2),
+            RV32I::AND   => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::RS2),
+            RV32I::OR    => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::RS2),
+            RV32I::XOR   => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::RS2),
+            RV32I::SLL   => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::RS2),
+            RV32I::SRL   => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::RS2),
+            RV32I::SRA   => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::RS2),
+            RV32I::SLT   => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::RS2),
+            RV32I::SLTU  => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::RS2),
+            RV32I::LUI   => Syntax::N2(SyntaxField::RD, SyntaxField::IMM),
+            RV32I::AUIPC => Syntax::N2(SyntaxField::RD, SyntaxField::IMM),
+            RV32I::JAL   => Syntax::N2(SyntaxField::RD, SyntaxField::OFF),
+            RV32I::JALR  => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::OFF),
+            RV32I::ADDI  => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::IMM),
+            RV32I::ANDI  => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::IMM),
+            RV32I::ORI   => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::IMM),
+            RV32I::XORI  => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::IMM),
+            RV32I::SLTI  => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::IMM),
+            RV32I::SLTIU => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::IMM),
+            RV32I::SLLI  => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::IMM),
+            RV32I::SRLI  => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::IMM),
+            RV32I::SRAI  => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::IMM),
+            RV32I::LW    => Syntax::N3(SyntaxField::RD, SyntaxField::OFF, SyntaxField::RS1),
+            RV32I::LH    => Syntax::N3(SyntaxField::RD, SyntaxField::OFF, SyntaxField::RS1),
+            RV32I::LB    => Syntax::N3(SyntaxField::RD, SyntaxField::OFF, SyntaxField::RS1),
+            RV32I::LHU   => Syntax::N3(SyntaxField::RD, SyntaxField::OFF, SyntaxField::RS1),
+            RV32I::LBU   => Syntax::N3(SyntaxField::RD, SyntaxField::OFF, SyntaxField::RS1),
+            RV32I::SW    => Syntax::N3(SyntaxField::RS2, SyntaxField::OFF, SyntaxField::RS1),
+            RV32I::SH    => Syntax::N3(SyntaxField::RS2, SyntaxField::OFF, SyntaxField::RS1),
+            RV32I::SB    => Syntax::N3(SyntaxField::RS2, SyntaxField::OFF, SyntaxField::RS1),
+            RV32I::BEQ   => Syntax::N3(SyntaxField::RS1, SyntaxField::RS2, SyntaxField::OFF),
+            RV32I::BNE   => Syntax::N3(SyntaxField::RS1, SyntaxField::RS2, SyntaxField::OFF),
+            RV32I::BLT   => Syntax::N3(SyntaxField::RS1, SyntaxField::RS2, SyntaxField::OFF),
+            RV32I::BLTU  => Syntax::N3(SyntaxField::RS1, SyntaxField::RS2, SyntaxField::OFF),
+            RV32I::BGE   => Syntax::N3(SyntaxField::RS1, SyntaxField::RS2, SyntaxField::OFF),
+            RV32I::BGEU  => Syntax::N3(SyntaxField::RS1, SyntaxField::RS2, SyntaxField::OFF),
             RV32I::FENCE => todo!(),
         }
     }
+
+    // fn clone_box(&self) -> Box<dyn Extension>  {
+    //     Box::new(self.clone())
+    // }
 }
 
 //convert an immediate as read from the parser into the number to be stored in an Instruction.
@@ -349,10 +371,4 @@ fn imm_to_j(imm: i32) -> i32 {
     let p3 = (imm >> 1)  & 0b11111_11111;
     let p4 = (imm >> 20) & 1;
     ((p4 << 18) | (p3 << 9) | (p2 << 8) | p1) << 1
-}
-
-
-
-//Pseudo Instruction
-pub struct PseudoInstruction {
 }

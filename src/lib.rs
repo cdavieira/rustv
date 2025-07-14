@@ -239,8 +239,7 @@ mod tests {
             let tokens = tokenizer.get_tokens(code);
             let lexemes = lexer.parse(tokens);
             let stats = parser.parse(&lexemes);
-            let stats: Vec<&syntax::intel::Statement> = stats.iter().map(|e| e).collect();
-            let res = assembler.to_words(stats);
+            let res = assembler.to_words(&stats);
             *res.get(0).unwrap()
         }
 
