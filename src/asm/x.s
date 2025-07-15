@@ -9,7 +9,7 @@ main:
 	beq     t1,t2,10
 	lui     t3,25
 	add     t3,t2,t1
-	jal     t4,0x900
+	jal     t4,0x1c
 	lw      ra, -12(sp)
 
 

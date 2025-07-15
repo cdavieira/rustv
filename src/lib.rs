@@ -299,7 +299,8 @@ mod tests {
         #[test]
         #[ignore]
         fn encode_jal() {
-            let code = "jal t4,0x900";
+            // let code = "jal t4,0x900";
+            let code = "jal t4,18";
             let expected: u32 = 0x00000eef;
             let res = encode_single_instruction(code);
             assert_eq!(res, expected, "LEFT: {res:x}, RIGHT: {expected:x}");

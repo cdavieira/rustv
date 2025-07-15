@@ -2,8 +2,8 @@ pub mod intel {
     use crate::assembler::{self};
     use crate::tokenizer::{self, CommonClassifier};
     use crate::lexer::{self, TokenClassifier, ToExtension, ToRegister, ToPseudo};
-    use crate::parser::{self, WhichKeyword, Keyword};
-    use crate::spec::{Arg, Extension, Register, WhichArg, RV32I };
+    use crate::parser::{self, ToKeyword, Keyword};
+    use crate::spec::{Arg, Extension, Register, ToArg, RV32I };
 
     pub struct Tokenizer ;
     pub struct Lexer;
@@ -100,14 +100,14 @@ pub mod intel {
         COMMA,
     }
 
-    // impl Clone for Token {
-    //     fn clone(&self) -> Self {
-    //         match self {
-    //             Token::OP(extension) => Token::OP(extension.clone()),
-    //             token => token.clone()
-    //         }
-    //     }
-    // }
+    impl Clone for Token {
+        fn clone(&self) -> Self {
+            match self {
+                Token::OP(extension) => Token::OP(extension.clone()),
+                token => token.clone()
+            }
+        }
+    }
 
     impl ToRegister<&str> for Lexer {
         fn to_register(&self, token: &str) -> Option<crate::spec::Register>  {
@@ -314,10 +314,10 @@ pub mod intel {
 
     /* Parser */
 
-    impl<'a> WhichKeyword<'a> for Parser {
+    impl<'a> ToKeyword<'a> for Parser {
         type Token = Token;
 
-        fn which_keyword(&self, token: &'a Self::Token) -> Option<Keyword<'a>>  {
+        fn to_keyword(&self, token: &'a Self::Token) -> Option<Keyword<'a>>  {
             match token {
                 Token::OP(e) => Some(Keyword::INSTRUCTION(e)),
                 Token::PSEUDO(_) => Some(Keyword::PSEUDO),
@@ -328,10 +328,10 @@ pub mod intel {
         }
     }
 
-    impl WhichArg for Parser {
+    impl ToArg for Parser {
         type Token = Token;
 
-        fn which_arg(&self, token: &Self::Token) -> Option<Arg>  {
+        fn to_arg(&self, token: &Self::Token) -> Option<Arg>  {
             match token {
                 Token::REG(register) => Some(Arg::REG(register.id().into())),
                 // Token::NAME(_) => todo!(),
@@ -390,9 +390,9 @@ pub mod intel {
     // }
 
     impl<'a> assembler::Assembler<'a> for Assembler {
-        type Output = (&'a Box<dyn Extension>, Vec<Arg>);
+        type Instruction = (&'a Box<dyn Extension>, Vec<Arg>);
 
-        fn to_words(&self, instructions: &'a Vec<Self::Output>) -> Vec<u32>  {
+        fn to_words(&self, instructions: &'a Vec<Self::Instruction>) -> Vec<u32>  {
             assembler::to_u32(instructions)
         }
     }

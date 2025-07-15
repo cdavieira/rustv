@@ -56,9 +56,9 @@ pub enum Arg {
     REG(i32),
 }
 
-pub trait WhichArg {
+pub trait ToArg {
     type Token;
-    fn which_arg(&self, token: &Self::Token) -> Option<Arg> ;
+    fn to_arg(&self, token: &Self::Token) -> Option<Arg> ;
 }
 
 pub enum SyntaxField {
@@ -186,14 +186,14 @@ enum whose variants are then linked to some specific instruction format.
 pub trait Extension: std::fmt::Debug {
     fn get_instruction(&self, rs1: i32, rs2: i32, rd: i32, imm: i32) -> Instruction ;
     fn get_syntax(&self) -> Syntax ;
-    // fn clone_box(&self) -> Box<dyn Extension> ;
+    fn clone_box(&self) -> Box<dyn Extension> ;
 }
 
-// impl Clone for Box<dyn Extension> {
-//     fn clone(&self) -> Self {
-//         self.clone_box()
-//     }
-// }
+impl Clone for Box<dyn Extension> {
+    fn clone(&self) -> Self {
+        self.clone_box()
+    }
+}
 
 
 
@@ -333,9 +333,9 @@ impl Extension for RV32I {
         }
     }
 
-    // fn clone_box(&self) -> Box<dyn Extension>  {
-    //     Box::new(self.clone())
-    // }
+    fn clone_box(&self) -> Box<dyn Extension>  {
+        Box::new(self.clone())
+    }
 }
 
 //convert an immediate as read from the parser into the number to be stored in an Instruction.
@@ -362,7 +362,8 @@ fn imm_to_b(imm: i32) -> (i32, i32) {
 }
 
 fn imm_to_u(imm: i32) -> i32 {
-    (imm >> 12) & 0b11111_11111_11111_11111
+    // (imm >> 12) & 0b11111_11111_11111_11111
+    imm & 0b11111_11111_11111_11111
 }
 
 fn imm_to_j(imm: i32) -> i32 {
