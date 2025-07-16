@@ -238,8 +238,8 @@ mod tests {
             let assembler = syntax::intel::Assembler;
             let tokens = tokenizer.get_tokens(code);
             let lexemes = lexer.parse(tokens);
-            let stats = parser.parse(&lexemes);
-            let res = assembler.to_words(&stats);
+            let stats = parser.parse(lexemes);
+            let res = assembler.to_words(stats);
             *res.get(0).unwrap()
         }
 

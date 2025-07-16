@@ -1,3 +1,4 @@
+ON WHAT WOULD LATER BECOME THE 'EXTENSION' TRAIT
 the tokenizer turns a buffer into a stream of grouped caracteres (or a word for
 short), which have no indication of which line/column they occurred
 
@@ -31,3 +32,31 @@ the language to the functionality expected for each opcode
 we could create something which is independent from the actual string
 representing that opcode. Then the implementors job would only be to map the
 string slice to the entity for that extension.
+
+ON HOW TO TRANSLATE PSEUDO INSTRUCTIONS
+The toplevel trait to be implemented by all lexers states that the return value
+for the 'parse' method should be a Vec<Self::Token>.The next step after
+classifying the tokens is to group them into instructions to be later executed.
+This includes opcodes+arguments, pseudoinst+arguments, label-to-offset
+translation, and more. The way this was thought to be done was to turn the
+Vec<Self::Token> into a Vec<Vec<Self::Token>>, that is, each element is a
+vector of tokens/a instruction.
+
+The only problem arises when doing something with those instructions, more
+specifically with the translation of the pseudo instruction into their real
+opcodes. The reason for that is because we have to somehow have the ability of
+copying multiple times the arguments of pseudo instruction . This is because
+pseudo instruction might reuse more than once one of its arguments during the
+decode. Well, in rust we can only copy data for types which implement Copy, but
+we can't implement the Copy trait for Trait Objects (such as the 'dyn
+Extension'), because those aren't compatible with the Sized Trait (which by
+itself is necessary to implement Copy). Okay, that's bad. One workaround for
+this is to implement the 'Clone' trait instead of the 'Copy' trait and use the
+'clone()' method for copying. That's exactly what we did!
+
+But we could've done it differently tho. You see, we don't need to copy/clone
+the 'Self::Token' by itself. If we designed the translation method for
+pseucodes to be something as: 'translate(&Vec<Self::Token>) -> Vec<(Box<dyn
+Extension>, Vec<Arg>)', we wouldn't need to copy the tokens, but still thats
+kind of problematic, because this would require turning tokens into such tuples
+in at least two different places in the code.

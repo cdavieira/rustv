@@ -48,34 +48,7 @@ impl Register {
 
 
 
-// Instruction Formats
-
-#[derive(Debug, Clone, Copy)]
-pub enum Arg {
-    NUMBER(i32),
-    REG(i32),
-}
-
-pub trait ToArg {
-    type Token;
-    fn to_arg(&self, token: &Self::Token) -> Option<Arg> ;
-}
-
-pub enum SyntaxField {
-    RS1,
-    RS2,
-    RD,
-    IMM,
-    OFF,
-}
-
-pub enum Syntax {
-    N0,
-    N1(SyntaxField),
-    N2(SyntaxField, SyntaxField),
-    N3(SyntaxField, SyntaxField, SyntaxField),
-    N4(SyntaxField, SyntaxField, SyntaxField, SyntaxField),
-}
+// Available Instruction Binary Formats (as in the ISA)
 
 #[derive(Debug, Copy, Clone)]
 pub enum Instruction {
@@ -163,6 +136,37 @@ fn cast_20bits(f7: &i32) -> u32 {
 
 
 
+// Instruction Assembly Description
+
+pub enum ArgKey {
+    RS1,
+    RS2,
+    RD,
+    IMM,
+    OFF,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ArgValue {
+    NUMBER(i32),
+    REG(i32),
+}
+
+pub enum ArgSyntax {
+    N0,
+    N1(ArgKey),
+    N2(ArgKey, ArgKey),
+    N3(ArgKey, ArgKey, ArgKey),
+    N4(ArgKey, ArgKey, ArgKey, ArgKey),
+}
+
+pub trait ToArg {
+    type Token;
+    fn to_arg(&self, token: Self::Token) -> Option<ArgValue> ;
+}
+
+
+
 // Extensions
 
 /** 
@@ -185,7 +189,7 @@ enum whose variants are then linked to some specific instruction format.
 */
 pub trait Extension: std::fmt::Debug {
     fn get_instruction(&self, rs1: i32, rs2: i32, rd: i32, imm: i32) -> Instruction ;
-    fn get_syntax(&self) -> Syntax ;
+    fn get_syntax(&self) -> ArgSyntax ;
     fn clone_box(&self) -> Box<dyn Extension> ;
 }
 
@@ -290,45 +294,45 @@ impl Extension for RV32I {
         }
     }
 
-    fn get_syntax(&self) -> Syntax {
+    fn get_syntax(&self) -> ArgSyntax {
         match self {
-            RV32I::ADD   => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::RS2),
-            RV32I::SUB   => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::RS2),
-            RV32I::AND   => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::RS2),
-            RV32I::OR    => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::RS2),
-            RV32I::XOR   => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::RS2),
-            RV32I::SLL   => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::RS2),
-            RV32I::SRL   => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::RS2),
-            RV32I::SRA   => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::RS2),
-            RV32I::SLT   => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::RS2),
-            RV32I::SLTU  => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::RS2),
-            RV32I::LUI   => Syntax::N2(SyntaxField::RD, SyntaxField::IMM),
-            RV32I::AUIPC => Syntax::N2(SyntaxField::RD, SyntaxField::IMM),
-            RV32I::JAL   => Syntax::N2(SyntaxField::RD, SyntaxField::OFF),
-            RV32I::JALR  => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::OFF),
-            RV32I::ADDI  => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::IMM),
-            RV32I::ANDI  => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::IMM),
-            RV32I::ORI   => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::IMM),
-            RV32I::XORI  => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::IMM),
-            RV32I::SLTI  => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::IMM),
-            RV32I::SLTIU => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::IMM),
-            RV32I::SLLI  => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::IMM),
-            RV32I::SRLI  => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::IMM),
-            RV32I::SRAI  => Syntax::N3(SyntaxField::RD, SyntaxField::RS1, SyntaxField::IMM),
-            RV32I::LW    => Syntax::N3(SyntaxField::RD, SyntaxField::OFF, SyntaxField::RS1),
-            RV32I::LH    => Syntax::N3(SyntaxField::RD, SyntaxField::OFF, SyntaxField::RS1),
-            RV32I::LB    => Syntax::N3(SyntaxField::RD, SyntaxField::OFF, SyntaxField::RS1),
-            RV32I::LHU   => Syntax::N3(SyntaxField::RD, SyntaxField::OFF, SyntaxField::RS1),
-            RV32I::LBU   => Syntax::N3(SyntaxField::RD, SyntaxField::OFF, SyntaxField::RS1),
-            RV32I::SW    => Syntax::N3(SyntaxField::RS2, SyntaxField::OFF, SyntaxField::RS1),
-            RV32I::SH    => Syntax::N3(SyntaxField::RS2, SyntaxField::OFF, SyntaxField::RS1),
-            RV32I::SB    => Syntax::N3(SyntaxField::RS2, SyntaxField::OFF, SyntaxField::RS1),
-            RV32I::BEQ   => Syntax::N3(SyntaxField::RS1, SyntaxField::RS2, SyntaxField::OFF),
-            RV32I::BNE   => Syntax::N3(SyntaxField::RS1, SyntaxField::RS2, SyntaxField::OFF),
-            RV32I::BLT   => Syntax::N3(SyntaxField::RS1, SyntaxField::RS2, SyntaxField::OFF),
-            RV32I::BLTU  => Syntax::N3(SyntaxField::RS1, SyntaxField::RS2, SyntaxField::OFF),
-            RV32I::BGE   => Syntax::N3(SyntaxField::RS1, SyntaxField::RS2, SyntaxField::OFF),
-            RV32I::BGEU  => Syntax::N3(SyntaxField::RS1, SyntaxField::RS2, SyntaxField::OFF),
+            RV32I::ADD   => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::RS2),
+            RV32I::SUB   => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::RS2),
+            RV32I::AND   => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::RS2),
+            RV32I::OR    => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::RS2),
+            RV32I::XOR   => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::RS2),
+            RV32I::SLL   => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::RS2),
+            RV32I::SRL   => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::RS2),
+            RV32I::SRA   => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::RS2),
+            RV32I::SLT   => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::RS2),
+            RV32I::SLTU  => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::RS2),
+            RV32I::LUI   => ArgSyntax::N2(ArgKey::RD, ArgKey::IMM),
+            RV32I::AUIPC => ArgSyntax::N2(ArgKey::RD, ArgKey::IMM),
+            RV32I::JAL   => ArgSyntax::N2(ArgKey::RD, ArgKey::OFF),
+            RV32I::JALR  => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::OFF),
+            RV32I::ADDI  => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::IMM),
+            RV32I::ANDI  => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::IMM),
+            RV32I::ORI   => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::IMM),
+            RV32I::XORI  => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::IMM),
+            RV32I::SLTI  => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::IMM),
+            RV32I::SLTIU => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::IMM),
+            RV32I::SLLI  => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::IMM),
+            RV32I::SRLI  => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::IMM),
+            RV32I::SRAI  => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::IMM),
+            RV32I::LW    => ArgSyntax::N3(ArgKey::RD, ArgKey::OFF, ArgKey::RS1),
+            RV32I::LH    => ArgSyntax::N3(ArgKey::RD, ArgKey::OFF, ArgKey::RS1),
+            RV32I::LB    => ArgSyntax::N3(ArgKey::RD, ArgKey::OFF, ArgKey::RS1),
+            RV32I::LHU   => ArgSyntax::N3(ArgKey::RD, ArgKey::OFF, ArgKey::RS1),
+            RV32I::LBU   => ArgSyntax::N3(ArgKey::RD, ArgKey::OFF, ArgKey::RS1),
+            RV32I::SW    => ArgSyntax::N3(ArgKey::RS2, ArgKey::OFF, ArgKey::RS1),
+            RV32I::SH    => ArgSyntax::N3(ArgKey::RS2, ArgKey::OFF, ArgKey::RS1),
+            RV32I::SB    => ArgSyntax::N3(ArgKey::RS2, ArgKey::OFF, ArgKey::RS1),
+            RV32I::BEQ   => ArgSyntax::N3(ArgKey::RS1, ArgKey::RS2, ArgKey::OFF),
+            RV32I::BNE   => ArgSyntax::N3(ArgKey::RS1, ArgKey::RS2, ArgKey::OFF),
+            RV32I::BLT   => ArgSyntax::N3(ArgKey::RS1, ArgKey::RS2, ArgKey::OFF),
+            RV32I::BLTU  => ArgSyntax::N3(ArgKey::RS1, ArgKey::RS2, ArgKey::OFF),
+            RV32I::BGE   => ArgSyntax::N3(ArgKey::RS1, ArgKey::RS2, ArgKey::OFF),
+            RV32I::BGEU  => ArgSyntax::N3(ArgKey::RS1, ArgKey::RS2, ArgKey::OFF),
             RV32I::FENCE => todo!(),
         }
     }
@@ -342,6 +346,7 @@ impl Extension for RV32I {
 //the Instruction is going to use this result as-is later to assemble a 32-bit instruction.
 
 //TODO: handle sign extension
+//TODO: This could later be turned into a struct/enum like 'InstructionImmediate' or just 'Immediate'
 
 fn imm_to_i(imm: i32) -> i32 {
     imm & 0b1111_1111_1111

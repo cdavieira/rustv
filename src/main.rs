@@ -39,19 +39,21 @@ fn main() {
 
     let tokens = t.get_tokens(code);
     let lexemes = l.parse(tokens);
-    // let stats = p.parse(&lexemes);
+    let stats = p.parse(lexemes);
+    let bits = s.to_words(stats);
+    for b in bits {
+        println!("{b:x}");
+    }
 
-    let tokens = t.get_tokens(li);
-    let lexemes = l.parse(tokens);
+    // let tokens = t.get_tokens(li);
+    // let lexemes = l.parse(tokens);
     // let li = p.parse(&lexemes);
 
-    let tokens = t.get_tokens(addi);
-    let lexemes = l.parse(tokens);
-    let addi = p.parse(&lexemes);
-    println!("{:?}", addi);
-
-    let bits = s.to_words(&addi);
-    println!("{:?}", bits);
+    // let tokens = t.get_tokens(addi);
+    // let lexemes = l.parse(tokens);
+    // let addi = p.parse(lexemes);
+    // let bits = s.to_words(addi);
+    // println!("{:?}", bits);
 
     // let m: Vec<&Statement> = addi.iter().map(|e| e).collect();
     // let b = s.to_words(m);

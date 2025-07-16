@@ -2,8 +2,8 @@ pub mod intel {
     use crate::assembler::{self};
     use crate::tokenizer::{self, CommonClassifier};
     use crate::lexer::{self, TokenClassifier, ToExtension, ToRegister, ToPseudo};
-    use crate::parser::{self, ToKeyword, Keyword};
-    use crate::spec::{Arg, Extension, Register, ToArg, RV32I };
+    use crate::parser::{self, ToKeyword, TranslatePseudo, Keyword};
+    use crate::spec::{ArgValue, Extension, Register, ToArg, RV32I };
 
     pub struct Tokenizer ;
     pub struct Lexer;
@@ -104,7 +104,18 @@ pub mod intel {
         fn clone(&self) -> Self {
             match self {
                 Token::OP(extension) => Token::OP(extension.clone()),
-                token => token.clone()
+                Token::PSEUDO(pseudo) => Token::PSEUDO(pseudo.clone()),
+                Token::REG(register) => Token::REG(register.clone()),
+                Token::NAME(s) => Token::NAME(s.clone()),
+                Token::STR(s) => Token::STR(s.clone()),
+                Token::SECTION(s) => Token::SECTION(s.clone()),
+                Token::LABEL(s) => Token::LABEL(s.clone()),
+                Token::NUMBER(n) => Token::NUMBER(*n),
+                Token::PLUS => Token::PLUS,
+                Token::MINUS => Token::MINUS,
+                Token::LPAR => Token::LPAR,
+                Token::RPAR => Token::RPAR,
+                Token::COMMA => Token::COMMA,
             }
         }
     }
@@ -314,12 +325,12 @@ pub mod intel {
 
     /* Parser */
 
-    impl<'a> ToKeyword<'a> for Parser {
+    impl ToKeyword for Parser {
         type Token = Token;
 
-        fn to_keyword(&self, token: &'a Self::Token) -> Option<Keyword<'a>>  {
+        fn to_keyword(&self, token: &Self::Token) -> Option<Keyword>  {
             match token {
-                Token::OP(e) => Some(Keyword::INSTRUCTION(e)),
+                Token::OP(e) => Some(Keyword::INSTRUCTION(e.clone())),
                 Token::PSEUDO(_) => Some(Keyword::PSEUDO),
                 Token::SECTION(s) => Some(Keyword::SECTION(s.clone())),
                 Token::LABEL(s) => Some(Keyword::LABEL(s.clone())),
@@ -331,23 +342,71 @@ pub mod intel {
     impl ToArg for Parser {
         type Token = Token;
 
-        fn to_arg(&self, token: &Self::Token) -> Option<Arg>  {
+        fn to_arg(&self, token: Self::Token) -> Option<ArgValue>  {
             match token {
-                Token::REG(register) => Some(Arg::REG(register.id().into())),
+                Token::REG(register) => Some(ArgValue::REG(register.id().into())),
                 // Token::NAME(_) => todo!(),
                 // Token::SECTION(_) => todo!(),
                 // Token::LABEL(_) => todo!(),
-                Token::NUMBER(n) => Some(Arg::NUMBER(*n)),
+                Token::NUMBER(n) => Some(ArgValue::NUMBER(n)),
                 _ => None
             }
         }
     }
 
-    impl<'a> parser::Parser<'a> for Parser {
+    impl TranslatePseudo for Parser {
         type Token = Token;
-        type Statement = (&'a Box<dyn Extension>, Vec<Arg>);
 
-        fn parse(&'a self, tokens: &'a Vec<Self::Token>) -> Vec<Self::Statement>  {
+        fn translate_pseudo(&self, stat: &Vec<Self::Token>) -> Option<Vec<Vec<Self::Token>>> {
+            if let Token::PSEUDO(pseudo) = stat.get(0).unwrap() {
+                match pseudo {
+                    // lui x7 2
+                    // addi x7 x7 -2048
+                    Pseudo::LI => {
+                        let mut v = Vec::new();
+                        let arg1 = stat.get(1).unwrap();
+                        let arg2 = stat.get(2).unwrap();
+
+                        let mut i = Vec::new();
+                        i.push(Token::OP(Box::new(RV32I::LUI)));
+                        i.push(arg1.clone());
+                        i.push(arg2.clone());
+                        v.push(i);
+
+                        let mut i = Vec::new();
+                        i.push(Token::OP(Box::new(RV32I::ADDI)));
+                        i.push(arg1.clone());
+                        i.push(arg1.clone());
+                        i.push(Token::NUMBER(-2048));
+                        v.push(i);
+
+                        Some(v)
+                    },
+                    Pseudo::RET => {
+                        let mut v = Vec::new();
+
+                        let mut i = Vec::new();
+                        i.push(Token::OP(Box::new(RV32I::JALR)));
+                        i.push(Token::REG(Register::X0));
+                        i.push(Token::REG(Register::X1));
+                        i.push(Token::NUMBER(0));
+                        v.push(i);
+
+                        Some(v)
+                    },
+                }
+            }
+            else {
+                None
+            }
+        }
+    }
+
+    impl parser::Parser for Parser {
+        type Token = Token;
+        type Statement = (Box<dyn Extension>, Vec<ArgValue>);
+
+        fn parse(&self, tokens: Vec<Self::Token>) -> Vec<Self::Statement>  {
             parser::parse(self, tokens)
         }
     }
@@ -356,43 +415,10 @@ pub mod intel {
 
     /* Assembler */
 
-    // impl<'a> TranslatePseudo<'a> for Assembler {
-    //     type Token = Token;
-    //
-    //     fn translate_pseudo(&self, stat: &Vec<&Self::Token>, pseudo_stat: &'a mut Vec<Self::Token>) -> Option<Vec<Vec<&'a Self::Token>>>{
-    //         if let Token::PSEUDO(pseudo) = stat.get(0).unwrap() {
-    //             match pseudo {
-    //                 Pseudo::LI => {
-    //                     let arg1 = stat.get(1).unwrap();
-    //                     let arg2 = stat.get(2).unwrap();
-    //                     // lui x7 2
-    //                     // addi x7 x7 -2048
-    //                     let mut v = Vec::new();
-    //                     let mut i = Vec::new();
-    //
-    //                     pseudo_stat.push(Token::OP(Box::new(RV32I::LUI)));
-    //                     i.push(pseudo_stat.last().unwrap());
-    //                     v.push(i);
-    //
-    //                     Some(v)
-    //                 },
-    //                 Pseudo::RET => {
-    //                     let v = vec![
-    //                     ];
-    //                     Some(v)
-    //                 },
-    //             }
-    //         }
-    //         else {
-    //             None
-    //         }
-    //     }
-    // }
+    impl assembler::Assembler for Assembler {
+        type Instruction = (Box<dyn Extension>, Vec<ArgValue>);
 
-    impl<'a> assembler::Assembler<'a> for Assembler {
-        type Instruction = (&'a Box<dyn Extension>, Vec<Arg>);
-
-        fn to_words(&self, instructions: &'a Vec<Self::Instruction>) -> Vec<u32>  {
+        fn to_words(&self, instructions: Vec<Self::Instruction>) -> Vec<u32>  {
             assembler::to_u32(instructions)
         }
     }
