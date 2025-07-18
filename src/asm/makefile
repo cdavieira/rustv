@@ -1,14 +1,20 @@
 src := x1.s
 obj := $(src:.s=.o)
 log := $(src:.s=.txt)
+
+AS := riscv32-unknown-linux-gnu-as
+HEXDUMP := hexdump
+READELF := riscv32-unknown-linux-gnu-readelf
+OBJDUMP := riscv32-unknown-linux-gnu-objdump
+
 all:
-	riscv32-unknown-linux-gnu-as $(src) -o $(obj)
-	@echo "hexdump $(obj)" > $(log)
-	hexdump $(obj)        >> $(log)
+	$(AS) $(src) -o $(obj)
+	@echo "$(HEXDUMP) $(obj)" > $(log)
+	$(HEXDUMP) $(obj)     >> $(log)
 	@echo -e "\n\n\n"     >> $(log)
-	@echo "riscv32-unknown-linux-gnu-readelf -a $(obj)" >> $(log)
-	riscv32-unknown-linux-gnu-readelf -a $(obj)         >> $(log)
+	@echo "$(READELF) -a $(obj)" >> $(log)
+	$(READELF) -a $(obj)  >> $(log)
 	@echo -e "\n\n\n"     >> $(log)
-	@echo "riscv32-unknown-linux-gnu-objdump -d $(obj)" >> $(log)
-	riscv32-unknown-linux-gnu-objdump -d $(obj)         >> $(log)
+	@echo "$(OBJDUMP) -d $(obj)" >> $(log)
+	$(OBJDUMP) -d $(obj)  >> $(log)
 	@echo -e "\n\n\n"     >> $(log)

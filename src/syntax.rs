@@ -382,6 +382,7 @@ pub mod intel {
 
                         Some(v)
                     },
+                    //jalr x0 x1 0
                     Pseudo::RET => {
                         let mut v = Vec::new();
 
@@ -422,6 +423,11 @@ pub mod intel {
             assembler::to_u32(instructions)
         }
     }
+
+
+
+
+    /* Loader */
 }
 
 mod att {

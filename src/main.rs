@@ -5,12 +5,14 @@ pub mod parser;
 pub mod syntax;
 pub mod reader;
 pub mod assembler;
+pub mod memory;
 
 use assembler::Assembler;
 use lexer::Lexer;
-use rustv::spec::{Instruction, RV32I, Extension};
+use rustv::spec::{InstructionFormat, RV32I, Extension};
 use tokenizer::Tokenizer;
 use parser::Parser;
+use memory::{Memory, BasicMemory};
 
 fn main() {
     let code = "
@@ -36,14 +38,18 @@ fn main() {
     let l = syntax::intel::Lexer;
     let p = syntax::intel::Parser;
     let s = syntax::intel::Assembler;
+    let mut m = BasicMemory::new();
 
     let tokens = t.get_tokens(code);
     let lexemes = l.parse(tokens);
     let stats = p.parse(lexemes);
-    let bits = s.to_words(stats);
-    for b in bits {
-        println!("{b:x}");
+    let words = s.to_words(stats);
+
+    for w in &words {
+        println!("{w:x}");
     }
+    m.append_words(words);
+    m.dump("test.txt").unwrap();
 
     // let tokens = t.get_tokens(li);
     // let lexemes = l.parse(tokens);

@@ -175,7 +175,7 @@ Additionally, entities which implement this trait might as well use it to implem
 pub trait ToPseudo<T, P> {
     fn to_pseudo(&self, token: T) -> Option<P> ;
 
-    // fn translate_pseudo(&self, token: &P, args: &Vec<&P>) -> Vec<P>;
+    // fn translate_pseudo(&self, token: &P, args: &Vec<&P>) -> Vec<Vec<P>>;
 
     fn is_pseudo(&self, token: T) -> bool {
         self.to_pseudo(token).is_some()

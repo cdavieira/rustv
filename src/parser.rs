@@ -57,7 +57,7 @@ fn group_tokens<T>(
     v
 }
 
-fn process_pseudos<T>(
+fn expand_pseudos<T>(
     translator: &impl TranslatePseudo<Token = T>,
     stats: Vec<Vec<T>>
 ) -> Vec<Vec<T>>
@@ -75,7 +75,7 @@ fn process_pseudos<T>(
 }
 
 // TODO:
-// fn process_labels() {
+// fn map_labels() {
 //
 // }
 
@@ -89,8 +89,9 @@ fn specialize_tokens<T>(
         let token_args = stat.split_off(1);
         let token_kw = stat.get(0).unwrap();
         match handler.to_keyword(token_kw) {
+            //No pseudos should be here
             Some(Keyword::PSEUDO) => {
-
+                todo!();
             },
             Some(Keyword::INSTRUCTION(e)) => {
                 let mut args = Vec::new();
@@ -121,6 +122,6 @@ pub fn parse<T>(
 ) -> Vec<(Box<dyn Extension>, Vec<ArgValue>)>
 {
     let stats = group_tokens(handler, tokens);
-    let stats = process_pseudos(handler, stats);
+    let stats = expand_pseudos(handler, stats);
     specialize_tokens(handler, stats)
 }
