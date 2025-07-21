@@ -29,6 +29,17 @@ fn main() {
             addi x3, sp, 16 + 9
             ret
     ";
+    let code1 = "
+            .text
+            .globl main
+        //this is gonna be great\n
+        main:
+            // li   a0, 0
+            // lw   ra, -12(sp)
+            // lw   s0, +8(sp)
+            addi x3, sp, 16 + 9
+            ret
+    ";
     let li = "
             li   t1, 3
     ";
@@ -42,7 +53,7 @@ fn main() {
     let s = syntax::intel::Assembler;
     let mut m = BasicMemory::new();
 
-    let tokens = t.get_tokens(code);
+    let tokens = t.get_tokens(code1);
     let lexemes = l.parse(tokens);
     let stats = p.parse(lexemes);
     let words = s.to_words(stats);

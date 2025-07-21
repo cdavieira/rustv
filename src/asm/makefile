@@ -1,4 +1,4 @@
-src := x1.s
+src := x2.s
 obj := $(src:.s=.o)
 log := $(src:.s=.txt)
 
