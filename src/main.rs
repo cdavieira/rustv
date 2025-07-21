@@ -6,13 +6,15 @@ pub mod syntax;
 pub mod reader;
 pub mod assembler;
 pub mod memory;
+pub mod elf;
 
+// use rustv::spec::{InstructionFormat, RV32I, Extension};
 use assembler::Assembler;
 use lexer::Lexer;
-use rustv::spec::{InstructionFormat, RV32I, Extension};
 use tokenizer::Tokenizer;
 use parser::Parser;
 use memory::{Memory, BasicMemory};
+use elf::write_elf;
 
 fn main() {
     let code = "
@@ -50,6 +52,8 @@ fn main() {
     }
     m.append_words(words);
     m.dump("test.txt").unwrap();
+
+    write_elf("main.o", m.get_bytes()).unwrap();
 
     // let tokens = t.get_tokens(li);
     // let lexemes = l.parse(tokens);

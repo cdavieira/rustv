@@ -1,4 +1,8 @@
+use std::io;
+
 pub trait Memory {
+    fn get_bytes(&self) -> Vec<u8>;
+
     fn erase(&mut self) ;
 
     fn write_byte(&mut self, idx: usize, v: u8) -> () ;
@@ -19,10 +23,11 @@ pub trait Memory {
     fn dump(&self, filename: &str) -> io::Result<()> ;
 }
 
+
+
 /* Basic implementation */
 
 use std::fs;
-use std::io;
 
 pub struct BasicMemory {
     data: Vec<u8>,
@@ -39,11 +44,6 @@ impl Memory for BasicMemory {
         self.data.clear();
     }
 
-    fn append_bytes(&mut self, mem: Vec<u8>) -> () {
-        self.erase();
-        self.data.extend(mem);
-    }
-
     fn write_byte(&mut self, idx: usize, v: u8) -> () {
         *self.data.get_mut(idx).unwrap() = v;
     }
@@ -52,11 +52,16 @@ impl Memory for BasicMemory {
         *self.data.get(idx).unwrap()
     }
 
+    fn append_bytes(&mut self, mem: Vec<u8>) -> () {
+        self.erase();
+        self.data.extend(mem);
+    }
+
     fn write_word(&mut self, idx: usize, v: u32) -> () {
         let b1: u8 = ((v & 0b11111111_00000000_00000000_00000000) >> 24).try_into().unwrap();
-        let b2: u8 = (v & 0b00000000_11111111_00000000_00000000).try_into().unwrap();
-        let b3: u8 = (v & 0b00000000_00000000_11111111_00000000).try_into().unwrap();
-        let b4: u8 = (v & 0b00000000_00000000_00000000_11111111).try_into().unwrap();
+        let b2: u8 = ((v & 0b00000000_11111111_00000000_00000000) >> 16).try_into().unwrap();
+        let b3: u8 = ((v & 0b00000000_00000000_11111111_00000000) >> 8).try_into().unwrap();
+        let b4: u8 = ((v & 0b00000000_00000000_00000000_11111111) >> 0).try_into().unwrap();
         *self.data.get_mut(idx).unwrap() = b1;
         *self.data.get_mut(idx+1).unwrap() = b2;
         *self.data.get_mut(idx+2).unwrap() = b3;
@@ -89,5 +94,9 @@ impl Memory for BasicMemory {
 
     fn dump(&self, filename: &str) -> io::Result<()> {
         fs::write(filename, &self.data)
+    }
+
+    fn get_bytes(&self) -> Vec<u8> {
+        self.data.clone()
     }
 }
