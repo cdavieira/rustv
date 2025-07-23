@@ -1,0 +1,71 @@
+Code
+* Write simple field evaluator
+* Indicate (row, col) error for the Tokenizer trait
+	* 'reader.rs' offers a possible implementation for that
+* Wrap the return types (tokenizer, lexer, parser, ...) with 'Result<_, Box<dyn Error>>' 
+* Make sure the minimal instruction set is fully supported
+	* Fix binary encoding of some instructions
+* Set starting code address
+* Write code for symbolic label resolution (name to address)
+* Support .data section
+* Support running real code in a virtual machine
+	* (cpu.rs) Prepare set of 32 registers to be R/W
+	* (memory.rs) R/W of in-memory addresses
+	* (stack.rs)
+* (isa.rs) ?
+* (execcontext.rs) ?
+* (machine.rs) ?
+
+
+
+Design/Improvements
+* Use &str instead of String for the Tokenizer
+* Review how pseudo instruction can be added
+	* Pseudo instructions: a set of one or more real instructions, with or
+	  without default parameters/variables
+* Review lexer/tokenizer names
+	* Lexer isnt really a lexer, more like a categorizer/classifier/parser
+* Save the tokenizer/lexer classification and maybe reuse it later
+* Standardize the implementation of the Token enum for the lexer could become a standard
+* Review how args (for instructions) are being handled
+	* This is a vector of 0-3 elements
+	* The instruction requires a syntax and args, which are then parsed by the function 'get_args'
+* Improve how 'parser::group_tokens' is implemented
+* Review using 'Rc' in order to reduce the number of duplicates for instances of 'dyn Extension'
+* Rename 'parser::Keyword' to 'parser::StartOfInstruction' or smth?
+
+
+
+Test
+* Add second extension
+	* Check how hard it is to add a new extension
+* Add tests for the gas syntax implementation
+	* Test if its assembler is generating the right instruction binaries
+
+
+
+Docs
+* Document Parser.rs
+
+
+
+Misc
+* Write CPU and tests
+* Write Memory and tests
+
+
+
+
+Minimal instruction set:
+	* add
+	* and
+	* or (R)
+	* lui (U)
+	* jal (J)
+	* addi
+	* andi
+	* ori
+	* lw (I)
+	* sw (S)
+	* beq
+	* blt (B)
