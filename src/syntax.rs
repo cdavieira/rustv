@@ -1,4 +1,4 @@
-pub mod intel {
+pub mod gas {
     use crate::assembler::{self};
     use crate::tokenizer::{self, CommonClassifier};
     use crate::lexer::{self, TokenClassifier, ToExtension, ToRegister, ToPseudo};
@@ -428,8 +428,4 @@ pub mod intel {
 
 
     /* Loader */
-}
-
-mod att {
-
 }

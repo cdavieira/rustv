@@ -47,12 +47,11 @@ fn main() {
             addi   t3, t2, 8
     ";
 
-    let mut t = syntax::intel::Tokenizer;
-    let l = syntax::intel::Lexer;
-    let p = syntax::intel::Parser;
-    let s = syntax::intel::Assembler;
+    let mut t = syntax::gas::Tokenizer;
+    let l = syntax::gas::Lexer;
+    let p = syntax::gas::Parser;
+    let s = syntax::gas::Assembler;
     let mut m = BasicMemory::new();
-
     let tokens = t.get_tokens(code1);
     let lexemes = l.parse(tokens);
     let stats = p.parse(lexemes);
@@ -65,30 +64,4 @@ fn main() {
     m.dump("test.txt").unwrap();
 
     write_elf("main.o", m.get_bytes()).unwrap();
-
-    // let tokens = t.get_tokens(li);
-    // let lexemes = l.parse(tokens);
-    // let li = p.parse(&lexemes);
-
-    // let tokens = t.get_tokens(addi);
-    // let lexemes = l.parse(tokens);
-    // let addi = p.parse(lexemes);
-    // let bits = s.to_words(addi);
-    // println!("{:?}", bits);
-
-    // let m: Vec<&Statement> = addi.iter().map(|e| e).collect();
-    // let b = s.to_words(m);
-    // for bits in b {
-    //     println!("{bits:b}");
-    //     println!("{bits:x}");
-    // }
-
-    // //ori 5,5,0x800
-    // let i: u32 = RV32I::ORI.get_instruction(5, 0, 5, 0x800).get_bytes();
-    // println!("ORI (bin): {i:b}");
-    // println!("ORI (hex): {i:x}");
-    // //sw 5,0x3(6)
-    // let i: u32 = RV32I::SW.get_instruction(6, 5, 0, 0x3).get_bytes();
-    // println!("SW (bin):  {i:b}");
-    // println!("SW (hex):  {i:x}");
 }
