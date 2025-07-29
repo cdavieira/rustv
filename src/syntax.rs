@@ -1,16 +1,14 @@
 pub mod gas {
     use crate::assembler::{self};
-    use crate::tokenizer::{self, CommonClassifier};
-    use crate::lexer::{self, TokenClassifier, ToExtension, ToRegister, ToPseudo};
-    use crate::parser::{self, ToKeyword, TranslatePseudo, Keyword};
-    use crate::spec::{ArgValue, Extension, Register, ToArg, RV32I };
+    use crate::tokenizer::CommonClassifier;
+    use crate::lexer::{self, Directive, Pseudo, ToDirective, ToExtension, ToPseudo, ToRegister, TokenClassifier};
+    use crate::parser::{self};
+    use crate::spec::{ArgValue, Extension, Register, RV32I };
 
-    pub struct Tokenizer ;
-    pub struct Lexer;
-    pub struct Parser;
-    pub struct Assembler;
 
     /* Tokenizer */
+
+    pub struct Tokenizer ;
 
     impl CommonClassifier for Tokenizer {
         fn is_ambiguous(&self, ch: char) -> bool {
@@ -66,61 +64,87 @@ pub mod gas {
         }
     }
 
-    impl tokenizer::Tokenizer for Tokenizer {
-        fn get_tokens(&mut self, buffer: &str) -> Vec<String> {
-            // let mut it = reader::SimpleReader::new(buffer);
-            let mut it = buffer.chars();
-            tokenizer::get_tokens(&mut it, self)
-        }
-    }
-
 
 
     /* Lexer */
+
+    pub struct Lexer ;
+
     #[derive(Debug, Copy, Clone)]
-    pub enum Pseudo {
+    pub enum PseudoInstruction {
         LI,
         RET,
     }
 
-    #[derive(Debug)]
-    pub enum Token {
-        OP(Box<dyn Extension>),
-        PSEUDO(Pseudo),
-        REG(Register),
-        NAME(String),
-        STR(String),
-        SECTION(String),
-        LABEL(String),
-        NUMBER(i32),
-        PLUS,
-        MINUS,
-        LPAR,
-        RPAR,
-        COMMA,
-    }
-
-    impl Clone for Token {
-        fn clone(&self) -> Self {
+    impl Pseudo for PseudoInstruction {
+        fn translate(&self, args: Vec<lexer::Value>) -> Vec<(Box<dyn Extension>, Vec<lexer::Value>)>  {
+            let mut v: Vec<(Box<dyn Extension>, Vec<lexer::Value>)> = vec![];
             match self {
-                Token::OP(extension) => Token::OP(extension.clone()),
-                Token::PSEUDO(pseudo) => Token::PSEUDO(pseudo.clone()),
-                Token::REG(register) => Token::REG(register.clone()),
-                Token::NAME(s) => Token::NAME(s.clone()),
-                Token::STR(s) => Token::STR(s.clone()),
-                Token::SECTION(s) => Token::SECTION(s.clone()),
-                Token::LABEL(s) => Token::LABEL(s.clone()),
-                Token::NUMBER(n) => Token::NUMBER(*n),
-                Token::PLUS => Token::PLUS,
-                Token::MINUS => Token::MINUS,
-                Token::LPAR => Token::LPAR,
-                Token::RPAR => Token::RPAR,
-                Token::COMMA => Token::COMMA,
+                // lui x7 2
+                // addi x7 x7 -2048
+                PseudoInstruction::LI => {
+                    let arg1 = args.get(0).unwrap();
+                    let arg2 = args.get(1).unwrap();
+
+                    let mut args1: Vec<lexer::Value> = Vec::new();
+                    args1.push(arg1.clone());
+                    args1.push(arg2.clone());
+                    v.push((Box::new(RV32I::LUI), args1));
+
+                    let mut args2: Vec<lexer::Value> = Vec::new();
+                    args2.push(arg1.clone());
+                    args2.push(arg1.clone());
+                    v.push((Box::new(RV32I::ADDI), args2));
+                },
+                //jalr x0 x1 0
+                PseudoInstruction::RET => {
+                    let mut args1 = Vec::new();
+
+                    args1.push(lexer::Value::REGISTER(Register::X0));
+                    args1.push(lexer::Value::REGISTER(Register::X1));
+                    args1.push(lexer::Value::NUMBER(0));
+
+                    v.push((Box::new(RV32I::JALR), args1));
+                },
             }
+            v
         }
     }
 
-    impl ToRegister<&str> for Lexer {
+    #[derive(Debug)]
+    pub enum DirectiveInstruction {
+        WORD,
+        HALF,
+        BYTE,
+    }
+
+    impl Directive for DirectiveInstruction {
+        fn translate(&self, args: Vec<lexer::Value>) -> Vec<u8>  {
+            let mut v = Vec::new();
+            match self {
+                DirectiveInstruction::WORD => {
+                    let arg = &args[0];
+                    match arg {
+                        lexer::Value::NUMBER(n) => {
+                            v.push((n & (0b1111_1111 << 0)).try_into().unwrap());
+                            v.push((n & (0b1111_1111 << 8)).try_into().unwrap());
+                            v.push((n & (0b1111_1111 << 16)).try_into().unwrap());
+                            v.push((n & (0b1111_1111 << 24)).try_into().unwrap());
+                        },
+                        _ => panic!(),
+                    }
+                },
+                DirectiveInstruction::HALF => {
+                },
+                DirectiveInstruction::BYTE => {
+
+                },
+            }
+            v
+        }
+    }
+
+    impl ToRegister for Lexer {
         fn to_register(&self, token: &str) -> Option<crate::spec::Register>  {
             match token {
                 "x0" | "zero" => Some(Register::X0),
@@ -161,11 +185,24 @@ pub mod gas {
         }
     }
 
-    impl ToPseudo<&str, Token> for Lexer {
-        fn to_pseudo(&self, token: &str) -> Option<Token>  {
+    impl ToPseudo for Lexer {
+        type Pseudo = lexer::Token;
+
+        fn to_pseudo(&self, token: &str) -> Option<Self::Pseudo>  {
             match token {
-                "ret" => Some(Token::PSEUDO(Pseudo::RET)),
-                "li" => Some(Token::PSEUDO(Pseudo::LI)),
+                "ret" => Some(lexer::Token::PSEUDO(Box::new(PseudoInstruction::RET))),
+                "li" => Some(lexer::Token::PSEUDO(Box::new(PseudoInstruction::LI))),
+                _ => None
+            }
+        }
+    }
+
+    impl ToDirective for Lexer {
+        type Directive = lexer::Token;
+
+        fn to_directive(&self, token: &str) -> Option<Self::Directive>  {
+            match token {
+                ".word" => Some(lexer::Token::DIRECTIVE(Box::new(DirectiveInstruction::WORD))),
                 _ => None
             }
         }
@@ -218,7 +255,7 @@ pub mod gas {
     }
 
     impl TokenClassifier for Lexer {
-        type Token = Token;
+        type Token = lexer::Token;
 
         fn is_register(&self, token: &str) -> bool {
             ToRegister::is_register(self, token)
@@ -242,8 +279,8 @@ pub mod gas {
             token.starts_with('.')
         }
 
-        fn is_directive(&self, _: &str) -> bool {
-            false
+        fn is_directive(&self, token: &str) -> bool {
+            ToDirective::is_directive(self, token)
         }
 
         fn is_label(&self, token: &str) -> bool {
@@ -258,20 +295,20 @@ pub mod gas {
             let Ok(n) = token.parse::<i32>() else {
                 return None;
             };
-            Some(Token::NUMBER(n))
+            Some(lexer::Token::NUMBER(n))
         }
 
         fn str_to_string(&self, token: &str) -> Option<Self::Token> {
-            Some(Token::STR(token.trim_matches('"').to_string()))
+            Some(lexer::Token::STR(token.trim_matches('"').to_string()))
         }
 
         fn str_to_symbol(&self, token: &str) -> Option<Self::Token> {
             match token {
-                "," => Some(Token::COMMA),
-                "(" => Some(Token::LPAR),
-                ")" => Some(Token::RPAR),
-                "+" => Some(Token::PLUS),
-                "-" => Some(Token::MINUS),
+                "," => Some(lexer::Token::COMMA),
+                "(" => Some(lexer::Token::LPAR),
+                ")" => Some(lexer::Token::RPAR),
+                "+" => Some(lexer::Token::PLUS),
+                "-" => Some(lexer::Token::MINUS),
                 _ => None
             }
         }
@@ -279,29 +316,29 @@ pub mod gas {
         fn str_to_opcode(&self, token: &str) -> Option<Self::Token> {
             match self.to_extension(token) {
                 Some(e) => {
-                    Some(Token::OP(e))
+                    Some(lexer::Token::OP(e))
                 },
                 None => None
             }
         }
 
         fn str_to_identifier(&self, token: &str) -> Option<Self::Token> {
-            Some(Token::NAME(token.to_string()))
+            Some(lexer::Token::NAME(token.to_string()))
         }
 
         fn str_to_section(&self, token: &str) -> Option<Self::Token> {
-            Some(Token::SECTION(token[1..].to_string()))
+            Some(lexer::Token::SECTION(token[1..].to_string()))
         }
 
-        fn str_to_directive(&self, _: &str) -> Option<Self::Token> {
-            None
+        fn str_to_directive(&self, token: &str) -> Option<Self::Token> {
+            ToDirective::to_directive(self, token)
         }
 
         fn str_to_register(&self, token: &str) -> Option<Self::Token> {
             let Some(reg) = ToRegister::to_register(self, token.trim().to_lowercase().as_str()) else {
                 return None;
             };
-            Some(Token::REG(reg))
+            Some(lexer::Token::REG(reg))
         }
 
         fn str_to_custom(&self, token: &str) -> Option<Self::Token> {
@@ -309,15 +346,7 @@ pub mod gas {
         }
 
         fn str_to_label(&self, token: &str) -> Option<Self::Token> {
-            Some(Token::LABEL(token.trim_end_matches(':').to_string()))
-        }
-    }
-
-    impl lexer::Lexer for Lexer {
-        type Token = Token;
-
-        fn parse(&self, tokens: Vec<String>) -> Vec<Token> {
-            lexer::parse(self, tokens)
+            Some(lexer::Token::LABEL(token.trim_end_matches(':').to_string()))
         }
     }
 
@@ -325,90 +354,29 @@ pub mod gas {
 
     /* Parser */
 
-    impl ToKeyword for Parser {
-        type Token = Token;
+    pub struct Parser;
 
-        fn to_keyword(&self, token: &Self::Token) -> Option<Keyword>  {
-            match token {
-                Token::OP(e) => Some(Keyword::INSTRUCTION(e.clone())),
-                Token::PSEUDO(_) => Some(Keyword::PSEUDO),
-                Token::SECTION(s) => Some(Keyword::SECTION(s.clone())),
-                Token::LABEL(s) => Some(Keyword::LABEL(s.clone())),
-                _ => None,
-            }
-        }
-    }
+    // impl Parser {
+    //     pub fn new() -> Self {
+    //         Lexer { labels: Vec::new() }
+    //     }
+    //
+    //     pub fn add_label(&mut self, l: String) {
+    //         self.labels.push(l);
+    //     }
+    //
+    //     pub fn is_label(&self, l: &str) -> bool {
+    //         self.labels.iter().find(|s| *s == l).is_some()
+    //     }
+    // }
 
-    impl ToArg for Parser {
-        type Token = Token;
-
-        fn to_arg(&self, token: Self::Token) -> Option<ArgValue>  {
-            match token {
-                Token::REG(register) => Some(ArgValue::REG(register.id().into())),
-                // Token::NAME(_) => todo!(),
-                // Token::SECTION(_) => todo!(),
-                // Token::LABEL(_) => todo!(),
-                Token::NUMBER(n) => Some(ArgValue::NUMBER(n)),
-                _ => None
-            }
-        }
-    }
-
-    impl TranslatePseudo for Parser {
-        type Token = Token;
-
-        fn translate_pseudo(&self, stat: &Vec<Self::Token>) -> Option<Vec<Vec<Self::Token>>> {
-            if let Token::PSEUDO(pseudo) = stat.get(0).unwrap() {
-                match pseudo {
-                    // lui x7 2
-                    // addi x7 x7 -2048
-                    Pseudo::LI => {
-                        let mut v = Vec::new();
-                        let arg1 = stat.get(1).unwrap();
-                        let arg2 = stat.get(2).unwrap();
-
-                        let mut i = Vec::new();
-                        i.push(Token::OP(Box::new(RV32I::LUI)));
-                        i.push(arg1.clone());
-                        i.push(arg2.clone());
-                        v.push(i);
-
-                        let mut i = Vec::new();
-                        i.push(Token::OP(Box::new(RV32I::ADDI)));
-                        i.push(arg1.clone());
-                        i.push(arg1.clone());
-                        i.push(Token::NUMBER(-2048));
-                        v.push(i);
-
-                        Some(v)
-                    },
-                    //jalr x0 x1 0
-                    Pseudo::RET => {
-                        let mut v = Vec::new();
-
-                        let mut i = Vec::new();
-                        i.push(Token::OP(Box::new(RV32I::JALR)));
-                        i.push(Token::REG(Register::X0));
-                        i.push(Token::REG(Register::X1));
-                        i.push(Token::NUMBER(0));
-                        v.push(i);
-
-                        Some(v)
-                    },
-                }
-            }
-            else {
-                None
-            }
-        }
-    }
 
     impl parser::Parser for Parser {
-        type Token = Token;
-        type Statement = (Box<dyn Extension>, Vec<ArgValue>);
+        type Token = lexer::Token;
+        type Statement = (usize, lexer::Token, Vec<ArgValue>);
 
         fn parse(&self, tokens: Vec<Self::Token>) -> Vec<Self::Statement>  {
-            parser::parse(self, tokens)
+            parser::parse(tokens)
         }
     }
 
@@ -416,8 +384,10 @@ pub mod gas {
 
     /* Assembler */
 
+   pub struct Assembler;
+
     impl assembler::Assembler for Assembler {
-        type Instruction = (Box<dyn Extension>, Vec<ArgValue>);
+        type Instruction = (usize, lexer::Token, Vec<ArgValue>);
 
         fn to_words(&self, instructions: Vec<Self::Instruction>) -> Vec<u32>  {
             assembler::to_u32(instructions)

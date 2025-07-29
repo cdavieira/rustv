@@ -160,11 +160,6 @@ pub enum ArgSyntax {
     N4(ArgKey, ArgKey, ArgKey, ArgKey),
 }
 
-pub trait ToArg {
-    type Token;
-    fn to_arg(&self, token: Self::Token) -> Option<ArgValue> ;
-}
-
 pub fn instruction_to_binary(inst: &Box<dyn Extension>, args: &Vec<ArgValue>) -> u32 {
     let fields = match inst.get_calling_syntax() {
         ArgSyntax::N0 => vec![],
@@ -228,14 +223,14 @@ enum whose variants are then linked to some specific instruction format.
 pub trait Extension: std::fmt::Debug {
     fn get_instruction_format(&self, rs1: i32, rs2: i32, rd: i32, imm: i32) -> InstructionFormat ;
     fn get_calling_syntax(&self) -> ArgSyntax ;
-    fn clone_box(&self) -> Box<dyn Extension> ;
+    // fn clone_box(&self) -> Box<dyn Extension> ;
 }
 
-impl Clone for Box<dyn Extension> {
-    fn clone(&self) -> Self {
-        self.clone_box()
-    }
-}
+// impl Clone for Box<dyn Extension> {
+//     fn clone(&self) -> Self {
+//         self.clone_box()
+//     }
+// }
 
 
 
@@ -254,7 +249,7 @@ OBS: According to 'The RISC-V Instruction Set Manual - Volume 1 (Unpriviledged A
 Version 20250508', the RV32I includes 40 instructions, out of which 2 are usually left'd out (FENCE
 and ECALL/EBREAK)
 */
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
 pub enum RV32I {
     LUI, AUIPC, ADDI, ANDI, ORI, XORI, ADD, SUB, AND, OR, XOR, SLL, SRL, SRA, FENCE, SLTI, SLTIU,
     SLLI, SRLI, SRAI, SLT, SLTU, LW, LH, LHU, LB, LBU, SW, SH, SB, JAL, JALR, BEQ, BNE, BLT, BLTU,
@@ -375,9 +370,9 @@ impl Extension for RV32I {
         }
     }
 
-    fn clone_box(&self) -> Box<dyn Extension>  {
-        Box::new(self.clone())
-    }
+    // fn clone_box(&self) -> Box<dyn Extension>  {
+    //     Box::new(self.clone())
+    // }
 }
 
 //convert an immediate as read from the parser into the number to be stored in an Instruction.

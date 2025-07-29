@@ -1,0 +1,32 @@
+// * criar trait object para pseudo e para directive (que sera uma directiva especifica de inserção de bytes raw)
+// 
+// * o trait do pseudo vai ser definido para um trait type Token com no minimo o seguinte metodo:
+// 	fn translate(&self, Keyword, Args) -> Vec<(Keyword, Args)>
+// 
+// * caso o tipo implementado para o pseudo seja um enum, entao todas variantes terao que funcionar para o tal metodo
+// 
+// * alem disso sera necessário uma interface de map para ligar um tipo T qualquer (&str por exemplo) ao enum do Pseudo
+// 
+// * o mesmo funcionara para o directive, mas o metodo a ser implementado seguira as seguintes linhas:
+// 	fn translate(&self, Keyword, Args) -> Vec<u8>
+// 
+// isso permitira que o enum Token não dependa mais de entidades inteiramente
+// implementadas pelo codigo chamante.
+// Isso por sua vez permitira que o tipo Token se torne algo definido no arquivo
+// lexer.rs, ja que nao precisara mais de tipos parametrizados.
+// Tudo isso por sua vez vai facilitar a implementação do parser, visto que o tipo
+// token podera ser utilizado diretamente nele.
+
+ler '( offset )' como uma unidade em vez de tres coisas separadas
+
+usar já um iterador custom na etapa de tokenizer e do lexer e que seja agnostico do tipo sendo iterado
+
+atualmente, os labels no lexer sao identificados como identifiers que ficam entre parenteses
+
+implement TODOS in parser::map_args_to_values!!!
+
+1.  Definir endereco inicial para execucao do codigo
+2.  Secao .data
+3.  Resolucao de label simbolico
+4.  Conseguir executar as instrucoes (banco de registradores, leitura e esxrita de valores em memoria, pushdown/stack, secao de stack, ...)
+5.  Corrigir encode binario de algumas das instruções

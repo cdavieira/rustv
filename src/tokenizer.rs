@@ -23,7 +23,9 @@ Any entity which implements the 'tokenizer::CommonClassifier' trait can then use
 
 'tokenizer::CommonClassifier': a tokenization strategy where N chars can be mapped to one of the categories/variants stored in enum 'CommonClass'. The implementor is responsible for the mapping
 
-OBS: 'get_tokens' can be overriden to use more complex/useful iterators
+By default, 'Tokenizer' is implemented for any entity which implements 'CommonClassifier'
+
+OBS: 'Tokenizer::get_tokens' can still be overriden to use more complex/useful iterators
 */
 pub trait CommonClassifier {
     fn is_ambiguous(&self, ch: char) -> bool ;
@@ -108,7 +110,15 @@ pub trait CommonClassifier {
     }
 }
 
-pub fn get_tokens(
+///Default implementation of 'Tokenizer' for any entity which implements 'CommonClassifier'
+impl<T: CommonClassifier> Tokenizer for T {
+    fn get_tokens(&mut self, buffer: &str) -> Vec<String>  {
+        let mut it = buffer.chars();
+        get_tokens(&mut it, self)
+    }
+}
+
+fn get_tokens(
     it: &mut impl Iterator<Item = char>,
     classifier: &impl CommonClassifier
 ) -> Vec<String>

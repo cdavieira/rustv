@@ -7,19 +7,7 @@ pub trait Lexer {
 
 /* The following code was written to ease the process of implementing the 'Lexer' trait. */
 
-pub enum TokenClass {
-    NUMBER,
-    STRING,
-    SYMBOL,
-    REGISTER,
-    OPCODE,
-    IDENTIFIER,
-    SECTION,
-    DIRECTIVE,
-    LABEL,
-    CUSTOM,
-    IGNORE
-}
+// Implementation 1
 
 /**
 Any entity which implements the 'lexer::TokenClassifier' trait can then use the function 'lexer::parse' as the backend for the implementation of 'Lexer::parse'
@@ -138,51 +126,29 @@ pub trait TokenClassifier {
     }
 }
 
-/**
-This trait allows implementers to link arbitrary data to Extensions
+pub enum TokenClass {
+    NUMBER,
+    STRING,
+    SYMBOL,
+    REGISTER,
+    OPCODE,
+    IDENTIFIER,
+    SECTION,
+    DIRECTIVE,
+    LABEL,
+    CUSTOM,
+    IGNORE
+}
 
-The implementer of this trait has the ability to choose which instructions from the extension are
-going to be supported or not. If the method 'to_instruction' returns the None variant for some
-token, then it isn't supported.
+impl<E, T: TokenClassifier<Token = E>> Lexer for T {
+    type Token = E;
 
-Additionally, entities which implement this trait might as well use it to implement
-'TokenClassifier::is_opcode' and 'TokenClassifier::str_to_opcode' in one go
-*/
-pub trait ToExtension<T> {
-    fn to_extension(&self, token: T) -> Option<Box<dyn crate::spec::Extension>> ;
-
-    fn in_extension(&self, token: T) -> bool {
-        self.to_extension(token).is_some()
+    fn parse(&self, tokens: Vec<String>) -> Vec<<Self as Lexer>::Token>  {
+        parse(self, tokens)
     }
 }
 
-/**
-Additionally, entities which implement this trait might as well use it to implement
-'TokenClassifier::is_register' and 'TokenClassifier::str_to_register' in one go
-*/
-pub trait ToRegister<T> {
-    fn to_register(&self, token: T) -> Option<crate::spec::Register> ;
-
-    fn is_register(&self, token: T) -> bool {
-        self.to_register(token).is_some()
-    }
-}
-
-/**
-Additionally, entities which implement this trait might as well use it to implement
-'TokenClassifier::is_custom' and 'TokenClassifier::str_to_custom' in one go
-*/
-pub trait ToPseudo<T, P> {
-    fn to_pseudo(&self, token: T) -> Option<P> ;
-
-    // fn translate_pseudo(&self, token: &P, args: &Vec<&P>) -> Vec<Vec<P>>;
-
-    fn is_pseudo(&self, token: T) -> bool {
-        self.to_pseudo(token).is_some()
-    }
-}
-
-pub fn parse<T>(lexer: & impl TokenClassifier<Token = T>, tokens: Vec<String>) -> Vec<T> {
+fn parse<T>(lexer: & impl TokenClassifier<Token = T>, tokens: Vec<String>) -> Vec<T> {
     let mut lexemes = Vec::new();
 
     for token in tokens {
@@ -192,4 +158,117 @@ pub fn parse<T>(lexer: & impl TokenClassifier<Token = T>, tokens: Vec<String>) -
     }
 
     lexemes
+}
+
+
+
+
+
+// Implementation 2
+
+use crate::spec::{Extension, Register};
+
+/*
+OBS: 'Implementation 1' is complemented by 'Implementation 2', which takes the responsability
+of defining what a token is, instead of letting this detail to be implemented by the trait
+implementor. This eases the process of building the parser later on, as the parser can reliably
+work with that token definition, instead of having to work with a myriad of possible inputs.
+
+In this implementation, it's the lexer job to:
+0. (Optional, not recommended) Implement extensions to be supported as an Enum which implements the
+   'spec::Extension' trait
+1. Map the symbolic representation of all or a subset of the instructions of an Extension to their
+   correspondent enum variant through the 'ToExtension' trait
+
+2. Implement the pseudo instructions to be supported as an Enum which implements the 'Pseudo' trait
+3. Map the symbolic representation of each pseudo instruction to their correspondent enum variant
+   through the 'ToPseudo' trait
+
+4. Implement the directives to be supported as an Enum which implements the 'Directive' trait
+5. Map the symbolic representation of each directive to their correspondent enum variant through
+   the 'ToDirective' trait
+
+7. Map the symbolic representation of registers to their correspondent enum variant through the
+   'ToRegister' trait
+
+OBS: Default implementation of extensions should be provided by this crate, as to standardize
+how operations turn into bytes according to the RISCV specification
+*/
+
+// Token standardization
+#[derive(Clone, Debug)]
+pub enum Value {
+    NUMBER(i32),
+    REGISTER(Register),
+    OFFSET(usize),
+    LABEL(String)
+}
+
+#[derive(Debug)]
+pub enum Token {
+    OP(Box<dyn Extension>),
+    PSEUDO(Box<dyn Pseudo>),
+    DIRECTIVE(Box<dyn Directive>),
+    REG(Register),
+    NAME(String),
+    STR(String),
+    SECTION(String),
+    LABEL(String),
+    NUMBER(i32),
+    PLUS,
+    MINUS,
+    LPAR,
+    RPAR,
+    COMMA,
+}
+
+/**
+This trait allows implementers to link arbitrary data to Extensions
+
+The implementer of this trait has the ability to choose which instructions from the extension are
+going to be supported or not. If the method 'to_instruction' returns the None variant for some
+token, then it isn't supported.
+*/
+pub trait ToExtension<T> {
+    fn to_extension(&self, token: T) -> Option<Box<dyn Extension>> ;
+
+    fn in_extension(&self, token: T) -> bool {
+        self.to_extension(token).is_some()
+    }
+}
+
+pub trait ToPseudo {
+    type Pseudo;
+
+    fn to_pseudo(&self, token: &str) -> Option<Self::Pseudo> ;
+
+    fn is_pseudo(&self, token: &str) -> bool {
+        self.to_pseudo(token).is_some()
+    }
+}
+
+pub trait ToDirective {
+    type Directive;
+
+    fn to_directive(&self, token: &str) -> Option<Self::Directive> ;
+
+    fn is_directive(&self, token: &str) -> bool {
+        self.to_directive(token).is_some()
+    }
+}
+
+pub trait ToRegister {
+    fn to_register(&self, token: &str) -> Option<Register> ;
+
+    fn is_register(&self, token: &str) -> bool {
+        self.to_register(token).is_some()
+    }
+}
+
+pub trait Pseudo: std::fmt::Debug {
+    fn translate(&self, args: Vec<Value>) -> Vec<(Box<dyn Extension>, Vec<Value>)> ;
+}
+
+pub trait Directive: std::fmt::Debug {
+    fn translate(&self, args: Vec<Value>) -> Vec<u8> ;
 }
