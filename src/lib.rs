@@ -3,19 +3,23 @@ pub mod tokenizer;
 pub mod lexer;
 pub mod parser;
 pub mod syntax;
-pub mod reader;
 pub mod assembler;
+pub mod memory;
+pub mod cpu;
+pub mod machine;
+pub mod elf;
 
 #[cfg(test)]
 mod tests {
-    //gas syntax
     mod gas {
         use crate::tokenizer::Tokenizer;
         use crate::lexer::Lexer;
         use crate::parser::Parser;
         use crate::assembler::Assembler;
-
+        use crate::machine::Machine;
         use super::super::*;
+
+        // Tokenization of sources
 
         #[test]
         fn tokenize_ignore_comments(){
@@ -29,6 +33,7 @@ mod tests {
             let res: Vec<String> = tokenizer.get_tokens(code);
             assert_eq!(res, expected);
         }
+
         #[test]
         fn tokenize_words(){
             let code = "abc paulista oloco";
@@ -231,7 +236,11 @@ mod tests {
             assert_eq!(res, expected);
         }
 
-        fn encode_single_instruction(code: &str) -> u32 {
+
+
+        // Binary encoding of instructions
+
+        fn encode_instructions(code: &str) -> Vec<u32> {
             let mut tokenizer = syntax::gas::Tokenizer;
             let lexer = syntax::gas::Lexer;
             let parser = syntax::gas::Parser;
@@ -239,8 +248,11 @@ mod tests {
             let tokens = tokenizer.get_tokens(code);
             let lexemes = lexer.parse(tokens);
             let stats = parser.parse(lexemes);
-            let res = assembler.to_words(stats);
-            *res.get(0).unwrap()
+            assembler.to_words(stats)
+        }
+
+        fn encode_single_instruction(code: &str) -> u32 {
+            *encode_instructions(code).get(0).unwrap()
         }
 
         #[test]
@@ -297,6 +309,42 @@ mod tests {
         }
 
         #[test]
+        fn encode_ret() {
+            let code = "ret";
+            let expected: Vec<u32> = vec![0x00008067];
+            let res = encode_instructions(code);
+            assert_eq!(res, expected, "LEFT: {res:?}, RIGHT: {expected:?}");
+        }
+
+        #[test]
+        fn encode_li_short() {
+            let code = "li a0, 93";
+            let expected: Vec<u32> = vec![0x05d00513];
+            let res = encode_instructions(code);
+            assert_eq!(res, expected, "LEFT: {res:?}, RIGHT: {expected:?}");
+        }
+
+        #[test]
+        fn encode_li_long() {
+            let code = "li t0, 10000";
+            let expected: Vec<u32> = vec![0x000022b7, 0x71028293];
+            let res = encode_instructions(code);
+            assert_eq!(res, expected, "LEFT: {res:?}, RIGHT: {expected:?}");
+        }
+
+        #[test]
+        fn encode_exit() {
+            let code = "
+                li a7, 93 # Linux syscall: exit
+                li a0, 0  # return code 0
+                ecall     # make the syscall
+            ";
+            let expected: Vec<u32> = vec![0x05d00893, 0x00000513, 0x00000073];
+            let res = encode_instructions(code);
+            assert_eq!(res, expected, "LEFT: {res:?}, RIGHT: {expected:?}");
+        }
+
+        #[test]
         #[ignore]
         fn encode_jal() {
             // let code = "jal t4,0x900";
@@ -304,6 +352,86 @@ mod tests {
             let expected: u32 = 0x00000eef;
             let res = encode_single_instruction(code);
             assert_eq!(res, expected, "LEFT: {res:x}, RIGHT: {expected:x}");
+        }
+
+
+
+        // TODO: Test CPU
+
+
+
+        // TODO: Test Memory
+
+
+
+        // Test Machine
+        #[test]
+        fn machine_test0() {
+            let code = "
+                li a7, 93    // Linux syscall: exit
+            ";
+            let words = encode_instructions(code);
+            let mut m = machine::SimpleMachine::new(&words);
+            m.decode();
+            m.info();
+            assert!(m.assert_reg(17u32, 93));
+        }
+
+        #[test]
+        fn machine_test1() {
+            let code = "
+                li a7, 93    // Linux syscall: exit
+                li a0, 1000  // return code 0
+            ";
+            let words = encode_instructions(code);
+            let mut m = machine::SimpleMachine::new(&words);
+            m.decode();
+            m.decode();
+            assert!(m.assert_reg(17u32, 93));
+            assert!(m.assert_reg(10u32, 1000));
+        }
+
+
+
+        // Test elf R/W
+        #[test]
+        fn elf_write() {
+            let filename = "test_elf_write.o";
+            let code = "
+                li a7, 93 // Linux syscall: exit
+                li a0, 0  // return code 0
+                ecall     // make the syscall
+            ";
+            let words = encode_instructions(code);
+            let m = machine::SimpleMachine::new(&words);
+
+            let write_res = elf::write_elf(filename, m.bytes());
+            let rem_res = std::fs::remove_file(filename);
+
+            assert!(write_res.is_ok() && rem_res.is_ok());
+        }
+
+        #[test]
+        fn elf_read() {
+            let filename = "test_elf_read.o";
+            let code = "
+                li a7, 93 // Linux syscall: exit
+                li a0, 0  // return code 0
+                ecall     // make the syscall
+            ";
+            let words_written = encode_instructions(code);
+            let m = machine::SimpleMachine::new(&words_written);
+
+            let write_res = elf::write_elf(filename, m.bytes());
+            let read_res = elf::read_elf(filename);
+            let rem_res = std::fs::remove_file(filename);
+
+            assert!(write_res.is_ok());
+            assert!(read_res.is_ok());
+            assert!(rem_res.is_ok());
+            if let Ok(words_read) = read_res {
+                assert_eq!(words_written, words_read);
+            }
         }
     }
 }

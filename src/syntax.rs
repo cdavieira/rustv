@@ -1,9 +1,9 @@
 pub mod gas {
     use crate::assembler::{self};
     use crate::tokenizer::CommonClassifier;
-    use crate::lexer::{self, Directive, Pseudo, ToDirective, ToExtension, ToPseudo, ToRegister, TokenClassifier};
+    use crate::lexer::{self, ToDirective, ToExtension, ToPseudo, ToRegister, TokenClassifier};
     use crate::parser::{self};
-    use crate::spec::{ArgValue, Extension, Register, RV32I };
+    use crate::spec::{self, Directive, DirectiveInstruction, Extension, Pseudo, PseudoInstruction, Register, RV32I };
 
 
     /* Tokenizer */
@@ -70,80 +70,6 @@ pub mod gas {
 
     pub struct Lexer ;
 
-    #[derive(Debug, Copy, Clone)]
-    pub enum PseudoInstruction {
-        LI,
-        RET,
-    }
-
-    impl Pseudo for PseudoInstruction {
-        fn translate(&self, args: Vec<lexer::Value>) -> Vec<(Box<dyn Extension>, Vec<lexer::Value>)>  {
-            let mut v: Vec<(Box<dyn Extension>, Vec<lexer::Value>)> = vec![];
-            match self {
-                // lui x7 2
-                // addi x7 x7 -2048
-                PseudoInstruction::LI => {
-                    let arg1 = args.get(0).unwrap();
-                    let arg2 = args.get(1).unwrap();
-
-                    let mut args1: Vec<lexer::Value> = Vec::new();
-                    args1.push(arg1.clone());
-                    args1.push(arg2.clone());
-                    v.push((Box::new(RV32I::LUI), args1));
-
-                    let mut args2: Vec<lexer::Value> = Vec::new();
-                    args2.push(arg1.clone());
-                    args2.push(arg1.clone());
-                    v.push((Box::new(RV32I::ADDI), args2));
-                },
-                //jalr x0 x1 0
-                PseudoInstruction::RET => {
-                    let mut args1 = Vec::new();
-
-                    args1.push(lexer::Value::REGISTER(Register::X0));
-                    args1.push(lexer::Value::REGISTER(Register::X1));
-                    args1.push(lexer::Value::NUMBER(0));
-
-                    v.push((Box::new(RV32I::JALR), args1));
-                },
-            }
-            v
-        }
-    }
-
-    #[derive(Debug)]
-    pub enum DirectiveInstruction {
-        WORD,
-        HALF,
-        BYTE,
-    }
-
-    impl Directive for DirectiveInstruction {
-        fn translate(&self, args: Vec<lexer::Value>) -> Vec<u8>  {
-            let mut v = Vec::new();
-            match self {
-                DirectiveInstruction::WORD => {
-                    let arg = &args[0];
-                    match arg {
-                        lexer::Value::NUMBER(n) => {
-                            v.push((n & (0b1111_1111 << 0)).try_into().unwrap());
-                            v.push((n & (0b1111_1111 << 8)).try_into().unwrap());
-                            v.push((n & (0b1111_1111 << 16)).try_into().unwrap());
-                            v.push((n & (0b1111_1111 << 24)).try_into().unwrap());
-                        },
-                        _ => panic!(),
-                    }
-                },
-                DirectiveInstruction::HALF => {
-                },
-                DirectiveInstruction::BYTE => {
-
-                },
-            }
-            v
-        }
-    }
-
     impl ToRegister for Lexer {
         fn to_register(&self, token: &str) -> Option<crate::spec::Register>  {
             match token {
@@ -186,23 +112,21 @@ pub mod gas {
     }
 
     impl ToPseudo for Lexer {
-        type Pseudo = lexer::Token;
-
-        fn to_pseudo(&self, token: &str) -> Option<Self::Pseudo>  {
+        fn to_pseudo(&self, token: &str) -> Option<Box<dyn Pseudo>>  {
             match token {
-                "ret" => Some(lexer::Token::PSEUDO(Box::new(PseudoInstruction::RET))),
-                "li" => Some(lexer::Token::PSEUDO(Box::new(PseudoInstruction::LI))),
+                "ret" => Some(Box::new(PseudoInstruction::RET)),
+                "li"  => Some(Box::new(PseudoInstruction::LI)),
+                "mv"  => Some(Box::new(PseudoInstruction::MV)),
+                "la"  => Some(Box::new(PseudoInstruction::LA)),
                 _ => None
             }
         }
     }
 
     impl ToDirective for Lexer {
-        type Directive = lexer::Token;
-
-        fn to_directive(&self, token: &str) -> Option<Self::Directive>  {
+        fn to_directive(&self, token: &str) -> Option<Box<dyn Directive>>  {
             match token {
-                ".word" => Some(lexer::Token::DIRECTIVE(Box::new(DirectiveInstruction::WORD))),
+                ".word" => Some(Box::new(DirectiveInstruction::WORD)),
                 _ => None
             }
         }
@@ -243,6 +167,7 @@ pub mod gas {
                 "sb"    => Some(Box::new(RV32I::SB))   ,
                 "jal"   => Some(Box::new(RV32I::JAL))  ,
                 "jalr"  => Some(Box::new(RV32I::JALR)) ,
+                "ecall" => Some(Box::new(RV32I::ECALL)),
                 "beq"   => Some(Box::new(RV32I::BEQ))  ,
                 "bne"   => Some(Box::new(RV32I::BNE))  ,
                 "blt"   => Some(Box::new(RV32I::BLT))  ,
@@ -331,7 +256,12 @@ pub mod gas {
         }
 
         fn str_to_directive(&self, token: &str) -> Option<Self::Token> {
-            ToDirective::to_directive(self, token)
+            if let Some(d) = ToDirective::to_directive(self, token) {
+                Some(lexer::Token::DIRECTIVE(d))
+            }
+            else {
+                None
+            }
         }
 
         fn str_to_register(&self, token: &str) -> Option<Self::Token> {
@@ -342,7 +272,12 @@ pub mod gas {
         }
 
         fn str_to_custom(&self, token: &str) -> Option<Self::Token> {
-            ToPseudo::to_pseudo(self, token)
+            if let Some(p) = ToPseudo::to_pseudo(self, token) {
+                Some(lexer::Token::PSEUDO(p))
+            }
+            else {
+                None
+            }
         }
 
         fn str_to_label(&self, token: &str) -> Option<Self::Token> {
@@ -356,24 +291,9 @@ pub mod gas {
 
     pub struct Parser;
 
-    // impl Parser {
-    //     pub fn new() -> Self {
-    //         Lexer { labels: Vec::new() }
-    //     }
-    //
-    //     pub fn add_label(&mut self, l: String) {
-    //         self.labels.push(l);
-    //     }
-    //
-    //     pub fn is_label(&self, l: &str) -> bool {
-    //         self.labels.iter().find(|s| *s == l).is_some()
-    //     }
-    // }
-
-
     impl parser::Parser for Parser {
         type Token = lexer::Token;
-        type Statement = (usize, lexer::Token, Vec<ArgValue>);
+        type Statement = spec::AssemblyInstruction;
 
         fn parse(&self, tokens: Vec<Self::Token>) -> Vec<Self::Statement>  {
             parser::parse(tokens)
@@ -384,10 +304,10 @@ pub mod gas {
 
     /* Assembler */
 
-   pub struct Assembler;
+    pub struct Assembler;
 
     impl assembler::Assembler for Assembler {
-        type Instruction = (usize, lexer::Token, Vec<ArgValue>);
+        type Instruction = spec::AssemblyInstruction;
 
         fn to_words(&self, instructions: Vec<Self::Instruction>) -> Vec<u32>  {
             assembler::to_u32(instructions)

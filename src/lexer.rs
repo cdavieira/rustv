@@ -5,9 +5,25 @@ pub trait Lexer {
 
 
 
-/* The following code was written to ease the process of implementing the 'Lexer' trait. */
+// Note: the code above was written to ease the process of implementing the 'Lexer' trait.
+
+
 
 // Implementation 1
+
+pub enum TokenClass {
+    NUMBER,
+    STRING,
+    SYMBOL,
+    REGISTER,
+    OPCODE,
+    IDENTIFIER,
+    SECTION,
+    DIRECTIVE,
+    LABEL,
+    CUSTOM,
+    IGNORE
+}
 
 /**
 Any entity which implements the 'lexer::TokenClassifier' trait can then use the function 'lexer::parse' as the backend for the implementation of 'Lexer::parse'
@@ -56,6 +72,10 @@ pub trait TokenClassifier {
             return TokenClass::OPCODE;
         }
 
+        if self.is_directive(token) {
+            return TokenClass::DIRECTIVE;
+        }
+
         if self.is_section(token) {
             return TokenClass::SECTION;
         }
@@ -74,10 +94,6 @@ pub trait TokenClassifier {
 
         if self.is_string(token) {
             return TokenClass::STRING;
-        }
-
-        if self.is_directive(token) {
-            return TokenClass::DIRECTIVE;
         }
 
         if self.is_identifier(token) {
@@ -126,28 +142,6 @@ pub trait TokenClassifier {
     }
 }
 
-pub enum TokenClass {
-    NUMBER,
-    STRING,
-    SYMBOL,
-    REGISTER,
-    OPCODE,
-    IDENTIFIER,
-    SECTION,
-    DIRECTIVE,
-    LABEL,
-    CUSTOM,
-    IGNORE
-}
-
-impl<E, T: TokenClassifier<Token = E>> Lexer for T {
-    type Token = E;
-
-    fn parse(&self, tokens: Vec<String>) -> Vec<<Self as Lexer>::Token>  {
-        parse(self, tokens)
-    }
-}
-
 fn parse<T>(lexer: & impl TokenClassifier<Token = T>, tokens: Vec<String>) -> Vec<T> {
     let mut lexemes = Vec::new();
 
@@ -160,16 +154,22 @@ fn parse<T>(lexer: & impl TokenClassifier<Token = T>, tokens: Vec<String>) -> Ve
     lexemes
 }
 
+impl<E, T: TokenClassifier<Token = E>> Lexer for T {
+    type Token = E;
+
+    fn parse(&self, tokens: Vec<String>) -> Vec<<Self as Lexer>::Token>  {
+        parse(self, tokens)
+    }
+}
+
 
 
 
 
 // Implementation 2
 
-use crate::spec::{Extension, Register};
-
 /*
-OBS: 'Implementation 1' is complemented by 'Implementation 2', which takes the responsability
+'Implementation 1' is complemented by 'Implementation 2', which takes the responsability
 of defining what a token is, instead of letting this detail to be implemented by the trait
 implementor. This eases the process of building the parser later on, as the parser can reliably
 work with that token definition, instead of having to work with a myriad of possible inputs.
@@ -180,29 +180,39 @@ In this implementation, it's the lexer job to:
 1. Map the symbolic representation of all or a subset of the instructions of an Extension to their
    correspondent enum variant through the 'ToExtension' trait
 
-2. Implement the pseudo instructions to be supported as an Enum which implements the 'Pseudo' trait
+2. (Optional) Implement the pseudo instructions to be supported as an Enum which
+   implements the 'spec::Pseudo' trait
 3. Map the symbolic representation of each pseudo instruction to their correspondent enum variant
    through the 'ToPseudo' trait
 
-4. Implement the directives to be supported as an Enum which implements the 'Directive' trait
+4. (Optional) Implement the directives to be supported as an Enum which implements the
+   'spec::Directive' trait
 5. Map the symbolic representation of each directive to their correspondent enum variant through
    the 'ToDirective' trait
 
 7. Map the symbolic representation of registers to their correspondent enum variant through the
    'ToRegister' trait
 
-OBS: Default implementation of extensions should be provided by this crate, as to standardize
+OBS 1: Default implementation of extensions should be provided by this crate, as to standardize
 how operations turn into bytes according to the RISCV specification
+
+OBS 2: Default implementation of common pseudoinstructions/directives are provided by this crate,
+as to standardize how operations turn into bytes according to the RISCV specification
+
+=== About 'To*' Traits
+'To*' traits allow implementers to link arbitrary data to Extensions, Pseudoinstrucions or
+Directives
+
+If the 'to_*' method returns the 'Some' variant, then 'token' maps to an existing
+Extension/PseudoInstruction/Directive (thus grating support for that functionality)
+
+On the other hand, if the return is the 'None' variant, then 'token' doesn't support any existing
+Extension/PseudoInstruction/Directive
 */
 
 // Token standardization
-#[derive(Clone, Debug)]
-pub enum Value {
-    NUMBER(i32),
-    REGISTER(Register),
-    OFFSET(usize),
-    LABEL(String)
-}
+
+use crate::spec::{Extension, Pseudo, Directive, Register};
 
 #[derive(Debug)]
 pub enum Token {
@@ -222,13 +232,6 @@ pub enum Token {
     COMMA,
 }
 
-/**
-This trait allows implementers to link arbitrary data to Extensions
-
-The implementer of this trait has the ability to choose which instructions from the extension are
-going to be supported or not. If the method 'to_instruction' returns the None variant for some
-token, then it isn't supported.
-*/
 pub trait ToExtension<T> {
     fn to_extension(&self, token: T) -> Option<Box<dyn Extension>> ;
 
@@ -238,9 +241,7 @@ pub trait ToExtension<T> {
 }
 
 pub trait ToPseudo {
-    type Pseudo;
-
-    fn to_pseudo(&self, token: &str) -> Option<Self::Pseudo> ;
+    fn to_pseudo(&self, token: &str) -> Option<Box<dyn Pseudo>> ;
 
     fn is_pseudo(&self, token: &str) -> bool {
         self.to_pseudo(token).is_some()
@@ -248,9 +249,7 @@ pub trait ToPseudo {
 }
 
 pub trait ToDirective {
-    type Directive;
-
-    fn to_directive(&self, token: &str) -> Option<Self::Directive> ;
+    fn to_directive(&self, token: &str) -> Option<Box<dyn Directive>> ;
 
     fn is_directive(&self, token: &str) -> bool {
         self.to_directive(token).is_some()
@@ -263,12 +262,4 @@ pub trait ToRegister {
     fn is_register(&self, token: &str) -> bool {
         self.to_register(token).is_some()
     }
-}
-
-pub trait Pseudo: std::fmt::Debug {
-    fn translate(&self, args: Vec<Value>) -> Vec<(Box<dyn Extension>, Vec<Value>)> ;
-}
-
-pub trait Directive: std::fmt::Debug {
-    fn translate(&self, args: Vec<Value>) -> Vec<u8> ;
 }

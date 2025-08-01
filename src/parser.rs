@@ -1,5 +1,5 @@
 use crate::lexer;
-use crate::spec::{Extension, ArgValue};
+use crate::spec::{ArgValue, AssemblyInstruction, AssemblySection, KeyValue};
 
 pub trait Parser {
     type Token;
@@ -11,6 +11,8 @@ pub trait Parser {
 
 
 /* The following code was written to ease the process of implementing the 'Parser' trait. */
+
+
 
 //2.1 MAKING GROUPS OUT OF THE STREAM OF TOKENS
 
@@ -43,22 +45,24 @@ fn group_tokens(
     token_groups.into_iter().rev().collect()
 }
 
-// 2.2 ARGS INTO COPIABLE TYPES RESOLUTION
+
+
+// 2.2 ARGS INTO CLONEABLE TYPES RESOLUTION
     
 fn map_args_to_values(
     tokens: Vec<(lexer::Token, Vec<lexer::Token>)>
-) -> Vec<(lexer::Token, Vec<lexer::Value>)>
+) -> Vec<(lexer::Token, Vec<ArgValue>)>
 {
     let mut v = Vec::new();
     for (kw, args) in tokens {
         let values = args
             .into_iter()
             .filter_map(|arg| match arg {
-                //TODO: To map (resolved) offset we have to know that the number has between ( )
-                //TODO: lexer::Token::NAME(_) => todo!(),
-                lexer::Token::REG(register) => Some(lexer::Value::REGISTER(register)),
-                lexer::Token::LABEL(s) =>  Some(lexer::Value::LABEL(s)),
-                lexer::Token::NUMBER(n) =>  Some(lexer::Value::NUMBER(n)),
+                lexer::Token::REG(register) =>  Some(ArgValue::REGISTER(register)),
+                lexer::Token::LABEL(s)      =>  Some(ArgValue::LABEL(s)),
+                lexer::Token::NUMBER(n)     =>  Some(ArgValue::NUMBER(n)),
+                lexer::Token::NAME(name)    =>  Some(ArgValue::USE(name)),
+                // lexer::Token::(n) =>  Some(Value::OFFSET(n)),
                 _ => None
             })
             .collect();
@@ -67,11 +71,13 @@ fn map_args_to_values(
     v
 }
 
-// 2.3 PSEUDO INSTRUCTION TRANSLATION
+
+
+// 2.3 PSEUDO INSTRUCTION TRANSLATION/EXPANSION
 
 fn expand_pseudos(
-    stats: Vec<(lexer::Token, Vec<lexer::Value>)>
-) -> Vec<(lexer::Token, Vec<lexer::Value>)>
+    stats: Vec<(lexer::Token, Vec<ArgValue>)>
+) -> Vec<(lexer::Token, Vec<ArgValue>)>
 {
     let mut v = Vec::new();
     for (kw, args) in stats {
@@ -90,21 +96,68 @@ fn expand_pseudos(
     v
 }
 
-// TODO: 2.4  DIRECTIVE EXPANSION
 
-// TODO: 2.5 SECTION HANDLING
 
-pub enum Section {
-    DATA,
-    TEXT,
-    CUSTOM(String)
+// 2.4 KEY SPECIALIZATION
+
+fn specialize_keys(
+    stats: Vec<(lexer::Token, Vec<ArgValue>)>
+) -> Vec<(KeyValue, Vec<ArgValue>)>
+{
+    let mut v = Vec::new();
+    for (kw, args) in stats {
+        let key = match kw {
+            lexer::Token::OP(o) => {
+                Some(KeyValue::OP(o))
+            },
+            lexer::Token::DIRECTIVE(d) => {
+                Some(KeyValue::DIRECTIVE(d))
+            },
+            lexer::Token::LABEL(l) => {
+                Some(KeyValue::LABEL(l))
+            },
+            lexer::Token::SECTION(s) => {
+                match s.as_str() {
+                    "text" => {
+                        Some(KeyValue::SECTION(AssemblySection::TEXT))
+                    },
+                    "data" => {
+                        Some(KeyValue::SECTION(AssemblySection::DATA))
+                    },
+                    "bss" => {
+                        Some(KeyValue::SECTION(AssemblySection::BSS))
+                    },
+                    _ => {
+                        Some(KeyValue::SECTION(AssemblySection::CUSTOM(s)))
+                    }
+                }
+            },
+            _ => {
+                None
+            }
+        };
+        if let Some(k) = key {
+            v.push((k, args));
+        }
+    }
+    v
 }
 
-// 2.6 GENERATING ADDRESSES
+
+
+// TODO: 2.5  DIRECTIVE EXPANSION
+
+
+
+// TODO: 2.6 SECTION HANDLING
+
+
+
+// 2.7 GENERATING ADDRESSES
 
 fn gen_addresses(
-    stats: Vec<(lexer::Token, Vec<lexer::Value>)>
-) -> Vec<(usize, lexer::Token, Vec<lexer::Value>)>
+    stats: Vec<(KeyValue, Vec<ArgValue>)>
+) -> Vec<(usize, KeyValue, Vec<ArgValue>)>
 {
     let mut v = Vec::new();
     for (idx, (kw, args)) in stats.into_iter().enumerate() {
@@ -113,18 +166,20 @@ fn gen_addresses(
     v
 }
 
-// 2.7  SYMBOLIC LABEL TO ADDRESS
+
+
+// 2.8  SYMBOLIC LABEL TO ADDRESS
 
 use std::collections::HashMap;
 
 fn resolve_labels(
-    stats: &Vec<(usize, lexer::Token, Vec<lexer::Value>)>
+    stats: &Vec<(usize, KeyValue, Vec<ArgValue>)>
 ) -> HashMap<String, usize>
 {
     let mut v = HashMap::new();
     for stat in stats {
         match &stat.1 {
-            lexer::Token::LABEL(s) => {
+            KeyValue::LABEL(s) => {
                 v.insert(s.clone(), stat.0);
             },
             _ => {
@@ -135,18 +190,18 @@ fn resolve_labels(
 }
 
 fn replace_symbolic_labels(
-    stats: Vec<(usize, lexer::Token, Vec<lexer::Value>)>,
+    stats: Vec<(usize, KeyValue, Vec<ArgValue>)>,
     symbmap: HashMap<String, usize>
-) -> Vec<(usize, lexer::Token, Vec<lexer::Value>)>
+) -> Vec<(usize, KeyValue, Vec<ArgValue>)>
 {
     let mut v = Vec::new();
     let mut new_args = Vec::new();
     for (addr, kw, args) in stats {
         for arg in args {
             match arg {
-                lexer::Value::LABEL(s) => {
+                ArgValue::LABEL(s) => {
                     if let Some(v) = symbmap.get(&s) {
-                        new_args.push(lexer::Value::OFFSET(*v));
+                        new_args.push(ArgValue::OFFSET(*v));
                     }
                     else {
                         eprintln!("Couldnt find {} in the symb map", s);
@@ -163,36 +218,41 @@ fn replace_symbolic_labels(
 }
 
 
-// 3
 
-use std::rc::Rc;
+// 3 CONVERTING ARGUMENTS TO ACTUAL NUMBERS
 
-fn specialize_tokens(
-    stats: Vec<(usize, lexer::Token, Vec<lexer::Value>)>
-) ->  Vec<(usize, lexer::Token, Vec<ArgValue>)>
+fn args_to_numbers(
+    stats: Vec<(usize, KeyValue, Vec<ArgValue>)>
+) ->  Vec<AssemblyInstruction>
 {
     let mut v = Vec::new();
     for (addr, kw, args) in stats {
         let new_args = args.iter().filter_map(|arg| match *arg {
-            lexer::Value::NUMBER(n) => Some(ArgValue::NUMBER(n)),
-            lexer::Value::REGISTER(register) => Some(ArgValue::REG(register.id().into())),
-            lexer::Value::OFFSET(o) => Some(ArgValue::NUMBER(o.try_into().unwrap())),
-            lexer::Value::LABEL(_) => panic!(),
+            ArgValue::NUMBER(n) => Some(n),
+            ArgValue::REGISTER(register) => Some(register.id().into()),
+            ArgValue::OFFSET(o) => Some(o.try_into().unwrap()),
+            ArgValue::USE(_)    => None,
+            ArgValue::LABEL(_)  => panic!(),
         }).collect();
-        v.push((addr, kw, new_args));
+        v.push(AssemblyInstruction {
+            addr,
+            key: kw,
+            args: new_args
+        });
     }
     v
 }
 
 pub fn parse(
     tokens: Vec<lexer::Token>
-) ->  Vec<(usize, lexer::Token, Vec<ArgValue>)>
+) ->  Vec<AssemblyInstruction>
 {
     let stats = group_tokens(tokens);
     let stats = map_args_to_values(stats);
     let stats = expand_pseudos(stats);
+    let stats = specialize_keys(stats);
     let stats = gen_addresses(stats);
     let m =  resolve_labels(&stats);
     let stats = replace_symbolic_labels(stats, m);
-    specialize_tokens(stats)
+    args_to_numbers(stats)
 }

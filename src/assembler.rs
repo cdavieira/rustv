@@ -5,14 +5,14 @@ pub trait Assembler {
 
 /**/
 
-use crate::{lexer, spec::{instruction_to_binary, ArgKey, ArgValue, Extension}};
+use crate::spec::{instruction_to_binary, AssemblyInstruction, KeyValue};
 
-pub fn to_u32(instructions: Vec<(usize, lexer::Token, Vec<ArgValue>)>) -> Vec<u32> {
+pub fn to_u32(instructions: Vec<AssemblyInstruction>) -> Vec<u32> {
     let mut insts = Vec::new();
     for inst in instructions {
-        match inst.1 {
-            lexer::Token::OP(extension) => {
-                insts.push((inst.0, extension, inst.2))
+        match inst.key {
+            KeyValue::OP(extension) => {
+                insts.push((inst.addr, extension, inst.args))
             },
             _ => {}
         }

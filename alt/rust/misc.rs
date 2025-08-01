@@ -24,3 +24,10 @@ impl<K: Hash + Eq> ExtensionCache<K> {
         Rc::clone(self.mymap.entry(token).or_insert_with(|| create()))
     }
 }
+
+/* Example:
+fn main() {
+    // let mut rv32i_cache = misc::ExtensionCache::<RV32I>::new();
+    // let or2 = Rc::clone(&rv32i_cache.get_or_create(RV32I::OR, || Rc::new(RV32I::OR)));
+}
+*/

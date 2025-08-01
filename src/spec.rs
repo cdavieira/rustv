@@ -2,8 +2,9 @@
 
 #[derive(Debug, Copy, Clone)]
 pub enum Register {
-    X0, X1, X2, X3, X4, X5, X6, X7, X8, X9, X10, X11, X12, X13, X14, X15, X16, X17, X18, X19, X20,
-    X21, X22, X23, X24, X25, X26, X27, X28, X29, X30, X31, PC,
+    X0, X1, X2, X3, X4, X5, X6, X7, X8, X9, X10, X11, X12, X13, X14, X15,
+    X16, X17, X18, X19, X20, X21, X22, X23, X24, X25, X26, X27, X28, X29, X30, X31,
+    PC,
 }
 
 impl Register {
@@ -52,15 +53,65 @@ impl Register {
 
 #[derive(Debug, Copy, Clone)]
 pub enum InstructionFormat {
-    R{funct7: i32, rs2: i32, rs1: i32, funct3: i32, rd: i32, opcode: i32},
-    I{imm: i32, rs1: i32, funct3: i32, rd: i32, opcode: i32},
-    S{imm1: i32, rs2: i32, rs1: i32, funct3: i32, imm2: i32, opcode: i32},
-    B{imm1: i32, rs2: i32, rs1: i32, funct3: i32, imm2: i32, opcode: i32},
-    U{imm: i32, rd: i32, opcode: i32},
-    J{imm: i32, rd: i32, opcode: i32},
+    R{funct7: u32, rs2: u32, rs1: u32, funct3: u32, rd: u32, opcode: u32},
+    I{imm: u32, rs1: u32, funct3: u32, rd: u32, opcode: u32},
+    S{imm1: u32, rs2: u32, rs1: u32, funct3: u32, imm2: u32, opcode: u32},
+    B{imm1: u32, rs2: u32, rs1: u32, funct3: u32, imm2: u32, opcode: u32},
+    U{imm: u32, rd: u32, opcode: u32},
+    J{imm: u32, rd: u32, opcode: u32},
 }
 
 impl InstructionFormat {
+    pub fn decode(word: u32) -> Self {
+        let opcode = word & 0b11_11111;
+        match opcode {
+            0b0110011 => { //R
+                let rd      = (word >> 7)  & 0b11111;
+                let funct3  = (word >> 12) & 0b111;
+                let rs1     = (word >> 15) & 0b11111;
+                let rs2     = (word >> 20) & 0b11111;
+                let funct7  = (word >> 25) & 0b11_11111;
+                InstructionFormat::R { funct7, rs2, rs1, funct3, rd, opcode }
+            },
+            0b0110111 | 0b0010111 => { //U
+                let rd   = (word >> 7)  & 0b11111;
+                let imm  = (word >> 12) & 0b11111_11111_11111_11111;
+                InstructionFormat::U { imm, rd, opcode }
+            },
+            0b1101111 => { //J
+                let rd   = (word >> 7)  & 0b11111;
+                let imm  = (word >> 12) & 0b11111_11111_11111_11111;
+                InstructionFormat::J { imm, rd, opcode }
+            },
+            0b1100111 | 0b1110011 | 0b0010011 | 0b0000011 => { //I
+                let rd      = (word >> 7)  & 0b11111;
+                let funct3  = (word >> 12) & 0b111;
+                let rs1     = (word >> 15) & 0b11111;
+                let imm     = (word >> 20) & 0b1111_1111_1111;
+                InstructionFormat::I { imm, rs1, funct3, rd, opcode }
+            },
+            0b0100011  => { //S
+                let imm2    = (word >> 7)  & 0b11111;
+                let funct3  = (word >> 12) & 0b111;
+                let rs1     = (word >> 15) & 0b11111;
+                let rs2     = (word >> 20) & 0b11111;
+                let imm1    = (word >> 25) & 0b11111;
+                InstructionFormat::S { imm1, rs2, rs1, funct3, imm2, opcode }
+            },
+            0b1100011 => { //B
+                let imm2    = (word >> 7)  & 0b11111;
+                let funct3  = (word >> 12) & 0b111;
+                let rs1     = (word >> 15) & 0b11111;
+                let rs2     = (word >> 20) & 0b11111;
+                let imm1    = (word >> 25) & 0b11_11111;
+                InstructionFormat::B { imm1, rs2, rs1, funct3, imm2, opcode }
+            }
+            _ => {
+                panic!("InstructionFormat decode: unknown opcode: {}", opcode);
+            }
+        }
+    }
+
     pub fn encode(&self) -> u32 {
         match self {
             InstructionFormat::R { funct7, rs2, rs1, funct3, rd, opcode } => {
@@ -114,23 +165,23 @@ impl InstructionFormat {
     }
 }
 
-fn cast_3bits(f3: &i32) -> u32 {
+fn cast_3bits(f3: &u32) -> u32 {
     (f3 & 0b111).try_into().unwrap()
 }
 
-fn cast_5bits(reg: &i32) -> u32 {
+fn cast_5bits(reg: &u32) -> u32 {
     (reg & 0b11111).try_into().unwrap()
 }
 
-fn cast_7bits(f7: &i32) -> u32 {
+fn cast_7bits(f7: &u32) -> u32 {
     (f7 & 0b1_111_111).try_into().unwrap()
 }
 
-fn cast_12bits(f7: &i32) -> u32 {
+fn cast_12bits(f7: &u32) -> u32 {
     (f7 & 0b1111_1111_1111).try_into().unwrap()
 }
 
-fn cast_20bits(f7: &i32) -> u32 {
+fn cast_20bits(f7: &u32) -> u32 {
     (f7 & 0b11111_11111_11111_11111).try_into().unwrap()
 }
 
@@ -138,7 +189,7 @@ fn cast_20bits(f7: &i32) -> u32 {
 
 // Instruction Assembly Description
 
-pub enum ArgKey {
+pub enum ArgName {
     RS1,
     RS2,
     RD,
@@ -146,21 +197,15 @@ pub enum ArgKey {
     OFF,
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum ArgValue {
-    NUMBER(i32),
-    REG(i32),
-}
-
 pub enum ArgSyntax {
     N0,
-    N1(ArgKey),
-    N2(ArgKey, ArgKey),
-    N3(ArgKey, ArgKey, ArgKey),
-    N4(ArgKey, ArgKey, ArgKey, ArgKey),
+    N1(ArgName),
+    N2(ArgName, ArgName),
+    N3(ArgName, ArgName, ArgName),
+    N4(ArgName, ArgName, ArgName, ArgName),
 }
 
-pub fn instruction_to_binary(inst: &Box<dyn Extension>, args: &Vec<ArgValue>) -> u32 {
+pub fn instruction_to_binary(inst: &Box<dyn Extension>, args: &Vec<i32>) -> u32 {
     let fields = match inst.get_calling_syntax() {
         ArgSyntax::N0 => vec![],
         ArgSyntax::N1(f0) => vec![f0],
@@ -173,28 +218,60 @@ pub fn instruction_to_binary(inst: &Box<dyn Extension>, args: &Vec<ArgValue>) ->
 }
 
 fn get_args(
-    fields: Vec<ArgKey>,
-    args: &Vec<ArgValue>
-) -> (i32, i32, i32, i32)
+    fields: Vec<ArgName>,
+    args: &Vec<i32>
+) -> (u32, u32, u32, i32)
 {
-    let mut rs1: i32 = 0;
-    let mut rs2: i32 = 0;
-    let mut rd: i32 = 0;
+    let mut rs1: u32 = 0;
+    let mut rs2: u32 = 0;
+    let mut rd:  u32 = 0;
     let mut imm: i32 = 0;
     for (field, arg) in fields.iter().zip(args.iter()) {
-        match arg {
-            ArgValue::NUMBER(v) => imm = *v,
-            ArgValue::REG(reg) => {
-                match field {
-                    ArgKey::RS1 => rs1 = *reg,
-                    ArgKey::RS2 => rs2 = *reg,
-                    ArgKey::RD => rd = *reg,
-                    _ => eprintln!("Error")
-                }
-            },
+        match field {
+            ArgName::RS1 => rs1 = (*arg) as u32,
+            ArgName::RS2 => rs2 = (*arg) as u32,
+            ArgName::RD =>  rd  = (*arg) as u32,
+            ArgName::IMM | ArgName::OFF => imm = *arg,
         }
     }
     (rs1, rs2, rd, imm)
+}
+
+
+
+
+// Assembly Instruction
+
+#[derive(Debug)]
+pub enum AssemblySection {
+    TEXT,
+    DATA,
+    BSS,
+    CUSTOM(String)
+}
+
+#[derive(Debug)]
+pub enum KeyValue {
+    OP(Box<dyn Extension>),
+    DIRECTIVE(Box<dyn Directive>),
+    SECTION(AssemblySection),
+    LABEL(String),
+}
+
+#[derive(Clone, Debug)]
+pub enum ArgValue {
+    NUMBER(i32),
+    REGISTER(Register),
+    OFFSET(usize),
+    LABEL(String),
+    USE(String),
+}
+
+#[derive(Debug)]
+pub struct AssemblyInstruction {
+    pub addr: usize,
+    pub key: KeyValue,
+    pub args: Vec<i32>,
 }
 
 
@@ -207,7 +284,7 @@ An extension was thought as a set of new instructions which can extend the funct
 offered by the assembly language to access and interact with the hardware.
 
 Each new instruction of the extension must have a format (as described in the riscv
-specification), which can be found in the enum 'Instruction'
+specification), which can be found in the enum 'InstructionFormat'
 
 In order for new extensions to be supported, it will be needed to:
     * create an entity for that extension (an enum/struct)
@@ -221,16 +298,40 @@ The implementer of this trait (an extension such RV32I, RV32E, RV64I, ...) will 
 enum whose variants are then linked to some specific instruction format.
 */
 pub trait Extension: std::fmt::Debug {
-    fn get_instruction_format(&self, rs1: i32, rs2: i32, rd: i32, imm: i32) -> InstructionFormat ;
+    fn get_instruction_format(&self, rs1: u32, rs2: u32, rd: u32, imm: i32) -> InstructionFormat ;
     fn get_calling_syntax(&self) -> ArgSyntax ;
-    // fn clone_box(&self) -> Box<dyn Extension> ;
 }
 
-// impl Clone for Box<dyn Extension> {
-//     fn clone(&self) -> Self {
-//         self.clone_box()
-//     }
-// }
+
+
+
+// Pseudo Instructions
+
+/**
+A pseudoinstruction was thought to be a sequence of tokens which can be turned into a sequence of
+Instructions.
+
+In this regard, a instruction is an opcode, followed by one or more arguments
+*/
+
+pub trait Pseudo: std::fmt::Debug {
+    fn translate(&self, args: Vec<ArgValue>) -> Vec<(Box<dyn Extension>, Vec<ArgValue>)> ;
+}
+
+
+
+
+// Directives
+
+/**
+A directive was thought to be a sequence of tokens which can be turned into a sequence of
+raw bytes
+*/
+
+pub trait Directive: std::fmt::Debug {
+    fn translate(&self, args: Vec<ArgValue>) -> Vec<u8> ;
+}
+
 
 
 
@@ -253,11 +354,11 @@ and ECALL/EBREAK)
 pub enum RV32I {
     LUI, AUIPC, ADDI, ANDI, ORI, XORI, ADD, SUB, AND, OR, XOR, SLL, SRL, SRA, FENCE, SLTI, SLTIU,
     SLLI, SRLI, SRAI, SLT, SLTU, LW, LH, LHU, LB, LBU, SW, SH, SB, JAL, JALR, BEQ, BNE, BLT, BLTU,
-    BGE, BGEU,
+    BGE, BGEU, ECALL
 }
 
 impl Extension for RV32I {
-    fn get_instruction_format(&self, rs1: i32, rs2: i32, rd: i32, imm: i32) -> InstructionFormat  {
+    fn get_instruction_format(&self, rs1: u32, rs2: u32, rd: u32, imm: i32) -> InstructionFormat  {
         match self {
             RV32I::ADD   => InstructionFormat::R { funct7: 0b0000000, rs2, rs1, funct3: 0b000, rd, opcode: 0b0110011 },
             RV32I::SUB   => InstructionFormat::R { funct7: 0b1000000, rs2, rs1, funct3: 0b000, rd, opcode: 0b0110011 },
@@ -272,7 +373,8 @@ impl Extension for RV32I {
             RV32I::LUI   => InstructionFormat::U { imm: imm_to_u(imm), rd, opcode: 0b0110111 },
             RV32I::AUIPC => InstructionFormat::U { imm: imm_to_u(imm), rd, opcode: 0b0010111 },
             RV32I::JAL   => InstructionFormat::J { imm: imm_to_j(imm), rd, opcode: 0b1101111 },
-            RV32I::JALR  => InstructionFormat::I { imm: imm_to_i(imm), rs1, funct3: 0b000, rd, opcode: 0b1101111 },
+            RV32I::JALR  => InstructionFormat::I { imm: imm_to_i(imm), rs1, funct3: 0b000, rd, opcode: 0b1100111 },
+            RV32I::ECALL => InstructionFormat::I { imm: imm_to_i(imm), rs1, funct3: 0b000, rd, opcode: 0b1110011 },
             RV32I::ADDI  => InstructionFormat::I { imm: imm_to_i(imm), rs1, funct3: 0b000, rd, opcode: 0b0010011 },
             RV32I::ANDI  => InstructionFormat::I { imm: imm_to_i(imm), rs1, funct3: 0b111, rd, opcode: 0b0010011 },
             RV32I::ORI   => InstructionFormat::I { imm: imm_to_i(imm), rs1, funct3: 0b110, rd, opcode: 0b0010011 },
@@ -329,85 +431,259 @@ impl Extension for RV32I {
 
     fn get_calling_syntax(&self) -> ArgSyntax {
         match self {
-            RV32I::ADD   => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::RS2),
-            RV32I::SUB   => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::RS2),
-            RV32I::AND   => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::RS2),
-            RV32I::OR    => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::RS2),
-            RV32I::XOR   => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::RS2),
-            RV32I::SLL   => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::RS2),
-            RV32I::SRL   => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::RS2),
-            RV32I::SRA   => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::RS2),
-            RV32I::SLT   => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::RS2),
-            RV32I::SLTU  => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::RS2),
-            RV32I::LUI   => ArgSyntax::N2(ArgKey::RD, ArgKey::IMM),
-            RV32I::AUIPC => ArgSyntax::N2(ArgKey::RD, ArgKey::IMM),
-            RV32I::JAL   => ArgSyntax::N2(ArgKey::RD, ArgKey::OFF),
-            RV32I::JALR  => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::OFF),
-            RV32I::ADDI  => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::IMM),
-            RV32I::ANDI  => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::IMM),
-            RV32I::ORI   => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::IMM),
-            RV32I::XORI  => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::IMM),
-            RV32I::SLTI  => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::IMM),
-            RV32I::SLTIU => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::IMM),
-            RV32I::SLLI  => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::IMM),
-            RV32I::SRLI  => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::IMM),
-            RV32I::SRAI  => ArgSyntax::N3(ArgKey::RD, ArgKey::RS1, ArgKey::IMM),
-            RV32I::LW    => ArgSyntax::N3(ArgKey::RD, ArgKey::OFF, ArgKey::RS1),
-            RV32I::LH    => ArgSyntax::N3(ArgKey::RD, ArgKey::OFF, ArgKey::RS1),
-            RV32I::LB    => ArgSyntax::N3(ArgKey::RD, ArgKey::OFF, ArgKey::RS1),
-            RV32I::LHU   => ArgSyntax::N3(ArgKey::RD, ArgKey::OFF, ArgKey::RS1),
-            RV32I::LBU   => ArgSyntax::N3(ArgKey::RD, ArgKey::OFF, ArgKey::RS1),
-            RV32I::SW    => ArgSyntax::N3(ArgKey::RS2, ArgKey::OFF, ArgKey::RS1),
-            RV32I::SH    => ArgSyntax::N3(ArgKey::RS2, ArgKey::OFF, ArgKey::RS1),
-            RV32I::SB    => ArgSyntax::N3(ArgKey::RS2, ArgKey::OFF, ArgKey::RS1),
-            RV32I::BEQ   => ArgSyntax::N3(ArgKey::RS1, ArgKey::RS2, ArgKey::OFF),
-            RV32I::BNE   => ArgSyntax::N3(ArgKey::RS1, ArgKey::RS2, ArgKey::OFF),
-            RV32I::BLT   => ArgSyntax::N3(ArgKey::RS1, ArgKey::RS2, ArgKey::OFF),
-            RV32I::BLTU  => ArgSyntax::N3(ArgKey::RS1, ArgKey::RS2, ArgKey::OFF),
-            RV32I::BGE   => ArgSyntax::N3(ArgKey::RS1, ArgKey::RS2, ArgKey::OFF),
-            RV32I::BGEU  => ArgSyntax::N3(ArgKey::RS1, ArgKey::RS2, ArgKey::OFF),
+            RV32I::ADD   => ArgSyntax::N3(ArgName::RD, ArgName::RS1, ArgName::RS2),
+            RV32I::SUB   => ArgSyntax::N3(ArgName::RD, ArgName::RS1, ArgName::RS2),
+            RV32I::AND   => ArgSyntax::N3(ArgName::RD, ArgName::RS1, ArgName::RS2),
+            RV32I::OR    => ArgSyntax::N3(ArgName::RD, ArgName::RS1, ArgName::RS2),
+            RV32I::XOR   => ArgSyntax::N3(ArgName::RD, ArgName::RS1, ArgName::RS2),
+            RV32I::SLL   => ArgSyntax::N3(ArgName::RD, ArgName::RS1, ArgName::RS2),
+            RV32I::SRL   => ArgSyntax::N3(ArgName::RD, ArgName::RS1, ArgName::RS2),
+            RV32I::SRA   => ArgSyntax::N3(ArgName::RD, ArgName::RS1, ArgName::RS2),
+            RV32I::SLT   => ArgSyntax::N3(ArgName::RD, ArgName::RS1, ArgName::RS2),
+            RV32I::SLTU  => ArgSyntax::N3(ArgName::RD, ArgName::RS1, ArgName::RS2),
+            RV32I::LUI   => ArgSyntax::N2(ArgName::RD, ArgName::IMM),
+            RV32I::AUIPC => ArgSyntax::N2(ArgName::RD, ArgName::IMM),
+            RV32I::JAL   => ArgSyntax::N2(ArgName::RD, ArgName::OFF),
+            RV32I::JALR  => ArgSyntax::N3(ArgName::RD, ArgName::RS1, ArgName::OFF),
+            RV32I::ECALL => ArgSyntax::N0,
+            RV32I::ADDI  => ArgSyntax::N3(ArgName::RD, ArgName::RS1, ArgName::IMM),
+            RV32I::ANDI  => ArgSyntax::N3(ArgName::RD, ArgName::RS1, ArgName::IMM),
+            RV32I::ORI   => ArgSyntax::N3(ArgName::RD, ArgName::RS1, ArgName::IMM),
+            RV32I::XORI  => ArgSyntax::N3(ArgName::RD, ArgName::RS1, ArgName::IMM),
+            RV32I::SLTI  => ArgSyntax::N3(ArgName::RD, ArgName::RS1, ArgName::IMM),
+            RV32I::SLTIU => ArgSyntax::N3(ArgName::RD, ArgName::RS1, ArgName::IMM),
+            RV32I::SLLI  => ArgSyntax::N3(ArgName::RD, ArgName::RS1, ArgName::IMM),
+            RV32I::SRLI  => ArgSyntax::N3(ArgName::RD, ArgName::RS1, ArgName::IMM),
+            RV32I::SRAI  => ArgSyntax::N3(ArgName::RD, ArgName::RS1, ArgName::IMM),
+            RV32I::LW    => ArgSyntax::N3(ArgName::RD, ArgName::OFF, ArgName::RS1),
+            RV32I::LH    => ArgSyntax::N3(ArgName::RD, ArgName::OFF, ArgName::RS1),
+            RV32I::LB    => ArgSyntax::N3(ArgName::RD, ArgName::OFF, ArgName::RS1),
+            RV32I::LHU   => ArgSyntax::N3(ArgName::RD, ArgName::OFF, ArgName::RS1),
+            RV32I::LBU   => ArgSyntax::N3(ArgName::RD, ArgName::OFF, ArgName::RS1),
+            RV32I::SW    => ArgSyntax::N3(ArgName::RS2, ArgName::OFF, ArgName::RS1),
+            RV32I::SH    => ArgSyntax::N3(ArgName::RS2, ArgName::OFF, ArgName::RS1),
+            RV32I::SB    => ArgSyntax::N3(ArgName::RS2, ArgName::OFF, ArgName::RS1),
+            RV32I::BEQ   => ArgSyntax::N3(ArgName::RS1, ArgName::RS2, ArgName::OFF),
+            RV32I::BNE   => ArgSyntax::N3(ArgName::RS1, ArgName::RS2, ArgName::OFF),
+            RV32I::BLT   => ArgSyntax::N3(ArgName::RS1, ArgName::RS2, ArgName::OFF),
+            RV32I::BLTU  => ArgSyntax::N3(ArgName::RS1, ArgName::RS2, ArgName::OFF),
+            RV32I::BGE   => ArgSyntax::N3(ArgName::RS1, ArgName::RS2, ArgName::OFF),
+            RV32I::BGEU  => ArgSyntax::N3(ArgName::RS1, ArgName::RS2, ArgName::OFF),
             RV32I::FENCE => todo!(),
         }
     }
-
-    // fn clone_box(&self) -> Box<dyn Extension>  {
-    //     Box::new(self.clone())
-    // }
 }
 
-//convert an immediate as read from the parser into the number to be stored in an Instruction.
-//the Instruction is going to use this result as-is later to assemble a 32-bit instruction.
+/*
+Functions to convert an immediate as read from the parser into the number to be stored in an
+Instruction.
 
-//TODO: handle sign extension
-//TODO: This could later be turned into a struct/enum like 'InstructionImmediate' or just 'Immediate'
+The Instruction is going to use this result as-is later to assemble a 32-bit instruction.
 
-fn imm_to_i(imm: i32) -> i32 {
-    imm & 0b1111_1111_1111
+Yet to be done:
+    1. handle sign extension
+    2. turn this into a struct/enum named 'InstructionImmediate'/'Immediate' ?
+*/
+
+fn imm_to_i(imm: i32) -> u32 {
+    (imm & 0b1111_1111_1111) as u32
 }
 
-fn imm_to_s(imm: i32) -> (i32, i32) {
+fn imm_to_s(imm: i32) -> (u32, u32) {
     let imm1 = (imm & 0b1111_111_00000) >> 5;
     let imm2 = imm & 0b11111;
-    (imm1, imm2)
+    (imm1 as u32, imm2 as u32)
 }
 
-fn imm_to_b(imm: i32) -> (i32, i32) {
+fn imm_to_b(imm: i32) -> (u32, u32) {
     let bit12 = imm & 0b100_000_000_000;
     let bit13 = imm & 0b1_000_000_000_000;
     let imm1 = ((imm & 0b111111_00000) >> 5) | (bit13 >> 6);
     let imm2 = (imm & 0b11110) | (bit12 >> 11);
-    (imm1, imm2)
+    (imm1 as u32, imm2 as u32)
 }
 
-fn imm_to_u(imm: i32) -> i32 {
+fn imm_to_u(imm: i32) -> u32 {
     // (imm >> 12) & 0b11111_11111_11111_11111
-    imm & 0b11111_11111_11111_11111
+    (imm & 0b11111_11111_11111_11111) as u32
 }
 
-fn imm_to_j(imm: i32) -> i32 {
+fn imm_to_j(imm: i32) -> u32 {
     let p1 = (imm >> 12) & 0b1111_1111;
     let p2 = (imm >> 11) & 1;
     let p3 = (imm >> 1)  & 0b11111_11111;
     let p4 = (imm >> 20) & 1;
-    ((p4 << 18) | (p3 << 9) | (p2 << 8) | p1) << 1
+    ( ((p4 << 18) | (p3 << 9) | (p2 << 8) | p1) << 1 ) as u32
+}
+
+
+
+
+// Pseudoinstructions implementation
+
+#[derive(Debug, Copy, Clone)]
+pub enum PseudoInstruction {
+    LI,
+    RET,
+    MV,
+    LA,
+}
+
+impl Pseudo for PseudoInstruction {
+    fn translate(&self, args: Vec<ArgValue>) -> Vec<(Box<dyn Extension>, Vec<ArgValue>)>  {
+        let mut v: Vec<(Box<dyn Extension>, Vec<ArgValue>)> = vec![];
+        match self {
+            // li x7 2, becomes:
+            // addi x7 x0 2
+            //
+            // li x7 6144, becomes:
+            // lui x7 1
+            // addi x7 x7 2048
+            PseudoInstruction::LI => {
+                let arg1 = args.get(0).unwrap();
+                let arg2 = args.get(1).unwrap();
+
+                if let (ArgValue::REGISTER(_), ArgValue::NUMBER(n)) = (arg1, arg2) {
+                    let mut args: Vec<ArgValue> = Vec::new();
+                    let upper20bits: i32 = (n >> 12) & 0b11111_11111_11111_11111;
+                    let lower12bits: i32 = n & 0b1111_1111_1111;
+
+                    if (*n >= -2048) && (*n <= 2047) {
+                        //If the immediate fits in a signed 12-bit immediate, then 'li' gets
+                        //simplified to a 'addi' op
+                        args.push(arg1.clone());
+                        args.push(ArgValue::REGISTER(Register::X0));
+                        args.push(ArgValue::NUMBER(lower12bits));
+                        v.push((Box::new(RV32I::ADDI), args.drain(..).collect()));
+                    }
+                    else {
+                        //Otherwise we have to load the upper 20 bits of the immediate using
+                        //'LUI', followed by a 'addi' op
+                        args.push(arg1.clone());
+                        args.push(ArgValue::NUMBER(upper20bits));
+                        v.push((Box::new(RV32I::LUI), args.drain(..).collect()));
+
+                        args.clear();
+                        args.push(arg1.clone());
+                        args.push(arg1.clone());
+                        args.push(ArgValue::NUMBER(lower12bits));
+                        v.push((Box::new(RV32I::ADDI), args.drain(..).collect()));
+                    }
+                }
+            },
+
+            //ret, becomes:
+            //jalr x0 x1 0
+            PseudoInstruction::RET => {
+                let mut args = Vec::new();
+
+                args.push(ArgValue::REGISTER(Register::X0));
+                args.push(ArgValue::REGISTER(Register::X1));
+                args.push(ArgValue::NUMBER(0));
+
+                v.push((Box::new(RV32I::JALR), args));
+            },
+
+            //mv rd, rs1, becomes:
+            //addi rd, rs1, 0
+            PseudoInstruction::MV => {
+                let arg1: ArgValue = args.get(0).unwrap().clone();
+                let arg2: ArgValue = args.get(1).unwrap().clone();
+                let mut args = Vec::new();
+                args.push(arg1);
+                args.push(arg2);
+                args.push(ArgValue::NUMBER(0));
+
+                v.push((Box::new(RV32I::ADDI), args));
+            },
+
+            // la x5, my_label, becomes:
+            // auipc x5, %hi(my_label) //20 bits
+            // addi x5, x5, %lo(my_label) //12 bits
+            //
+            // or if %hi(my_label) == 0:
+            // addi x5, x0, %lo(my_label) //12 bits
+            PseudoInstruction::LA => {
+                let arg1 = args.get(0).unwrap();
+                let arg2 = args.get(1).unwrap();
+
+                if let (ArgValue::REGISTER(_), ArgValue::NUMBER(n)) = (arg1, arg2) {
+                    let mut args: Vec<ArgValue> = Vec::new();
+                    let upper20bits: i32 = (n >> 12) & 0b11111_11111_11111_11111;
+                    let lower12bits: i32 = n & 0b1111_1111_1111;
+
+                    if (*n >= -2048) && (*n <= 2047) {
+                        args.push(arg1.clone());
+                        args.push(ArgValue::REGISTER(Register::X0));
+                        args.push(ArgValue::NUMBER(lower12bits));
+                        v.push((Box::new(RV32I::ADDI), args.drain(..).collect()));
+                    }
+                    else {
+                        args.push(arg1.clone());
+                        args.push(ArgValue::NUMBER(upper20bits));
+                        v.push((Box::new(RV32I::AUIPC), args.drain(..).collect()));
+
+                        args.clear();
+                        args.push(arg1.clone());
+                        args.push(arg1.clone());
+                        args.push(ArgValue::NUMBER(lower12bits));
+                        v.push((Box::new(RV32I::ADDI), args.drain(..).collect()));
+                    }
+                }
+            }
+        }
+        v
+    }
+}
+
+
+
+
+// Directives implementation
+
+#[derive(Debug)]
+pub enum DirectiveInstruction {
+    WORD,
+    HALF,
+    BYTE,
+    SKIP,
+    ASCII
+}
+
+impl Directive for DirectiveInstruction {
+    fn translate(&self, args: Vec<ArgValue>) -> Vec<u8>  {
+        let mut v = Vec::new();
+        match self {
+            DirectiveInstruction::WORD => {
+                let arg = &args[0];
+                match arg {
+                    ArgValue::NUMBER(n) => {
+                        v.push((n & (0b1111_1111 << 0)).try_into().unwrap());
+                        v.push((n & (0b1111_1111 << 8)).try_into().unwrap());
+                        v.push((n & (0b1111_1111 << 16)).try_into().unwrap());
+                        v.push((n & (0b1111_1111 << 24)).try_into().unwrap());
+                    },
+                    _ => panic!(),
+                }
+            },
+            DirectiveInstruction::SKIP => {
+                let arg = &args[0];
+                match arg {
+                    ArgValue::NUMBER(n) => {
+                        let capacity: usize = (*n).try_into().unwrap();
+                        v.reserve(capacity);
+                    },
+                    _ => panic!(),
+                }
+            },
+            DirectiveInstruction::ASCII => {
+            },
+            DirectiveInstruction::HALF => {
+            },
+            DirectiveInstruction::BYTE => {
+
+            },
+        }
+        v
+    }
 }

@@ -1,14 +1,22 @@
-src := x2.s
-obj := $(src:.s=.o)
-log := $(src:.s=.txt)
+src := src/exit.s
+obj := $(subst src,obj,$(src:.s=.o))
+log := $(subst src,log,$(src:.s=.txt))
+elf := /home/carlos/projs/riscv32/initramfs/home/$(notdir $(subst .o,,$(obj)))
 
 AS := riscv32-unknown-linux-gnu-as
+ASFLAGS := -g
+
+LD := riscv32-unknown-linux-gnu-ld
+LDFLAGS :=
+
 HEXDUMP := hexdump
+
 READELF := riscv32-unknown-linux-gnu-readelf
+
 OBJDUMP := riscv32-unknown-linux-gnu-objdump
 
 all:
-	$(AS) $(src) -o $(obj)
+	$(AS) $(ASFLAGS) $(src) -o $(obj)
 	@echo "$(HEXDUMP) $(obj)" > $(log)
 	$(HEXDUMP) $(obj)     >> $(log)
 	@echo -e "\n\n\n"     >> $(log)
@@ -18,3 +26,5 @@ all:
 	@echo "$(OBJDUMP) -d $(obj)" >> $(log)
 	$(OBJDUMP) -d $(obj)  >> $(log)
 	@echo -e "\n\n\n"     >> $(log)
+	$(LD) $(LDFLAGS) $(obj) -o $(elf)
+

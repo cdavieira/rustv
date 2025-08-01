@@ -77,7 +77,6 @@ pub trait CommonClassifier {
         }
         opt
     }
-    //TODO: test this
     fn handle_string(&self, it: &mut impl Iterator<Item = char>, s: &mut String) -> Option<char> {
         let mut opt = it.next();
         while let Some(ch) = opt {
@@ -167,15 +166,15 @@ fn get_tokens(
 }
 
 fn handle_number(it: &mut impl Iterator<Item = char>, n: &mut String, is_valid: impl Fn(char) -> bool) -> Option<char>{
-        let mut opt = it.next();
-        while let Some(ch) = opt {
-            if !is_valid(ch) {
-                break;
-            }
-            n.push(ch);
-            opt = it.next();
+    let mut opt = it.next();
+    while let Some(ch) = opt {
+        if !is_valid(ch) {
+            break;
         }
-        opt
+        n.push(ch);
+        opt = it.next();
+    }
+    opt
 }
 
 fn handle_hexadecimal(it: &mut impl Iterator<Item = char>, n: &mut String) -> Option<char> {

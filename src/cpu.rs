@@ -23,6 +23,7 @@ impl SimpleCPU {
     }
 
     pub fn info(&self) -> () {
+        println!("PC: {}", self.pc);
         for (i, v) in self.registers.iter().enumerate() {
             println!("Reg {}: {}", i, v);
         }

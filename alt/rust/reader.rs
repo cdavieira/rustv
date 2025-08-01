@@ -20,7 +20,8 @@ impl<'a> SimpleReader<'a> {
     }
 
     fn get_next_pos(&self, cur_ch: char, next_ch: char, pos: (usize, usize, usize)) -> (usize, usize, usize) {
-        let line_change = cur_ch == '\n' && next_ch != '\n';
+        // let line_change = cur_ch == '\n' && next_ch != '\n';
+        let line_change = cur_ch == '\n';
         let col = if line_change { 0 } else { pos.0 + 1};
         let lin = if line_change { pos.1 + 1 } else { pos.1 };
         let cur = pos.2 + 1;
@@ -65,8 +66,7 @@ impl<'a> Reader for SimpleReader<'a> {
     }
 
     fn peek_next_pos(&mut self) -> Option<(usize, usize, usize)> {
-        let opt = self.peek_next_ch();
-        if let Some(next_ch) = opt {
+        if let Some(next_ch) = self.peek_next_ch() {
             let prev_pos = self.peek_current_pos().unwrap();
             let prev_ch = self.peek_current_ch().unwrap();
             Some(self.get_next_pos(prev_ch, next_ch, prev_pos))
