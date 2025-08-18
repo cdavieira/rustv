@@ -1,24 +1,42 @@
+use crate::spec::AssemblyData;
+
 pub trait Assembler {
-    type Instruction;
-    fn to_words(&self, instructions: Vec<Self::Instruction>) -> Vec<u32> ;
+    type Input;
+    fn to_words(&self, instructions: Self::Input) -> AssemblyData ;
 }
 
 /**/
 
-use crate::spec::{instruction_to_binary, AssemblyInstruction, KeyValue};
+use crate::spec::{instruction_to_binary, AssemblySection, KeyValue};
 
-pub fn to_u32(instructions: Vec<AssemblyInstruction>) -> Vec<u32> {
-    let mut insts = Vec::new();
-    for inst in instructions {
-        match inst.key {
+pub fn to_u32(section: AssemblySection) -> AssemblyData {
+    let mut data = Vec::new();
+
+    for i in &section.instructions {
+        // println!("Processing {:?}", &i.key);
+        match &i.key {
             KeyValue::OP(extension) => {
-                insts.push((inst.addr, extension, inst.args))
+                let word = instruction_to_binary(extension, &i.args);
+                // println!("Turned into {}", word);
+                data.push(word);
+            },
+            KeyValue::DIRECTIVE(_) => {
+                let words: Vec<u32> = i.args
+                        .iter()
+                        .map(|x| *x as u32)
+                        .collect();
+                // println!("Turned into {:?}", words);
+                data.extend(words);
             },
             _ => {}
         }
     }
-    insts
-        .into_iter()
-        .map(|i| instruction_to_binary(&i.1, &i.2))
-        .collect()
+    // println!("Len 1: {}", data.len());
+
+    let (addr, name) = (section.addr, section.name);
+    AssemblyData {
+        addr,
+        name,
+        data,
+    }
 }

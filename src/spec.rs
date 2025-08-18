@@ -51,6 +51,8 @@ impl Register {
 
 // Available Instruction Binary Formats (as in the ISA)
 
+use crate::utils::{uword_mask_lower_3bits, uword_mask_lower_5bits, uword_mask_lower_7bits, uword_mask_lower_12bits, uword_mask_lower_20bits};
+
 #[derive(Debug, Copy, Clone)]
 pub enum InstructionFormat {
     R{funct7: u32, rs2: u32, rs1: u32, funct3: u32, rd: u32, opcode: u32},
@@ -115,74 +117,54 @@ impl InstructionFormat {
     pub fn encode(&self) -> u32 {
         match self {
             InstructionFormat::R { funct7, rs2, rs1, funct3, rd, opcode } => {
-                let opcode = cast_7bits(opcode);
-                let rd     = cast_5bits(rd);
-                let rs1    = cast_5bits(rs1);
-                let rs2    = cast_5bits(rs2);
-                let funct3 = cast_3bits(funct3);
-                let funct7 = cast_7bits(funct7);
+                let opcode = uword_mask_lower_7bits(opcode);
+                let rd     = uword_mask_lower_5bits(rd);
+                let rs1    = uword_mask_lower_5bits(rs1);
+                let rs2    = uword_mask_lower_5bits(rs2);
+                let funct3 = uword_mask_lower_3bits(funct3);
+                let funct7 = uword_mask_lower_7bits(funct7);
                 (funct7 << 25) | (rs2 << 20) | (rs1 << 15) | (funct3 << 12) | (rd << 7) | opcode
             },
             InstructionFormat::I { imm, rs1, funct3, rd, opcode } => {
-                let opcode = cast_7bits(opcode);
-                let rd     = cast_5bits(rd);
-                let rs1    = cast_5bits(rs1);
-                let funct3 = cast_3bits(funct3);
-                let imm    = cast_12bits(imm);
+                let opcode = uword_mask_lower_7bits(opcode);
+                let rd     = uword_mask_lower_5bits(rd);
+                let rs1    = uword_mask_lower_5bits(rs1);
+                let funct3 = uword_mask_lower_3bits(funct3);
+                let imm    = uword_mask_lower_12bits(imm);
                 (imm << 20) | (rs1 << 15) | (funct3 << 12) | (rd << 7) | opcode
             },
             InstructionFormat::S { imm1, rs2, rs1, funct3, imm2, opcode } => {
-                let opcode = cast_7bits(opcode);
-                let rs1    = cast_5bits(rs1);
-                let rs2    = cast_5bits(rs2);
-                let funct3 = cast_3bits(funct3);
-                let imm2   = cast_5bits(imm2);
-                let imm1   = cast_7bits(imm1);
+                let opcode = uword_mask_lower_7bits(opcode);
+                let rs1    = uword_mask_lower_5bits(rs1);
+                let rs2    = uword_mask_lower_5bits(rs2);
+                let funct3 = uword_mask_lower_3bits(funct3);
+                let imm2   = uword_mask_lower_5bits(imm2);
+                let imm1   = uword_mask_lower_7bits(imm1);
                 (imm1 << 25) | (rs2 << 20) | (rs1 << 15) | (funct3 << 12) | (imm2 << 7) | opcode
             },
             InstructionFormat::B { imm1, rs2, rs1, funct3, imm2, opcode } => {
-                let opcode = cast_7bits(opcode);
-                let rs1    = cast_5bits(rs1);
-                let rs2    = cast_5bits(rs2);
-                let funct3 = cast_3bits(funct3);
-                let imm2   = cast_5bits(imm2);
-                let imm1   = cast_7bits(imm1);
+                let opcode = uword_mask_lower_7bits(opcode);
+                let rs1    = uword_mask_lower_5bits(rs1);
+                let rs2    = uword_mask_lower_5bits(rs2);
+                let funct3 = uword_mask_lower_3bits(funct3);
+                let imm2   = uword_mask_lower_5bits(imm2);
+                let imm1   = uword_mask_lower_7bits(imm1);
                 (imm1 << 25) | (rs2 << 20) | (rs1 << 15) | (funct3 << 12) | (imm2 << 7) | opcode
             },
             InstructionFormat::U { imm, rd, opcode } => {
-                let opcode = cast_7bits(opcode);
-                let rd     = cast_5bits(rd);
-                let imm    = cast_20bits(imm);
+                let opcode = uword_mask_lower_7bits(opcode);
+                let rd     = uword_mask_lower_5bits(rd);
+                let imm    = uword_mask_lower_20bits(imm);
                 (imm << 12) | (rd << 7) | opcode
             },
             InstructionFormat::J { imm, rd, opcode } => {
-                let opcode = cast_7bits(opcode);
-                let rd     = cast_5bits(rd);
-                let imm    = cast_20bits(imm);
+                let opcode = uword_mask_lower_7bits(opcode);
+                let rd     = uword_mask_lower_5bits(rd);
+                let imm    = uword_mask_lower_20bits(imm);
                 (imm << 12) | (rd << 7) | opcode
             },
         }
     }
-}
-
-fn cast_3bits(f3: &u32) -> u32 {
-    (f3 & 0b111).try_into().unwrap()
-}
-
-fn cast_5bits(reg: &u32) -> u32 {
-    (reg & 0b11111).try_into().unwrap()
-}
-
-fn cast_7bits(f7: &u32) -> u32 {
-    (f7 & 0b1_111_111).try_into().unwrap()
-}
-
-fn cast_12bits(f7: &u32) -> u32 {
-    (f7 & 0b1111_1111_1111).try_into().unwrap()
-}
-
-fn cast_20bits(f7: &u32) -> u32 {
-    (f7 & 0b11111_11111_11111_11111).try_into().unwrap()
 }
 
 
@@ -243,28 +225,25 @@ fn get_args(
 // Assembly Instruction
 
 #[derive(Debug)]
-pub enum AssemblySection {
-    TEXT,
-    DATA,
-    BSS,
-    CUSTOM(String)
-}
-
-#[derive(Debug)]
 pub enum KeyValue {
     OP(Box<dyn Extension>),
+    PSEUDO(Box<dyn Pseudo>),
     DIRECTIVE(Box<dyn Directive>),
-    SECTION(AssemblySection),
+    SECTION(AssemblySectionName),
     LABEL(String),
 }
 
 #[derive(Clone, Debug)]
 pub enum ArgValue {
+    BYTE(u8),
     NUMBER(i32),
     REGISTER(Register),
-    OFFSET(usize),
+    OFFSET(usize, i32),
     LABEL(String),
+    LITERAL(String),
     USE(String),
+    USEHI(String),
+    USELO(String),
 }
 
 #[derive(Debug)]
@@ -273,6 +252,29 @@ pub struct AssemblyInstruction {
     pub key: KeyValue,
     pub args: Vec<i32>,
 }
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum AssemblySectionName {
+    TEXT,
+    DATA,
+    BSS,
+    CUSTOM(String)
+}
+
+#[derive(Debug)]
+pub struct AssemblySection {
+    pub addr: usize,
+    pub name: AssemblySectionName,
+    pub instructions: Vec<AssemblyInstruction>
+}
+
+#[derive(Debug)]
+pub struct AssemblyData {
+    pub addr: usize,
+    pub name: AssemblySectionName,
+    pub data: Vec<u32>
+}
+
 
 
 
@@ -325,11 +327,13 @@ pub trait Pseudo: std::fmt::Debug {
 
 /**
 A directive was thought to be a sequence of tokens which can be turned into a sequence of
-raw bytes
+raw bytes (4-byte aligned)
+
+The length of the resulting vector is expected to be a multiple of 4 (to ensure 4bytes alignment)
 */
 
 pub trait Directive: std::fmt::Debug {
-    fn translate(&self, args: Vec<ArgValue>) -> Vec<u8> ;
+    fn translate(&self, args: &Vec<ArgValue>) -> Vec<u8> ;
 }
 
 
@@ -607,6 +611,7 @@ impl Pseudo for PseudoInstruction {
                 let arg1 = args.get(0).unwrap();
                 let arg2 = args.get(1).unwrap();
 
+                // TODO: remove the use of a number as the second argument
                 if let (ArgValue::REGISTER(_), ArgValue::NUMBER(n)) = (arg1, arg2) {
                     let mut args: Vec<ArgValue> = Vec::new();
                     let upper20bits: i32 = (n >> 12) & 0b11111_11111_11111_11111;
@@ -630,6 +635,20 @@ impl Pseudo for PseudoInstruction {
                         v.push((Box::new(RV32I::ADDI), args.drain(..).collect()));
                     }
                 }
+                else if let (ArgValue::REGISTER(_), ArgValue::USE(s)) = (arg1, arg2) {
+                    let mut args: Vec<ArgValue> = Vec::new();
+                    let upper20bits = ArgValue::USEHI(s.to_string());
+                    let lower12bits = ArgValue::USELO(s.to_string());
+                    //We can't know if HI is 0 or not, therefore we can't optimize
+                    args.push(arg1.clone());
+                    args.push(upper20bits);
+                    v.push((Box::new(RV32I::AUIPC), args.drain(..).collect()));
+                    args.clear();
+                    args.push(arg1.clone());
+                    args.push(arg1.clone());
+                    args.push(lower12bits);
+                    v.push((Box::new(RV32I::ADDI), args.drain(..).collect()));
+                }
             }
         }
         v
@@ -647,21 +666,22 @@ pub enum DirectiveInstruction {
     HALF,
     BYTE,
     SKIP,
-    ASCII
+    ASCII,
+    GLOBL,
 }
 
 impl Directive for DirectiveInstruction {
-    fn translate(&self, args: Vec<ArgValue>) -> Vec<u8>  {
+    fn translate(&self, args: &Vec<ArgValue>) -> Vec<u8>  {
         let mut v = Vec::new();
         match self {
             DirectiveInstruction::WORD => {
                 let arg = &args[0];
                 match arg {
                     ArgValue::NUMBER(n) => {
-                        v.push((n & (0b1111_1111 << 0)).try_into().unwrap());
-                        v.push((n & (0b1111_1111 << 8)).try_into().unwrap());
-                        v.push((n & (0b1111_1111 << 16)).try_into().unwrap());
-                        v.push((n & (0b1111_1111 << 24)).try_into().unwrap());
+                        v.push(((n & 0b00000000_00000000_00000000_11111111) >> 0).try_into().unwrap());
+                        v.push(((n & 0b00000000_00000000_11111111_00000000) >> 8).try_into().unwrap());
+                        v.push(((n & 0b00000000_11111111_00000000_00000000) >> 16).try_into().unwrap());
+                        v.push(((n & 0b11111111_00000000_00000000_00000000u32 as i32) >> 24).try_into().unwrap());
                     },
                     _ => panic!(),
                 }
@@ -671,12 +691,22 @@ impl Directive for DirectiveInstruction {
                 match arg {
                     ArgValue::NUMBER(n) => {
                         let capacity: usize = (*n).try_into().unwrap();
-                        v.reserve(capacity);
+                        v.reserve(capacity + capacity % 4);
                     },
                     _ => panic!(),
                 }
             },
             DirectiveInstruction::ASCII => {
+                let arg = &args[0];
+                match arg {
+                    ArgValue::LITERAL(s) => {
+                        let lits: Vec<u8> = s.bytes().collect();
+                        v.extend(lits);
+                    },
+                    _ => panic!(),
+                }
+            },
+            DirectiveInstruction::GLOBL => {
             },
             DirectiveInstruction::HALF => {
             },

@@ -42,7 +42,15 @@ pub trait TokenClassifier {
     fn is_custom(&self, token: &str) -> bool ;
     fn is_label(&self, token: &str) -> bool ;
     fn is_number(&self, token: &str) -> bool {
-        token.parse::<i32>().is_ok()
+        let is_decimal = token.parse::<i32>().is_ok();
+        let is_hex = if token.len() > 2 {
+            let without_pref = &token[2..];
+            i32::from_str_radix(without_pref, 16).is_ok()
+        }
+        else {
+            false
+        };
+        is_decimal || is_hex
     }
     fn is_string(&self, token: &str) -> bool {
         token.starts_with('"') && token.ends_with('"')
@@ -61,45 +69,56 @@ pub trait TokenClassifier {
 
     fn classify(&self, token: &str) -> TokenClass {
         if self.is_symbol(token) {
+            // println!("symbol!");
             return TokenClass::SYMBOL;
         }
 
         if self.is_register(token) {
+            // println!("register!");
             return TokenClass::REGISTER;
         }
 
         if self.is_opcode(token) {
+            // println!("opcode!");
             return TokenClass::OPCODE;
         }
 
         if self.is_directive(token) {
+            // println!("directive!");
             return TokenClass::DIRECTIVE;
         }
 
         if self.is_section(token) {
+            // println!("section!");
             return TokenClass::SECTION;
         }
 
         if self.is_custom(token) {
+            // println!("custom!");
             return TokenClass::CUSTOM;
         }
 
         if self.is_label(token) {
+            // println!("label!");
             return TokenClass::LABEL;
         }
 
         if self.is_number(token) {
+            // println!("number!");
             return TokenClass::NUMBER;
         }
 
         if self.is_string(token) {
+            // println!("string!");
             return TokenClass::STRING;
         }
 
         if self.is_identifier(token) {
+            // println!("identifier!");
             return TokenClass::IDENTIFIER;
         }
 
+        // println!("Ingore!");
         TokenClass::IGNORE
     }
 
@@ -146,6 +165,7 @@ fn parse<T>(lexer: & impl TokenClassifier<Token = T>, tokens: Vec<String>) -> Ve
     let mut lexemes = Vec::new();
 
     for token in tokens {
+        // println!("Lexer is parsing {}...", token);
         if let Some(lex) = lexer.str_to_token(&token) {
             lexemes.push(lex);
         }
@@ -222,9 +242,9 @@ pub enum Token {
     REG(Register),
     NAME(String),
     STR(String),
-    SECTION(String),
     LABEL(String),
     NUMBER(i32),
+    SECTION,
     PLUS,
     MINUS,
     LPAR,

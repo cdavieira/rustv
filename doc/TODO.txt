@@ -4,6 +4,18 @@ Focus
 * Symbolic label resolution
 * Parse riscv32 elf files, decode instructions and execute them in a Virtual Context
 * Fix the binary encoding of some instruction formats
+* Organize bitwise operations in utils.rs module
+* Use relative addresses for offsets instead of absolute ones
+* Create tests to check memory alignment after Parser runs
+
+* Create and test a interface to allow writing the MVP assembly file and reading the same thing
+> Take a look at how things are parsed by the riscv32-*as assembler in alt/asm/
+
+* labels need to belong to a section. The symbol table will therefore change.
+
+* throw errors on lexical and syntax mistakes
+
+* entender o que o auipc faz
 
 
 

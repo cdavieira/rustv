@@ -138,7 +138,7 @@ impl Machine for SimpleMachine {
 
     fn words(&self) -> Vec<u32> {
         self.bytes()
-            .chunks(4)
+            .chunks_exact(4)
             .map(|chunk| {
                 let b3: u32 = chunk[0].into();
                 let b2: u32 = chunk[1].into();

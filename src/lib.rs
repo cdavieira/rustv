@@ -8,10 +8,12 @@ pub mod memory;
 pub mod cpu;
 pub mod machine;
 pub mod elf;
+pub mod utils;
 
 #[cfg(test)]
 mod tests {
     mod gas {
+        use crate::spec::AssemblySectionName;
         use crate::tokenizer::Tokenizer;
         use crate::lexer::Lexer;
         use crate::parser::Parser;
@@ -247,8 +249,12 @@ mod tests {
             let assembler = syntax::gas::Assembler;
             let tokens = tokenizer.get_tokens(code);
             let lexemes = lexer.parse(tokens);
-            let stats = parser.parse(lexemes);
-            assembler.to_words(stats)
+            let mut parser_output = parser.parse(lexemes);
+            let text = parser_output.get_sections().into_iter().find(|stat| match stat.name {
+                AssemblySectionName::TEXT => true,
+                _ => false
+            }).unwrap();
+            assembler.to_words(text).data
         }
 
         fn encode_single_instruction(code: &str) -> u32 {
@@ -335,9 +341,9 @@ mod tests {
         #[test]
         fn encode_exit() {
             let code = "
-                li a7, 93 # Linux syscall: exit
-                li a0, 0  # return code 0
-                ecall     # make the syscall
+                li a7, 93 // Linux syscall: exit
+                li a0, 0  // return code 0
+                ecall     // make the syscall
             ";
             let expected: Vec<u32> = vec![0x05d00893, 0x00000513, 0x00000073];
             let res = encode_instructions(code);

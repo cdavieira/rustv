@@ -1,9 +1,30 @@
 pub mod gas {
     use crate::assembler::{self};
     use crate::tokenizer::CommonClassifier;
-    use crate::lexer::{self, ToDirective, ToExtension, ToPseudo, ToRegister, TokenClassifier};
-    use crate::parser::{self};
-    use crate::spec::{self, Directive, DirectiveInstruction, Extension, Pseudo, PseudoInstruction, Register, RV32I };
+    use crate::lexer::{
+        self,
+        ToDirective,
+        ToExtension,
+        ToPseudo,
+        ToRegister,
+        TokenClassifier
+    };
+    use crate::parser::{self, ParserOutput};
+    use crate::spec::{
+        self,
+        ArgValue,
+        AssemblyData,
+        AssemblySection,
+        AssemblySectionName,
+        Directive,
+        DirectiveInstruction,
+        Extension,
+        KeyValue,
+        Pseudo,
+        PseudoInstruction,
+        Register,
+        RV32I
+    };
 
 
     /* Tokenizer */
@@ -24,7 +45,7 @@ pub mod gas {
         }
 
         fn is_identifier(&self, ch: char) -> bool {
-            ch.is_ascii_alphanumeric() || ch == '.' || ch == ':'
+            ch.is_ascii_alphanumeric() || ch == '.' || ch == ':' || ch == '_'
         }
 
         fn handle_comment(&self, it: &mut impl Iterator<Item = char>) -> Option<char> {
@@ -126,7 +147,9 @@ pub mod gas {
     impl ToDirective for Lexer {
         fn to_directive(&self, token: &str) -> Option<Box<dyn Directive>>  {
             match token {
-                ".word" => Some(Box::new(DirectiveInstruction::WORD)),
+                ".globl" => Some(Box::new(DirectiveInstruction::GLOBL)),
+                ".word"  => Some(Box::new(DirectiveInstruction::WORD)),
+                ".ascii" => Some(Box::new(DirectiveInstruction::ASCII)),
                 _ => None
             }
         }
@@ -197,11 +220,14 @@ pub mod gas {
         fn is_identifier(&self, token: &str) -> bool {
             let mut chs = token.chars();
             let f: char = chs.nth(0).unwrap_or(' ');
-            f.is_ascii_alphabetic() && chs.all(|ch| ch.is_ascii_alphanumeric())
+            let first_ch_check = f.is_ascii_alphabetic() || matches!(f, '_' | '.');
+            let remaining_string_check = chs.all(|ch| ch.is_ascii_alphanumeric());
+            first_ch_check && remaining_string_check
         }
 
         fn is_section(&self, token: &str) -> bool {
-            token.starts_with('.')
+            // token.starts_with('.')
+            token == ".section"
         }
 
         fn is_directive(&self, token: &str) -> bool {
@@ -217,10 +243,22 @@ pub mod gas {
         }
 
         fn str_to_number(&self, token: &str) -> Option<Self::Token> {
-            let Ok(n) = token.parse::<i32>() else {
-                return None;
-            };
-            Some(lexer::Token::NUMBER(n))
+            if let Ok(n) = token.parse::<i32>() {
+                return Some(lexer::Token::NUMBER(n));
+            }
+            let prefix    = &token[..2];
+            let no_prefix = &token[2..];
+            match prefix {
+                "0x" => {
+                    if let Ok(hex) = i32::from_str_radix(no_prefix, 16) {
+                        Some(lexer::Token::NUMBER(hex))
+                    }
+                    else {
+                        None
+                    }
+                },
+                _ => None
+            }
         }
 
         fn str_to_string(&self, token: &str) -> Option<Self::Token> {
@@ -251,8 +289,9 @@ pub mod gas {
             Some(lexer::Token::NAME(token.to_string()))
         }
 
-        fn str_to_section(&self, token: &str) -> Option<Self::Token> {
-            Some(lexer::Token::SECTION(token[1..].to_string()))
+        fn str_to_section(&self, _: &str) -> Option<Self::Token> {
+            // Some(lexer::Token::SECTION(token[1..].to_string()))
+            Some(lexer::Token::SECTION)
         }
 
         fn str_to_directive(&self, token: &str) -> Option<Self::Token> {
@@ -293,9 +332,9 @@ pub mod gas {
 
     impl parser::Parser for Parser {
         type Token = lexer::Token;
-        type Statement = spec::AssemblyInstruction;
+        type Output = ParserOutput;
 
-        fn parse(&self, tokens: Vec<Self::Token>) -> Vec<Self::Statement>  {
+        fn parse(&self, tokens: Vec<Self::Token>) -> Self::Output {
             parser::parse(tokens)
         }
     }
@@ -307,10 +346,10 @@ pub mod gas {
     pub struct Assembler;
 
     impl assembler::Assembler for Assembler {
-        type Instruction = spec::AssemblyInstruction;
+        type Input = spec::AssemblySection;
 
-        fn to_words(&self, instructions: Vec<Self::Instruction>) -> Vec<u32>  {
-            assembler::to_u32(instructions)
+        fn to_words(&self, instruction: Self::Input) -> AssemblyData {
+            assembler::to_u32(instruction)
         }
     }
 
