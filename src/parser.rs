@@ -575,8 +575,8 @@ pub fn parse(tokens: Vec<lexer::Token>) -> ParserOutput {
     let (metadata, no_directives) = expand_directives(no_pseudos);
 
     let sparsed_blocks = group_sections(no_directives);
-    let grouped_blocks = merge_sections(sparsed_blocks);
-    let blocks = gen_section_address(grouped_blocks);
+    let merged_blocks = merge_sections(sparsed_blocks);
+    let blocks = gen_section_address(merged_blocks);
     let blocks = gen_line_address(blocks);
     // println!("{:?}", blocks);
 

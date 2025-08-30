@@ -13,6 +13,8 @@ pub mod utils;
 #[cfg(test)]
 mod tests {
     mod gas {
+        use crate::cpu::{SimpleCPU, CPU};
+        use crate::memory::{BasicMemory, Memory};
         use crate::spec::AssemblySectionName;
         use crate::tokenizer::Tokenizer;
         use crate::lexer::Lexer;
@@ -362,12 +364,78 @@ mod tests {
 
 
 
-        // TODO: Test CPU
+        // CPU
+        #[test]
+        fn cpu_rw_all_gpr() {
+            let mut cpu = SimpleCPU::new();
+            let default_value = 1000u32;
+            for reg in 0..32 {
+                cpu.write(reg, default_value);
+            }
+            for reg in 0..32 {
+                assert_eq!(cpu.read(reg), default_value);
+            }
+        }
+
+        #[test]
+        fn cpu_rw_pc() {
+            let mut cpu = SimpleCPU::new();
+            let default_value = 1000usize;
+            cpu.write_pc(default_value);
+            assert_eq!(cpu.read_pc(), default_value);
+        }
 
 
 
-        // TODO: Test Memory
+        // Memory
+        #[test]
+        fn memory_rw_byte() {
+            let mut memory = BasicMemory::new();
+            let values = [1u8, 2u8, 3u8, 4u8];
+            memory.reserve_bytes(values.len());
+            for (idx, value) in values.into_iter().enumerate() {
+                memory.write_byte(idx, value);
+                assert_eq!(memory.read_byte(idx), value, "Error reading byte at {}", idx);
+            }
+        }
 
+        #[test]
+        fn memory_rw_word() {
+            let mut memory = BasicMemory::new();
+            let values = [1u32, 2u32, 3u32, 4u32];
+            memory.reserve_words(values.len());
+            for (idx, value) in values.into_iter().enumerate() {
+                memory.write_word(idx*4, value);
+                assert_eq!(memory.read_word(idx*4), value, "Error reading byte at {}", idx);
+            }
+        }
+
+        #[test]
+        fn memory_rw_bytes_from_word() {
+            let mut memory = BasicMemory::new();
+            let word = u32::from_be_bytes([0, 0, 0, 100u8]); //100
+            memory.reserve_words(1);
+            memory.write_word(0, word);
+            assert_eq!(memory.read_word(0), word);
+        }
+
+        #[test]
+        fn memory_rw_bytes() {
+            let mut memory = BasicMemory::new();
+            let values = [1u8, 2u8, 3u8, 4u8];
+            memory.reserve_bytes(values.len());
+            memory.write_bytes(0, &values.to_vec());
+            assert_eq!(memory.bytes(), values);
+        }
+
+        #[test]
+        fn memory_rw_words() {
+            let mut memory = BasicMemory::new();
+            let values = [1u32, 2u32, 3u32, 4u32];
+            memory.reserve_words(values.len());
+            memory.write_words(0, &values.to_vec());
+            assert_eq!(memory.words(), values);
+        }
 
 
         // Test Machine
@@ -379,7 +447,6 @@ mod tests {
             let words = encode_instructions(code);
             let mut m = machine::SimpleMachine::new(&words);
             m.decode();
-            m.info();
             assert!(m.assert_reg(17u32, 93));
         }
 

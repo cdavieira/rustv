@@ -8,8 +8,6 @@ pub trait Machine {
 
     fn decode(&mut self) -> () ;
 
-    fn info(&self) -> () ;
-
     fn assert_reg(&self, reg: u32, val: u32) -> bool ;
 }
 
@@ -24,15 +22,63 @@ pub struct SimpleMachine {
     mem: BasicMemory
 }
 
+// TODO: move all these methods to the Machine interface
+
+// TODO: create test to all these methods
+
 impl SimpleMachine {
     pub fn new(data: &Vec<u32>) -> Self {
         let mut mem = BasicMemory::new();
-        mem.alloc(data.len() * 4);
-        mem.load_words(data);
+        mem.reserve_words(data.len());
+        mem.write_words(0, data);
         SimpleMachine {
             cpu: SimpleCPU::new(),
             mem,
         }
+    }
+
+    // This
+    pub fn read_registers(&self) -> Vec<u32> {
+        self.cpu.read_all()
+    }
+
+    // This
+    pub fn write_registers(&mut self, gprs: Vec<u32>, pc: usize) -> () {
+        self.cpu.write_all(gprs, pc);
+    }
+
+    pub fn read_memory_byte(&self, addr: usize) -> u8 {
+        self.mem.read_byte(addr)
+    }
+
+    // This
+    pub fn write_memory_byte(&mut self, addr: usize, value: u8) -> () {
+        self.mem.write_byte(addr, value)
+    }
+
+    // This
+    pub fn read_memory_bytes(&self, addr: usize, count: usize) -> Vec<u8> {
+        self.mem.read_bytes(addr, count)
+    }
+
+    pub fn write_memory_bytes(&mut self, addr: usize, values: &Vec<u8>) -> () {
+        self.mem.write_bytes(addr, values)
+    }
+
+    pub fn read_memory_word(&self, addr: usize) -> u32 {
+        self.mem.read_word(addr)
+    }
+
+    pub fn write_memory_word(&mut self, addr: usize, value: u32) -> () {
+        self.mem.write_word(addr, value);
+    }
+
+    pub fn read_memory_words(&self, addr: usize, count: usize) -> Vec<u32> {
+        self.mem.read_words(addr, count)
+    }
+
+    pub fn write_memory_words(&mut self, addr: usize, values: &Vec<u32>) -> () {
+        self.mem.write_words(addr, values);
     }
 }
 
@@ -47,17 +93,13 @@ impl Machine for SimpleMachine {
         self.cpu.write_pc(pc + off);
     }
 
-    fn info(&self) -> () {
-        self.cpu.info();
-    }
-
     fn load(&mut self, instrs: &Vec<u32>) -> () {
-        self.mem.load_words(instrs);
+        self.mem.write_words(0, instrs);
     }
 
     fn decode(&mut self) -> ()  {
         let word = self.fetch();
-        self.jump(1usize);
+        self.jump(4usize);
 
         match InstructionFormat::decode(word) {
             InstructionFormat::R { funct7, rs2, rs1, funct3, rd, opcode: _ } => {
@@ -137,16 +179,7 @@ impl Machine for SimpleMachine {
     }
 
     fn words(&self) -> Vec<u32> {
-        self.bytes()
-            .chunks_exact(4)
-            .map(|chunk| {
-                let b3: u32 = chunk[0].into();
-                let b2: u32 = chunk[1].into();
-                let b1: u32 = chunk[2].into();
-                let b0: u32 = chunk[3].into();
-                (b3 << 24) | (b2 << 16) | (b1 << 8) | b0
-            })
-            .collect()
+        self.mem.words()
     }
 
     fn assert_reg(&self, reg: u32, val: u32) -> bool {

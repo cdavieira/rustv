@@ -4,6 +4,9 @@ pub trait CPU {
 
     fn write_pc(&mut self, v: usize) ;
     fn read_pc(&self) -> usize ;
+
+    fn read_all(&self) -> Vec<u32>;
+    fn write_all(&mut self, gps: Vec<u32>, pc: usize) -> () ;
 }
 
 
@@ -21,14 +24,9 @@ impl SimpleCPU {
             pc: 0,
         }
     }
-
-    pub fn info(&self) -> () {
-        println!("PC: {}", self.pc);
-        for (i, v) in self.registers.iter().enumerate() {
-            println!("Reg {}: {}", i, v);
-        }
-    }
 }
+
+// TODO: create test to all these methods
 
 impl CPU for SimpleCPU {
     fn write(&mut self, reg: usize, v: u32) {
@@ -47,5 +45,21 @@ impl CPU for SimpleCPU {
 
     fn read_pc(&self) -> usize {
         self.pc
+    }
+
+    fn read_all(&self) -> Vec<u32> {
+        println!("Reading all registers");
+        let mut state = self.registers.clone();
+        let pc: u32 = self.pc.try_into().expect("read_all failed converting pc to u32");
+        state.push(pc);
+        state
+    }
+
+    fn write_all(&mut self, gps: Vec<u32>, pc: usize) -> () {
+        println!("Writing all registers");
+        for (idx, reg) in gps.into_iter().enumerate() {
+            self.registers[idx] = reg;
+        }
+        self.pc = pc;
     }
 }
