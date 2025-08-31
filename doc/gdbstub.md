@@ -104,12 +104,13 @@ inspecting the memory in gdb or by logging this information in the stub's
 stdout)
 
 To inspect the stub's remote environment:
-* info registers: take a look at registers
-* info files: take a look at where each section is
+* `info registers`: take a look at registers
+* `info files`: take a look at where each section is
+* `x/1xw 0x10074`: inspect 1 hex word (4 bytes) at address 0x10074
 
-after this, you should be able to run commands such as s/c in gdb
+after this, you should be able to run commands such as `s`/`c` in gdb
 
-when entering s, gdb will:
+when entering `s`, gdb will:
 * trigger the 'add_sw_breakpoint' in the stub
 * invoke the 'resume' handler in the stub (because it has just resumed its
 execution)
@@ -117,7 +118,7 @@ execution)
 probably takes care of performing modifications related to instructions?) and
 the stub is expected to return only after the operations have been completed or
 a problem has occurred (therefore, the 'gdb instance' is waiting the 'gdbstub'
-until something happens (a stop reason))
+for it (gdbstub) to stop (a stop reason))
 
 ---
 

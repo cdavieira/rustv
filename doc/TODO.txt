@@ -17,6 +17,24 @@ Focus
 
 * entender o que o auipc faz
 
+* fazer entidade Loader
+* fazer entidade Executor
+* fazer alterações propostas no Parser e Assembler (jogar resolução de simbolos para assembler)
+* deprecar arquivo elf.rs
+* possivelmente splitar o arquivo spec.rs em varios
+* criar o arquivo elfreader.rs
+
+* in memory (assembly into &[u32], debugger, read elf and execute)
+> what changes -> how the loading to memory is done
+-> debugger is more like a Executor than a Loader
+
+-> gather all TODOS from: utils.rs, memory.rs, machine.rs, spec.rs and lib.rs
+
+-> logger?
+
+* FIX how memory gets interpreted (in terms of endianness) by the debugger!
+> maybe the machine will need this additional information (memory endianness
+> and target endianness)
 
 
 Code

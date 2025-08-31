@@ -1,34 +1,65 @@
+// TODO: create test to all these methods
+
 pub trait Machine {
+    // Core
+    fn new(data: &Vec<u32>) -> Self ;
+    fn load(&mut self, instrs: &Vec<u32>) -> () ;
     fn fetch(&self) -> u32 ;
     fn jump(&mut self, off: usize) -> () ;
+    fn decode(&mut self) -> () ;
 
-    fn load(&mut self, instrs: &Vec<u32>) -> () ;
+
+    // CPU
+    // This
+    fn read_registers(&self) -> Vec<u32> ;
+    // This
+    fn write_registers(&mut self, gprs: Vec<u32>, pc: usize) -> () ;
+
+
+    // Memory
+    fn bytes_count(&self) -> usize ;
+    fn words_count(&self) -> usize ;
+
     fn bytes(&self) -> Vec<u8> ;
     fn words(&self) -> Vec<u32> ;
 
-    fn decode(&mut self) -> () ;
+    fn read_memory_byte(&self, addr: usize) -> u8;
+    // This
+    fn write_memory_byte(&mut self, addr: usize, value: u8) -> () ;
 
+    // This
+    fn read_memory_bytes(&self, addr: usize, count: usize) -> Vec<u8> ;
+    fn write_memory_bytes(&mut self, addr: usize, values: &Vec<u8>) -> () ;
+
+    fn read_memory_word(&self, addr: usize) -> u32 ;
+    fn write_memory_word(&mut self, addr: usize, value: u32) -> () ;
+
+    fn read_memory_words(&self, addr: usize, count: usize) -> Vec<u32> ;
+    fn write_memory_words(&mut self, addr: usize, values: &Vec<u32>) -> () ;
+
+
+    // Debug
     fn assert_reg(&self, reg: u32, val: u32) -> bool ;
+    fn assert_memory_words(&self, addr: usize, word_count: usize, values: &Vec<u32>) -> bool ;
+    fn assert_memory_bytes(&self, addr: usize, byte_count: usize, values: &Vec<u8>) -> bool ;
 }
+
+
 
 /* Possible implementation */
 
 use crate::cpu::{SimpleCPU, CPU};
-use crate::memory::{BasicMemory, Memory};
+use crate::memory::{SimpleMemory, Memory};
 use crate::spec::InstructionFormat;
 
 pub struct SimpleMachine {
     cpu: SimpleCPU,
-    mem: BasicMemory
+    mem: SimpleMemory
 }
 
-// TODO: move all these methods to the Machine interface
-
-// TODO: create test to all these methods
-
-impl SimpleMachine {
-    pub fn new(data: &Vec<u32>) -> Self {
-        let mut mem = BasicMemory::new();
+impl Machine for SimpleMachine {
+    fn new(data: &Vec<u32>) -> Self {
+        let mut mem = SimpleMemory::new();
         mem.reserve_words(data.len());
         mem.write_words(0, data);
         SimpleMachine {
@@ -37,52 +68,10 @@ impl SimpleMachine {
         }
     }
 
-    // This
-    pub fn read_registers(&self) -> Vec<u32> {
-        self.cpu.read_all()
+    fn load(&mut self, instrs: &Vec<u32>) -> () {
+        self.mem.write_words(0, instrs);
     }
 
-    // This
-    pub fn write_registers(&mut self, gprs: Vec<u32>, pc: usize) -> () {
-        self.cpu.write_all(gprs, pc);
-    }
-
-    pub fn read_memory_byte(&self, addr: usize) -> u8 {
-        self.mem.read_byte(addr)
-    }
-
-    // This
-    pub fn write_memory_byte(&mut self, addr: usize, value: u8) -> () {
-        self.mem.write_byte(addr, value)
-    }
-
-    // This
-    pub fn read_memory_bytes(&self, addr: usize, count: usize) -> Vec<u8> {
-        self.mem.read_bytes(addr, count)
-    }
-
-    pub fn write_memory_bytes(&mut self, addr: usize, values: &Vec<u8>) -> () {
-        self.mem.write_bytes(addr, values)
-    }
-
-    pub fn read_memory_word(&self, addr: usize) -> u32 {
-        self.mem.read_word(addr)
-    }
-
-    pub fn write_memory_word(&mut self, addr: usize, value: u32) -> () {
-        self.mem.write_word(addr, value);
-    }
-
-    pub fn read_memory_words(&self, addr: usize, count: usize) -> Vec<u32> {
-        self.mem.read_words(addr, count)
-    }
-
-    pub fn write_memory_words(&mut self, addr: usize, values: &Vec<u32>) -> () {
-        self.mem.write_words(addr, values);
-    }
-}
-
-impl Machine for SimpleMachine {
     fn fetch(&self) -> u32  {
         let pc = self.cpu.read_pc();
         self.mem.read_word(pc)
@@ -91,10 +80,6 @@ impl Machine for SimpleMachine {
     fn jump(&mut self, off: usize) -> () {
         let pc = self.cpu.read_pc();
         self.cpu.write_pc(pc + off);
-    }
-
-    fn load(&mut self, instrs: &Vec<u32>) -> () {
-        self.mem.write_words(0, instrs);
     }
 
     fn decode(&mut self) -> ()  {
@@ -174,6 +159,22 @@ impl Machine for SimpleMachine {
         }
     }
 
+    fn read_registers(&self) -> Vec<u32> {
+        self.cpu.read_all()
+    }
+
+    fn write_registers(&mut self, gprs: Vec<u32>, pc: usize) -> () {
+        self.cpu.write_all(gprs, pc);
+    }
+
+    fn bytes_count(&self) -> usize {
+        self.mem.bytes_count()
+    }
+
+    fn words_count(&self) -> usize {
+        self.mem.words_count()
+    }
+
     fn bytes(&self) -> Vec<u8>  {
         self.mem.bytes()
     }
@@ -182,7 +183,59 @@ impl Machine for SimpleMachine {
         self.mem.words()
     }
 
+    fn read_memory_byte(&self, addr: usize) -> u8 {
+        self.mem.read_byte(addr)
+    }
+
+    fn write_memory_byte(&mut self, addr: usize, value: u8) -> () {
+        self.mem.write_byte(addr, value)
+    }
+
+    fn read_memory_bytes(&self, addr: usize, count: usize) -> Vec<u8> {
+        self.mem.read_bytes(addr, count)
+    }
+
+    fn write_memory_bytes(&mut self, addr: usize, values: &Vec<u8>) -> () {
+        self.mem.write_bytes(addr, values)
+    }
+
+    fn read_memory_word(&self, addr: usize) -> u32 {
+        self.mem.read_word(addr)
+    }
+
+    fn write_memory_word(&mut self, addr: usize, value: u32) -> () {
+        self.mem.write_word(addr, value);
+    }
+
+    fn read_memory_words(&self, addr: usize, count: usize) -> Vec<u32> {
+        self.mem.read_words(addr, count)
+    }
+
+    fn write_memory_words(&mut self, addr: usize, values: &Vec<u32>) -> () {
+        self.mem.write_words(addr, values);
+    }
+
     fn assert_reg(&self, reg: u32, val: u32) -> bool {
         self.cpu.read(reg as usize) == val
+    }
+
+    fn assert_memory_words(&self, addr: usize, word_count: usize, values: &Vec<u32>) -> bool {
+        let words = self.mem.read_words(addr, word_count);
+        for (word_in_memory, word_test) in words.iter().zip(values) {
+            if word_in_memory != word_test {
+                return false;
+            }
+        }
+        true
+    }
+
+    fn assert_memory_bytes(&self, addr: usize, byte_count: usize, values: &Vec<u8>) -> bool {
+        let bytes = self.mem.read_bytes(addr, byte_count);
+        for (byte_in_memory, byte_test) in bytes.iter().zip(values) {
+            if byte_in_memory != byte_test {
+                return false;
+            }
+        }
+        true
     }
 }

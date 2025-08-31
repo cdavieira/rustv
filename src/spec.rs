@@ -51,7 +51,7 @@ impl Register {
 
 // Available Instruction Binary Formats (as in the ISA)
 
-use crate::utils::{uword_mask_lower_3bits, uword_mask_lower_5bits, uword_mask_lower_7bits, uword_mask_lower_12bits, uword_mask_lower_20bits};
+use crate::utils::rsh_mask_bits;
 
 #[derive(Debug, Copy, Clone)]
 pub enum InstructionFormat {
@@ -68,44 +68,44 @@ impl InstructionFormat {
         let opcode = word & 0b11_11111;
         match opcode {
             0b0110011 => { //R
-                let rd      = (word >> 7)  & 0b11111;
-                let funct3  = (word >> 12) & 0b111;
-                let rs1     = (word >> 15) & 0b11111;
-                let rs2     = (word >> 20) & 0b11111;
-                let funct7  = (word >> 25) & 0b11_11111;
+                let rd      = rsh_mask_bits(&word, 7, 5);
+                let funct3  = rsh_mask_bits(&word, 12, 3);
+                let rs1     = rsh_mask_bits(&word, 15, 5);
+                let rs2     = rsh_mask_bits(&word, 20, 5);
+                let funct7  = rsh_mask_bits(&word, 25, 7);
                 InstructionFormat::R { funct7, rs2, rs1, funct3, rd, opcode }
             },
             0b0110111 | 0b0010111 => { //U
-                let rd   = (word >> 7)  & 0b11111;
-                let imm  = (word >> 12) & 0b11111_11111_11111_11111;
+                let rd   = rsh_mask_bits(&word, 7, 5);
+                let imm  = rsh_mask_bits(&word, 12, 20);
                 InstructionFormat::U { imm, rd, opcode }
             },
             0b1101111 => { //J
-                let rd   = (word >> 7)  & 0b11111;
-                let imm  = (word >> 12) & 0b11111_11111_11111_11111;
+                let rd   = rsh_mask_bits(&word, 7, 5);
+                let imm  = rsh_mask_bits(&word, 12, 20);
                 InstructionFormat::J { imm, rd, opcode }
             },
             0b1100111 | 0b1110011 | 0b0010011 | 0b0000011 => { //I
-                let rd      = (word >> 7)  & 0b11111;
-                let funct3  = (word >> 12) & 0b111;
-                let rs1     = (word >> 15) & 0b11111;
-                let imm     = (word >> 20) & 0b1111_1111_1111;
+                let rd      = rsh_mask_bits(&word, 7, 5);
+                let funct3  = rsh_mask_bits(&word, 12, 3);
+                let rs1     = rsh_mask_bits(&word, 15, 5);
+                let imm     = rsh_mask_bits(&word, 20, 12);
                 InstructionFormat::I { imm, rs1, funct3, rd, opcode }
             },
             0b0100011  => { //S
-                let imm2    = (word >> 7)  & 0b11111;
-                let funct3  = (word >> 12) & 0b111;
-                let rs1     = (word >> 15) & 0b11111;
-                let rs2     = (word >> 20) & 0b11111;
-                let imm1    = (word >> 25) & 0b11111;
+                let imm2    = rsh_mask_bits(&word, 7, 5);
+                let funct3  = rsh_mask_bits(&word, 12, 3);
+                let rs1     = rsh_mask_bits(&word, 15, 5);
+                let rs2     = rsh_mask_bits(&word, 20, 5);
+                let imm1    = rsh_mask_bits(&word, 25, 5);
                 InstructionFormat::S { imm1, rs2, rs1, funct3, imm2, opcode }
             },
             0b1100011 => { //B
-                let imm2    = (word >> 7)  & 0b11111;
-                let funct3  = (word >> 12) & 0b111;
-                let rs1     = (word >> 15) & 0b11111;
-                let rs2     = (word >> 20) & 0b11111;
-                let imm1    = (word >> 25) & 0b11_11111;
+                let imm2    = rsh_mask_bits(&word, 7, 5);
+                let funct3  = rsh_mask_bits(&word, 12, 3);
+                let rs1     = rsh_mask_bits(&word, 15, 5);
+                let rs2     = rsh_mask_bits(&word, 20, 5);
+                let imm1    = rsh_mask_bits(&word, 25, 7);
                 InstructionFormat::B { imm1, rs2, rs1, funct3, imm2, opcode }
             }
             _ => {
@@ -117,50 +117,50 @@ impl InstructionFormat {
     pub fn encode(&self) -> u32 {
         match self {
             InstructionFormat::R { funct7, rs2, rs1, funct3, rd, opcode } => {
-                let opcode = uword_mask_lower_7bits(opcode);
-                let rd     = uword_mask_lower_5bits(rd);
-                let rs1    = uword_mask_lower_5bits(rs1);
-                let rs2    = uword_mask_lower_5bits(rs2);
-                let funct3 = uword_mask_lower_3bits(funct3);
-                let funct7 = uword_mask_lower_7bits(funct7);
+                let opcode = rsh_mask_bits(opcode, 0, 7);
+                let rd     = rsh_mask_bits(rd, 0, 5);
+                let rs1    = rsh_mask_bits(rs1, 0, 5);
+                let rs2    = rsh_mask_bits(rs2, 0, 5);
+                let funct3 = rsh_mask_bits(funct3, 0, 3);
+                let funct7 = rsh_mask_bits(funct7, 0, 7);
                 (funct7 << 25) | (rs2 << 20) | (rs1 << 15) | (funct3 << 12) | (rd << 7) | opcode
             },
             InstructionFormat::I { imm, rs1, funct3, rd, opcode } => {
-                let opcode = uword_mask_lower_7bits(opcode);
-                let rd     = uword_mask_lower_5bits(rd);
-                let rs1    = uword_mask_lower_5bits(rs1);
-                let funct3 = uword_mask_lower_3bits(funct3);
-                let imm    = uword_mask_lower_12bits(imm);
+                let opcode = rsh_mask_bits(opcode, 0, 7);
+                let rd     = rsh_mask_bits(rd, 0, 5);
+                let rs1    = rsh_mask_bits(rs1, 0, 5);
+                let funct3 = rsh_mask_bits(funct3, 0, 3);
+                let imm    = rsh_mask_bits(imm, 0, 12);
                 (imm << 20) | (rs1 << 15) | (funct3 << 12) | (rd << 7) | opcode
             },
             InstructionFormat::S { imm1, rs2, rs1, funct3, imm2, opcode } => {
-                let opcode = uword_mask_lower_7bits(opcode);
-                let rs1    = uword_mask_lower_5bits(rs1);
-                let rs2    = uword_mask_lower_5bits(rs2);
-                let funct3 = uword_mask_lower_3bits(funct3);
-                let imm2   = uword_mask_lower_5bits(imm2);
-                let imm1   = uword_mask_lower_7bits(imm1);
+                let opcode = rsh_mask_bits(opcode, 0, 7);
+                let rs1    = rsh_mask_bits(rs1, 0, 5);
+                let rs2    = rsh_mask_bits(rs2, 0, 5);
+                let funct3 = rsh_mask_bits(funct3, 0, 3);
+                let imm2   = rsh_mask_bits(imm2, 0, 5);
+                let imm1   = rsh_mask_bits(imm1, 0, 7);
                 (imm1 << 25) | (rs2 << 20) | (rs1 << 15) | (funct3 << 12) | (imm2 << 7) | opcode
             },
             InstructionFormat::B { imm1, rs2, rs1, funct3, imm2, opcode } => {
-                let opcode = uword_mask_lower_7bits(opcode);
-                let rs1    = uword_mask_lower_5bits(rs1);
-                let rs2    = uword_mask_lower_5bits(rs2);
-                let funct3 = uword_mask_lower_3bits(funct3);
-                let imm2   = uword_mask_lower_5bits(imm2);
-                let imm1   = uword_mask_lower_7bits(imm1);
+                let opcode = rsh_mask_bits(opcode, 0, 7);
+                let rs1    = rsh_mask_bits(rs1, 0, 5);
+                let rs2    = rsh_mask_bits(rs2, 0, 5);
+                let funct3 = rsh_mask_bits(funct3, 0, 3);
+                let imm2   = rsh_mask_bits(imm2, 0, 5);
+                let imm1   = rsh_mask_bits(imm1, 0, 7);
                 (imm1 << 25) | (rs2 << 20) | (rs1 << 15) | (funct3 << 12) | (imm2 << 7) | opcode
             },
             InstructionFormat::U { imm, rd, opcode } => {
-                let opcode = uword_mask_lower_7bits(opcode);
-                let rd     = uword_mask_lower_5bits(rd);
-                let imm    = uword_mask_lower_20bits(imm);
+                let opcode = rsh_mask_bits(opcode, 0, 7);
+                let rd     = rsh_mask_bits(rd, 0, 5);
+                let imm    = rsh_mask_bits(imm, 0, 20);
                 (imm << 12) | (rd << 7) | opcode
             },
             InstructionFormat::J { imm, rd, opcode } => {
-                let opcode = uword_mask_lower_7bits(opcode);
-                let rd     = uword_mask_lower_5bits(rd);
-                let imm    = uword_mask_lower_20bits(imm);
+                let opcode = rsh_mask_bits(opcode, 0, 7);
+                let rd     = rsh_mask_bits(rd, 0, 5);
+                let imm    = rsh_mask_bits(imm, 0, 20);
                 (imm << 12) | (rd << 7) | opcode
             },
         }
@@ -487,6 +487,7 @@ The Instruction is going to use this result as-is later to assemble a 32-bit ins
 Yet to be done:
     1. handle sign extension
     2. turn this into a struct/enum named 'InstructionImmediate'/'Immediate' ?
+    3. use 'rsh_mask_bits' instead of raw bit manipulation?
 */
 
 fn imm_to_i(imm: i32) -> u32 {

@@ -3,6 +3,9 @@ use std::io;
 // TODO: add a way to deal with the endianness
 
 pub trait Memory {
+    fn bytes_count(&self) -> usize;
+    fn words_count(&self) -> usize;
+
     fn reserve_bytes(&mut self, sz: usize) ;
     fn reserve_words(&mut self, sz: usize) ;
     fn clear(&mut self) ;
@@ -42,19 +45,27 @@ use std::fs;
 
 use object::ReadRef;
 
-pub struct BasicMemory {
+pub struct SimpleMemory {
     data: Vec<u8>,
 }
 
-impl BasicMemory {
+impl SimpleMemory {
     pub fn new() -> Self {
-        BasicMemory { data: Vec::new() }
+        SimpleMemory { data: Vec::new() }
     }
 }
 
 // TODO: create test to all these methods
 
-impl Memory for BasicMemory {
+impl Memory for SimpleMemory {
+    fn bytes_count(&self) -> usize {
+        self.data.len()
+    }
+
+    fn words_count(&self) -> usize {
+        self.data.len() >> 2
+    }
+
     fn reserve_bytes(&mut self, sz: usize)  {
         self.data.resize(sz, 0);
     }
@@ -96,6 +107,7 @@ impl Memory for BasicMemory {
     fn write_byte(&mut self, idx: usize, v: u8) -> () {
         println!("Writing value {} at {} address", v, idx);
         // *self.data.get_mut(idx).unwrap() = v;
+        println!("{}", self.data.len());
         if idx < self.data.len() {
             self.data[idx] = v;
         }
@@ -126,12 +138,14 @@ impl Memory for BasicMemory {
 
     fn write_word(&mut self, idx: usize, v: u32) -> () {
         let bytes = u32::to_be_bytes(v);
+        // println!("{:x} written in mem as {:?}", v, bytes);
         *self.data.get_mut(idx).unwrap() = bytes[0];
         *self.data.get_mut(idx+1).unwrap() = bytes[1];
         *self.data.get_mut(idx+2).unwrap() = bytes[2];
         *self.data.get_mut(idx+3).unwrap() = bytes[3];
     }
 
+    // TODO: end_addr could overflow, handle this
     fn read_bytes(&self, start_addr: usize, count: usize) -> Vec<u8> {
         println!("Reading {} bytes starting at address {}", count, start_addr);
         let end_addr = start_addr + count;
