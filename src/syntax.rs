@@ -12,14 +12,10 @@ pub mod gas {
     use crate::parser::{self, ParserOutput};
     use crate::spec::{
         self,
-        ArgValue,
         AssemblyData,
-        AssemblySection,
-        AssemblySectionName,
         Directive,
         DirectiveInstruction,
         Extension,
-        KeyValue,
         Pseudo,
         PseudoInstruction,
         Register,

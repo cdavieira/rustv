@@ -65,7 +65,7 @@ pub enum InstructionFormat {
 
 impl InstructionFormat {
     pub fn decode(word: u32) -> Self {
-        let opcode = word & 0b11_11111;
+        let opcode = rsh_mask_bits(&word, 0, 7);
         match opcode {
             0b0110011 => { //R
                 let rd      = rsh_mask_bits(&word, 7, 5);

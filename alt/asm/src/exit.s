@@ -2,5 +2,5 @@
 
 _start:
     li a7, 93
-    li a0, 0
+    li a0, 1000
     ecall

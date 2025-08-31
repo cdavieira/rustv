@@ -35,6 +35,7 @@ use gdbstub::stub::SingleThreadStopReason;
 
 
 use crate::machine::Machine;
+use crate::utils::DataEndianness;
 
 
 
@@ -62,7 +63,7 @@ impl<'a, T: Machine> SimpleGdbStub<'a, T> {
         for _ in 0..memsize {
             mem.push(0);
         }
-        let target = SimpleTarget::new(mem);
+        let target = SimpleTarget::from_words(mem);
         let (stream, addr) = wait_for_gdb_connection(port)?;
         let stub = GdbStub::new(stream);
         Ok(
@@ -133,6 +134,9 @@ impl<'a, T: Machine> SimpleGdbStub<'a, T> {
 fn wait_for_gdb_connection(port: u16) -> io::Result<(TcpStream, SocketAddr)> {
     let sockaddr = format!("localhost:{}", port);
     let sock = TcpListener::bind(sockaddr)?;
+    println!("Waiting for GDB to connect to target at localhost:{}", port);
+    println!("Enter gdb and type:");
+    println!("  gdb> target remote :{}", port);
     sock.accept()
 }
 
@@ -147,8 +151,8 @@ struct SimpleTarget<T: Machine> {
 }
 
 impl<T: Machine> SimpleTarget<T> {
-    pub fn new(mem: Vec<u32>) -> Self {
-        let machine = <T>::new(&mem);
+    pub fn from_words(mem: Vec<u32>) -> Self {
+        let machine = <T>::from_words(&mem, DataEndianness::LE);
         SimpleTarget { machine }
     }
 }
@@ -210,7 +214,7 @@ impl<T: Machine> SingleThreadBase for SimpleTarget<T> {
         if start_addr < mem_size {
             let free_mem_size = mem_size - start_addr;
             let bytes_size = if data_size < free_mem_size { data_size } else { free_mem_size };
-            let bytes = self.machine.read_memory_bytes(start_addr, bytes_size);
+            let bytes = self.machine.read_memory_bytes(start_addr, bytes_size, 1);
             for (idx, byte) in bytes.into_iter().enumerate() {
                 data[idx] = byte;
             }
@@ -244,7 +248,7 @@ impl<T: Machine> SingleThreadBase for SimpleTarget<T> {
 impl<T: Machine> SingleThreadResume for SimpleTarget<T> {
     fn resume(
         &mut self,
-        signal: Option<Signal>,
+        _signal: Option<Signal>,
     ) -> Result<(), Self::Error> {
         Ok(())
     }
@@ -263,7 +267,7 @@ impl<T: Machine> SingleThreadResume for SimpleTarget<T> {
 impl<T: Machine> SingleThreadSingleStep for SimpleTarget<T> {
     fn step(
         &mut self,
-        signal: Option<Signal>,
+        _signal: Option<Signal>,
     ) -> Result<(), Self::Error>
     {
         self.machine.decode();
@@ -327,7 +331,7 @@ impl<T: Machine> run_blocking::BlockingEventLoop for SimpleGdbBlockingEventLoop<
     // reports a stop reason, or if new data was sent over the connection.
     fn wait_for_stop_reason(
         target: &mut SimpleTarget<T>,
-        conn: &mut Self::Connection,
+        _conn: &mut Self::Connection,
     ) -> Result<
         run_blocking::Event<SingleThreadStopReason<u32>>,
         run_blocking::WaitForStopReasonError<
@@ -364,7 +368,7 @@ impl<T: Machine> run_blocking::BlockingEventLoop for SimpleGdbBlockingEventLoop<
 
     // Invoked when the GDB client sends a Ctrl-C interrupt.
     fn on_interrupt(
-        target: &mut SimpleTarget<T>,
+        _target: &mut SimpleTarget<T>,
     ) -> Result<Option<SingleThreadStopReason<u32>>, <SimpleTarget<T> as Target>::Error> {
         // notify the target that a ctrl-c interrupt has occurred.
         // target.stop_in_response_to_ctrl_c_interrupt()?;
@@ -418,13 +422,19 @@ fn custom_handle_machine_state<'a, T: Machine>(
             println!("Running");
 
             // block waiting for the target to return a stop reason
-            let event = <SimpleGdbBlockingEventLoop<T> as
-                run_blocking::BlockingEventLoop>::wait_for_stop_reason(target,
-                    gdb_stub_state_machine_inner.borrow_conn());
+            let event = <SimpleGdbBlockingEventLoop<T> as run_blocking::BlockingEventLoop>::
+                wait_for_stop_reason(target, gdb_stub_state_machine_inner.borrow_conn());
+
             match event {
                 Ok(BlockingEventLoopEvent::TargetStopped(stop_reason)) => {
                     println!("Running - Got target stopped");
-                    let _ = gdb_stub_state_machine_inner.report_stop(target, stop_reason);
+                    let gdb_res = gdb_stub_state_machine_inner.report_stop(target, stop_reason);
+                    if let Ok(gdb_ok) = gdb_res {
+                        Ok(gdb_ok)
+                    }
+                    else {
+                        Err(())
+                    }
                 }
 
                 Ok(BlockingEventLoopEvent::IncomingData(byte)) => {
@@ -435,25 +445,32 @@ fn custom_handle_machine_state<'a, T: Machine>(
                     else {
                         println!("Running - Got byte {}", byte);
                     }
-                    let _ = gdb_stub_state_machine_inner.incoming_data(target, byte);
+                    let gdb_res = gdb_stub_state_machine_inner.incoming_data(target, byte);
+                    if let Ok(gdb_ok) = gdb_res {
+                        Ok(gdb_ok)
+                    }
+                    else {
+                        Err(())
+                    }
                 }
 
-                Err(WaitForStopReasonError::Target(e)) => {
+                Err(WaitForStopReasonError::Target(_e)) => {
                     println!("Running - Got target");
                     // break Err(InternalError::TargetError(e).into());
+                    Err(())
                 }
-                Err(WaitForStopReasonError::Connection(e)) => {
+                Err(WaitForStopReasonError::Connection(_e)) => {
                     println!("Running - Got connection");
                     // break Err(InternalError::conn_read(e).into());
+                    Err(())
                 }
             }
-            Err(())
         },
-        gdbstub::stub::state_machine::GdbStubStateMachine::CtrlCInterrupt(gdb_stub_state_machine_inner) => {
+        gdbstub::stub::state_machine::GdbStubStateMachine::CtrlCInterrupt(_gdb_stub_state_machine_inner) => {
             println!("Ctrlc");
             Err(())
         },
-        gdbstub::stub::state_machine::GdbStubStateMachine::Disconnected(gdb_stub_state_machine_inner) => {
+        gdbstub::stub::state_machine::GdbStubStateMachine::Disconnected(_gdb_stub_state_machine_inner) => {
             println!("Disconnected");
             Err(())
         }

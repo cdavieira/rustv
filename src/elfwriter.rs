@@ -15,6 +15,42 @@ use crate::spec::AssemblySectionName;
 
 
 
+
+
+
+// Result
+
+pub enum ElfWriterError {
+    Build(write::Error),
+    IO(std::io::Error),
+}
+
+impl std::fmt::Display for ElfWriterError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "elf writter failed!")
+    }
+}
+
+impl From<write::Error> for ElfWriterError {
+    fn from(value: write::Error) -> Self {
+        ElfWriterError::Build(value)
+    }
+}
+
+impl From<std::io::Error> for ElfWriterError {
+    fn from(value: std::io::Error) -> Self {
+        ElfWriterError::IO(value)
+    }
+}
+
+pub type Result<T> = std::result::Result<T, ElfWriterError>;
+
+
+
+
+
+// ElfWriter
+
 pub struct ElfWriter<'a> {
     obj: write::Object<'a>,
     text: SectionId,
@@ -106,8 +142,9 @@ impl<'a> ElfWriter<'a> {
         });
     }
 
-    pub fn save(&self, filename: &str) -> () {
-        let elf_bytes = self.obj.write().expect("Failed loading bytes for save");
-        std::fs::write(filename, elf_bytes).expect("Failed saving elf file");
+    pub fn save(&self, filename: &str) -> Result<()> {
+        let elf_bytes = self.obj.write()?;
+        std::fs::write(filename, elf_bytes)?;
+        Ok(())
     }
 }

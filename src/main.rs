@@ -10,32 +10,28 @@ pub mod machine;
 pub mod utils;
 pub mod elfwriter;
 pub mod debugger;
+pub mod elfreader;
 
-use gdbstub::stub::state_machine::GdbStubStateMachine;
-
-use crate::assembler::Assembler;
-use crate::lexer::Lexer;
-use crate::spec::AssemblySection;
-use crate::tokenizer::Tokenizer;
-use crate::parser::Parser;
-use crate::machine::SimpleMachine;
-use crate::utils::encode_to_elf;
+use crate::machine::Machine;
 
 fn main() {
-    // let memsize = 1024*1024;
-    // let port = 9999u16;
-    // if let Ok(riscv32_dbg) = debugger::SimpleGdbStub::<SimpleMachine>::new(memsize, port) {
-    //     riscv32_dbg.custom_gdb_event_loop_thread();
-    // }
-    // else {
-    //     println!("Failed when instantiating riscv32 debugger");
-    // }
+    let memsize = 1024*1024;
+    let port = 9999u16;
+    let riscv32_dbg = utils::wait_for_new_debugger_at_port(memsize, port);
+    riscv32_dbg.custom_gdb_event_loop_thread();
 
-    let code = "
-        li a7, 93
-        li a0, 1000
-        ecall
-    ";
-    let outputfile = "main2.o";
-    encode_to_elf(code, outputfile);
+    // let code = "
+    //     li a7, 93
+    //     li a0, 1000
+    //     ecall
+    // ";
+    // let outputfile = "main2.o";
+    // utils::encode_to_elf(code, outputfile);
+
+    // let inputfile = "main2.o";
+    // let mut m = utils::new_machine_from_elf_textsection(inputfile);
+    // m.decode();
+    // m.decode();
+    // assert!(m.assert_reg(17u32, 93));
+    // assert!(m.assert_reg(10u32, 1000));
 }

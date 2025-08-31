@@ -9,17 +9,20 @@ pub mod cpu;
 pub mod machine;
 pub mod utils;
 pub mod elfwriter;
+pub mod elfreader;
+pub mod debugger;
 
 #[cfg(test)]
 mod tests {
     mod gas {
         use crate::cpu::{SimpleCPU, CPU};
+        use crate::utils::DataEndianness;
         use crate::memory::{SimpleMemory, Memory};
         use crate::spec::AssemblySectionName;
         use crate::tokenizer::Tokenizer;
-        use crate::lexer::Lexer;
-        use crate::parser::Parser;
-        use crate::assembler::Assembler;
+        // use crate::lexer::Lexer;
+        // use crate::parser::Parser;
+        // use crate::assembler::Assembler;
         use crate::utils::{
             encode_to_words,
             encode_to_word,
@@ -326,13 +329,25 @@ mod tests {
         }
 
         #[test]
-        fn encode_exit() {
+        fn encode_exit_0() {
             let code = "
                 li a7, 93 // Linux syscall: exit
                 li a0, 0  // return code 0
                 ecall     // make the syscall
             ";
             let expected: Vec<u32> = vec![0x05d00893, 0x00000513, 0x00000073];
+            let res = encode_to_words(code);
+            assert_eq!(res, expected, "LEFT: {res:?}, RIGHT: {expected:?}");
+        }
+
+        #[test]
+        fn encode_exit_1000() {
+            let code = "
+                li a7, 93    // Linux syscall: exit
+                li a0, 1000  // return code 1000
+                ecall        // make the syscall
+            ";
+            let expected: Vec<u32> = vec![0x05d00893, 0x3e800513, 0x00000073];
             let res = encode_to_words(code);
             assert_eq!(res, expected, "LEFT: {res:?}, RIGHT: {expected:?}");
         }
@@ -381,7 +396,7 @@ mod tests {
         // Memory
         #[test]
         fn memory_rw_byte() {
-            let mut memory = SimpleMemory::new();
+            let mut memory = SimpleMemory::new(DataEndianness::BE);
             let values = [1u8, 2u8, 3u8, 4u8];
             memory.reserve_bytes(values.len());
             for (idx, value) in values.into_iter().enumerate() {
@@ -392,27 +407,27 @@ mod tests {
 
         #[test]
         fn memory_rw_word() {
-            let mut memory = SimpleMemory::new();
+            let mut memory = SimpleMemory::new(DataEndianness::LE);
             let values = [1u32, 2u32, 3u32, 4u32];
             memory.reserve_words(values.len());
             for (idx, value) in values.into_iter().enumerate() {
                 memory.write_word(idx*4, value);
-                assert_eq!(memory.read_word(idx*4), value, "Error reading byte at {}", idx);
+                assert_eq!(memory.read_word(idx*4, DataEndianness::LE), value, "Error reading byte at {}", idx);
             }
         }
 
         #[test]
         fn memory_rw_bytes_from_word() {
-            let mut memory = SimpleMemory::new();
+            let mut memory = SimpleMemory::new(DataEndianness::BE);
             let word = u32::from_be_bytes([0, 0, 0, 100u8]); //100
             memory.reserve_words(1);
             memory.write_word(0, word);
-            assert_eq!(memory.read_word(0), word);
+            assert_eq!(memory.read_word(0, DataEndianness::BE), word);
         }
 
         #[test]
         fn memory_rw_bytes() {
-            let mut memory = SimpleMemory::new();
+            let mut memory = SimpleMemory::new(DataEndianness::BE);
             let values = [1u8, 2u8, 3u8, 4u8];
             memory.reserve_bytes(values.len());
             memory.write_bytes(0, &values.to_vec());
@@ -421,7 +436,7 @@ mod tests {
 
         #[test]
         fn memory_rw_words() {
-            let mut memory = SimpleMemory::new();
+            let mut memory = SimpleMemory::new(DataEndianness::BE);
             let values = [1u32, 2u32, 3u32, 4u32];
             memory.reserve_words(values.len());
             memory.write_words(0, &values.to_vec());
@@ -440,7 +455,7 @@ mod tests {
                 li a7, 93    // Linux syscall: exit
             ";
             let words = encode_to_words(code);
-            let mut m = machine::SimpleMachine::new(&words);
+            let mut m = machine::SimpleMachine::from_words(&words, DataEndianness::BE);
             m.decode();
             assert!(m.assert_reg(17u32, 93));
         }
@@ -452,7 +467,7 @@ mod tests {
                 li a0, 1000  // return code 0
             ";
             let words = encode_to_words(code);
-            let mut m = machine::SimpleMachine::new(&words);
+            let mut m = machine::SimpleMachine::from_words(&words, DataEndianness::BE);
             m.decode();
             m.decode();
             assert!(m.assert_reg(17u32, 93));
@@ -463,45 +478,96 @@ mod tests {
 
         // Test elf R/W
         #[test]
-        #[ignore]
         fn elf_write() {
-            // let filename = "test_elf_write.o";
-            // let code = "
-            //     li a7, 93 // Linux syscall: exit
-            //     li a0, 0  // return code 0
-            //     ecall     // make the syscall
-            // ";
-            // let words = encode_to_words(code);
-            // let m = machine::SimpleMachine::new(&words);
-            //
-            // let write_res = elf::write_elf(filename, m.bytes());
-            // let rem_res = std::fs::remove_file(filename);
-            //
-            // assert!(write_res.is_ok() && rem_res.is_ok());
+            //li a7, 93
+            //li a0, 0
+            //ecall
+            let words: Vec<u32> = vec![0x05d00893, 0x00000513, 0x00000073];
+            let bytes = utils::words_to_bytes_le(&words);
+            let filename = "test_elf_write.o";
+
+            let mut writer = elfwriter::ElfWriter::new();
+            writer.set_start_address(0);
+            writer.set_section_data(AssemblySectionName::TEXT, bytes, 4);
+            let write_res = writer.save(filename);
+            let rem_res = std::fs::remove_file(filename);
+
+            assert!(write_res.is_ok() && rem_res.is_ok());
         }
 
         #[test]
-        #[ignore]
         fn elf_read() {
-            // let filename = "test_elf_read.o";
-            // let code = "
-            //     li a7, 93 // Linux syscall: exit
-            //     li a0, 0  // return code 0
-            //     ecall     // make the syscall
-            // ";
-            // let words_written = encode_to_words(code);
-            // let m = machine::SimpleMachine::new(&words_written);
-            //
-            // let write_res = elf::write_elf(filename, m.bytes());
-            // let read_res = elf::read_elf(filename);
-            // let rem_res = std::fs::remove_file(filename);
-            //
-            // assert!(write_res.is_ok());
-            // assert!(read_res.is_ok());
-            // assert!(rem_res.is_ok());
-            // if let Ok(words_read) = read_res {
-            //     assert_eq!(words_written, words_read);
-            // }
+            //li a7, 93
+            //li a0, 0
+            //ecall
+            let words: Vec<u32> = vec![0x05d00893, 0x00000513, 0x00000073];
+            let bytes = utils::words_to_bytes_le(&words);
+            let filename = "test_elf_read.o";
+
+            // Writing temporary ELF file
+            let mut writer = elfwriter::ElfWriter::new();
+            writer.set_start_address(0);
+            writer.set_section_data(AssemblySectionName::TEXT, bytes, 4);
+            let write_res = writer.save(filename);
+            assert!(write_res.is_ok());
+
+            // Reading temporary ELF file data
+            let read_io_res = std::fs::read(filename);
+            if let Ok(data) = read_io_res {
+                let read_res = elfreader::ElfReader::new(&data, DataEndianness::LE);
+                assert!(read_res.is_ok());
+            }
+            else {
+                assert!(read_io_res.is_ok());
+            }
+
+            // Removing temporary ELF file from fs
+            let rem_res = std::fs::remove_file(filename);
+            assert!(rem_res.is_ok());
+        }
+
+        #[test]
+        fn elf_rw() {
+            let filename = "test_elf_write.o";
+            let code = "
+                li a7, 93 // Linux syscall: exit
+                li a0, 0  // return code 0
+                ecall     // make the syscall
+            ";
+
+            // Encoding instructions to binary
+            let words_written = encode_to_words(code);
+            let bytes_written = utils::words_to_bytes_le(&words_written);
+
+            // Saving the binary code in the ELF format
+            let mut writer = elfwriter::ElfWriter::new();
+            writer.set_start_address(0);
+            writer.set_section_data(AssemblySectionName::TEXT, bytes_written.clone(), 4);
+            let write_res = writer.save(filename);
+            assert!(write_res.is_ok());
+
+            // Reading/Parsing the ELF file
+            let read_io_res = std::fs::read(filename);
+            assert!(read_io_res.is_ok());
+
+            // Removing the ELF file from the file system
+            let rem_res = std::fs::remove_file(filename);
+            assert!(rem_res.is_ok());
+
+            // Comparing what was written to what was read
+            if let Ok(data) = read_io_res {
+                let read_res = elfreader::ElfReader::new(&data, DataEndianness::LE);
+                if let Ok(reader) = read_res {
+                    let bytes_read = reader.text_section();
+                    assert_eq!(bytes_read, &bytes_written);
+                }
+                else {
+                    assert!(read_res.is_ok());
+                }
+            }
+            else {
+                assert!(read_io_res.is_ok());
+            }
         }
     }
 }

@@ -10,21 +10,24 @@ LD := riscv32-unknown-linux-gnu-ld
 LDFLAGS :=
 
 HEXDUMP := hexdump
+HEXDUMPFLAGS := -C
 
 READELF := riscv32-unknown-linux-gnu-readelf
+READELFFLAGS := -a
 
 OBJDUMP := riscv32-unknown-linux-gnu-objdump
+OBJDUMPFLAGS := -d
 
 all:
 	$(AS) $(ASFLAGS) $(src) -o $(obj)
-	@echo "$(HEXDUMP) $(obj)" > $(log)
-	$(HEXDUMP) $(obj)     >> $(log)
+	@echo "$(HEXDUMP) $(HEXDUMPFLAGS) $(obj)" > $(log)
+	$(HEXDUMP) $(obj) $(HEXDUMPFLAGS) >> $(log)
 	@echo -e "\n\n\n"     >> $(log)
-	@echo "$(READELF) -a $(obj)" >> $(log)
-	$(READELF) -a $(obj)  >> $(log)
+	@echo "$(READELF) $(READELFFLAGS) $(obj)" >> $(log)
+	$(READELF) $(READELFFLAGS) $(obj) >> $(log)
 	@echo -e "\n\n\n"     >> $(log)
-	@echo "$(OBJDUMP) -d $(obj)" >> $(log)
-	$(OBJDUMP) -d $(obj)  >> $(log)
+	@echo "$(OBJDUMP) $(OBJDUMPFLAGS) $(obj)" >> $(log)
+	$(OBJDUMP) $(OBJDUMPFLAGS) $(obj) >> $(log)
 	@echo -e "\n\n\n"     >> $(log)
 	$(LD) $(LDFLAGS) $(obj) -o $(elf)
 

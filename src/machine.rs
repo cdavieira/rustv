@@ -1,12 +1,19 @@
 // TODO: create test to all these methods
 
 pub trait Machine {
+    // Init
+    fn from_bytes_size(byte_count: usize, machine_endian: DataEndianness) -> Self ;
+    fn from_words_size(word_count: usize, machine_endian: DataEndianness) -> Self ;
+    fn from_bytes(data: &Vec<u8>, machine_endian: DataEndianness) -> Self ;
+    fn from_words(data: &Vec<u32>, machine_endian: DataEndianness) -> Self ;
+
+
     // Core
-    fn new(data: &Vec<u32>) -> Self ;
     fn load(&mut self, instrs: &Vec<u32>) -> () ;
     fn fetch(&self) -> u32 ;
     fn jump(&mut self, off: usize) -> () ;
     fn decode(&mut self) -> () ;
+    fn endianness(&self) -> DataEndianness ;
 
 
     // CPU
@@ -28,7 +35,7 @@ pub trait Machine {
     fn write_memory_byte(&mut self, addr: usize, value: u8) -> () ;
 
     // This
-    fn read_memory_bytes(&self, addr: usize, count: usize) -> Vec<u8> ;
+    fn read_memory_bytes(&self, addr: usize, count: usize, alignment: usize) -> Vec<u8> ;
     fn write_memory_bytes(&mut self, addr: usize, values: &Vec<u8>) -> () ;
 
     fn read_memory_word(&self, addr: usize) -> u32 ;
@@ -41,7 +48,7 @@ pub trait Machine {
     // Debug
     fn assert_reg(&self, reg: u32, val: u32) -> bool ;
     fn assert_memory_words(&self, addr: usize, word_count: usize, values: &Vec<u32>) -> bool ;
-    fn assert_memory_bytes(&self, addr: usize, byte_count: usize, values: &Vec<u8>) -> bool ;
+    fn assert_memory_bytes(&self, addr: usize, byte_count: usize, values: &Vec<u8>, alignment: usize) -> bool ;
 }
 
 
@@ -51,20 +58,60 @@ pub trait Machine {
 use crate::cpu::{SimpleCPU, CPU};
 use crate::memory::{SimpleMemory, Memory};
 use crate::spec::InstructionFormat;
+use crate::utils::DataEndianness;
 
 pub struct SimpleMachine {
     cpu: SimpleCPU,
-    mem: SimpleMemory
+    mem: SimpleMemory,
+    endian: DataEndianness,
 }
 
 impl Machine for SimpleMachine {
-    fn new(data: &Vec<u32>) -> Self {
-        let mut mem = SimpleMemory::new();
+    fn from_bytes_size(byte_count: usize, machine_endian: DataEndianness) -> Self  {
+        let mut mem = SimpleMemory::new(DataEndianness::BE);
+        mem.reserve_bytes(byte_count);
+        for i in 0..byte_count {
+            mem.write_byte(i, 0);
+        }
+        SimpleMachine {
+            cpu: SimpleCPU::new(),
+            mem,
+            endian: machine_endian
+        }
+    }
+
+    fn from_words_size(word_count: usize, machine_endian: DataEndianness) -> Self  {
+        let mut mem = SimpleMemory::new(DataEndianness::BE);
+        mem.reserve_words(word_count);
+        for i in 0..word_count {
+            mem.write_word(i, 0);
+        }
+        SimpleMachine {
+            cpu: SimpleCPU::new(),
+            mem,
+            endian: machine_endian
+        }
+    }
+
+    fn from_bytes(data: &Vec<u8>, machine_endian: DataEndianness) -> Self  {
+        let mut mem = SimpleMemory::new(DataEndianness::BE);
+        mem.reserve_bytes(data.len());
+        mem.write_bytes(0, data);
+        SimpleMachine {
+            cpu: SimpleCPU::new(),
+            mem,
+            endian: machine_endian
+        }
+    }
+
+    fn from_words(data: &Vec<u32>, machine_endian: DataEndianness) -> Self {
+        let mut mem = SimpleMemory::new(DataEndianness::BE);
         mem.reserve_words(data.len());
         mem.write_words(0, data);
         SimpleMachine {
             cpu: SimpleCPU::new(),
             mem,
+            endian: machine_endian
         }
     }
 
@@ -74,7 +121,7 @@ impl Machine for SimpleMachine {
 
     fn fetch(&self) -> u32  {
         let pc = self.cpu.read_pc();
-        self.mem.read_word(pc)
+        self.mem.read_word(pc, self.endian)
     }
 
     fn jump(&mut self, off: usize) -> () {
@@ -159,6 +206,10 @@ impl Machine for SimpleMachine {
         }
     }
 
+    fn endianness(&self) -> DataEndianness  {
+        self.endian
+    }
+
     fn read_registers(&self) -> Vec<u32> {
         self.cpu.read_all()
     }
@@ -191,8 +242,8 @@ impl Machine for SimpleMachine {
         self.mem.write_byte(addr, value)
     }
 
-    fn read_memory_bytes(&self, addr: usize, count: usize) -> Vec<u8> {
-        self.mem.read_bytes(addr, count)
+    fn read_memory_bytes(&self, addr: usize, count: usize, alignment: usize) -> Vec<u8> {
+        self.mem.read_bytes(addr, count, self.endian, alignment)
     }
 
     fn write_memory_bytes(&mut self, addr: usize, values: &Vec<u8>) -> () {
@@ -200,7 +251,7 @@ impl Machine for SimpleMachine {
     }
 
     fn read_memory_word(&self, addr: usize) -> u32 {
-        self.mem.read_word(addr)
+        self.mem.read_word(addr, self.endian)
     }
 
     fn write_memory_word(&mut self, addr: usize, value: u32) -> () {
@@ -208,7 +259,7 @@ impl Machine for SimpleMachine {
     }
 
     fn read_memory_words(&self, addr: usize, count: usize) -> Vec<u32> {
-        self.mem.read_words(addr, count)
+        self.mem.read_words(addr, count, self.endian)
     }
 
     fn write_memory_words(&mut self, addr: usize, values: &Vec<u32>) -> () {
@@ -220,7 +271,7 @@ impl Machine for SimpleMachine {
     }
 
     fn assert_memory_words(&self, addr: usize, word_count: usize, values: &Vec<u32>) -> bool {
-        let words = self.mem.read_words(addr, word_count);
+        let words = self.mem.read_words(addr, word_count, self.endian);
         for (word_in_memory, word_test) in words.iter().zip(values) {
             if word_in_memory != word_test {
                 return false;
@@ -229,8 +280,8 @@ impl Machine for SimpleMachine {
         true
     }
 
-    fn assert_memory_bytes(&self, addr: usize, byte_count: usize, values: &Vec<u8>) -> bool {
-        let bytes = self.mem.read_bytes(addr, byte_count);
+    fn assert_memory_bytes(&self, addr: usize, byte_count: usize, values: &Vec<u8>, alignment: usize) -> bool {
+        let bytes = self.mem.read_bytes(addr, byte_count, self.endian, alignment);
         for (byte_in_memory, byte_test) in bytes.iter().zip(values) {
             if byte_in_memory != byte_test {
                 return false;
