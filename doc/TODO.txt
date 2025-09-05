@@ -48,6 +48,14 @@ elf parse and the differences of how data flows into the memory for each case
 >> give that same data back with the endianness that it understands. This
 >> allows for a complete separation of concerns.
 
+* move dataendianness struct to spec?
+
+* the 'imm_*' family of functions in spec.rs cant use utils::rsh_mask_bits
+  because they operate i32 instead of u32...
+* read notes in parser.rs::parse and start from there
+* pub(crate), pub(self), pub(in path) where needed instead of raw pub
+* split spec in different files and possibly organize 'Assembly Instruction'
+
 
 Code
 * Assess the use of u32, i32, usize, ... in spec.rs and lexer::Token

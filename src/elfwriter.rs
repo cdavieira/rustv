@@ -20,6 +20,7 @@ use crate::spec::AssemblySectionName;
 
 // Result
 
+#[derive(Debug)]
 pub enum ElfWriterError {
     Build(write::Error),
     IO(std::io::Error),

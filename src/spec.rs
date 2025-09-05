@@ -226,24 +226,25 @@ fn get_args(
 
 #[derive(Debug)]
 pub enum KeyValue {
-    OP(Box<dyn Extension>),
-    PSEUDO(Box<dyn Pseudo>),
-    DIRECTIVE(Box<dyn Directive>),
-    SECTION(AssemblySectionName),
-    LABEL(String),
+    Op(Box<dyn Extension>),
+    Pseudo(Box<dyn Pseudo>),
+    AssemblyDirective(Box<dyn Directive>),
+    LinkerDirective(String),
+    Section(AssemblySectionName),
+    Label(String),
 }
 
 #[derive(Clone, Debug)]
 pub enum ArgValue {
-    BYTE(u8),
-    NUMBER(i32),
-    REGISTER(Register),
-    OFFSET(usize, i32),
-    LABEL(String),
-    LITERAL(String),
-    USE(String),
-    USEHI(String),
-    USELO(String),
+    Byte(u8),
+    Number(i32),
+    Register(Register),
+    Offset(usize, i32),
+    Label(String),
+    Literal(String),
+    Use(String),
+    UseHi(String),
+    UseLo(String),
 }
 
 #[derive(Debug)]
@@ -255,14 +256,15 @@ pub struct AssemblyInstruction {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AssemblySectionName {
-    TEXT,
-    DATA,
-    BSS,
-    CUSTOM(String)
+    Metadata,
+    Text,
+    Data,
+    Bss,
+    Custom(String)
 }
 
 #[derive(Debug)]
-pub struct AssemblySection {
+pub struct AssemblyBlock {
     pub addr: usize,
     pub name: AssemblySectionName,
     pub instructions: Vec<AssemblyInstruction>
@@ -273,6 +275,18 @@ pub struct AssemblyData {
     pub addr: usize,
     pub name: AssemblySectionName,
     pub data: Vec<u32>
+}
+
+#[derive(Debug)]
+pub struct SemanticLine {
+    pub(crate) keyword: KeyValue,
+    pub(crate) args: Vec<ArgValue>
+}
+
+#[derive(Debug)]
+pub struct SemanticBlock {
+    pub(crate) name: AssemblySectionName,
+    pub(crate) lines: Vec<SemanticLine>
 }
 
 
@@ -548,7 +562,7 @@ impl Pseudo for PseudoInstruction {
                 let arg1 = args.get(0).unwrap();
                 let arg2 = args.get(1).unwrap();
 
-                if let (ArgValue::REGISTER(_), ArgValue::NUMBER(n)) = (arg1, arg2) {
+                if let (ArgValue::Register(_), ArgValue::Number(n)) = (arg1, arg2) {
                     let mut args: Vec<ArgValue> = Vec::new();
                     let upper20bits: i32 = (n >> 12) & 0b11111_11111_11111_11111;
                     let lower12bits: i32 = n & 0b1111_1111_1111;
@@ -557,21 +571,21 @@ impl Pseudo for PseudoInstruction {
                         //If the immediate fits in a signed 12-bit immediate, then 'li' gets
                         //simplified to a 'addi' op
                         args.push(arg1.clone());
-                        args.push(ArgValue::REGISTER(Register::X0));
-                        args.push(ArgValue::NUMBER(lower12bits));
+                        args.push(ArgValue::Register(Register::X0));
+                        args.push(ArgValue::Number(lower12bits));
                         v.push((Box::new(RV32I::ADDI), args.drain(..).collect()));
                     }
                     else {
                         //Otherwise we have to load the upper 20 bits of the immediate using
                         //'LUI', followed by a 'addi' op
                         args.push(arg1.clone());
-                        args.push(ArgValue::NUMBER(upper20bits));
+                        args.push(ArgValue::Number(upper20bits));
                         v.push((Box::new(RV32I::LUI), args.drain(..).collect()));
 
                         args.clear();
                         args.push(arg1.clone());
                         args.push(arg1.clone());
-                        args.push(ArgValue::NUMBER(lower12bits));
+                        args.push(ArgValue::Number(lower12bits));
                         v.push((Box::new(RV32I::ADDI), args.drain(..).collect()));
                     }
                 }
@@ -582,9 +596,9 @@ impl Pseudo for PseudoInstruction {
             PseudoInstruction::RET => {
                 let mut args = Vec::new();
 
-                args.push(ArgValue::REGISTER(Register::X0));
-                args.push(ArgValue::REGISTER(Register::X1));
-                args.push(ArgValue::NUMBER(0));
+                args.push(ArgValue::Register(Register::X0));
+                args.push(ArgValue::Register(Register::X1));
+                args.push(ArgValue::Number(0));
 
                 v.push((Box::new(RV32I::JALR), args));
             },
@@ -597,7 +611,7 @@ impl Pseudo for PseudoInstruction {
                 let mut args = Vec::new();
                 args.push(arg1);
                 args.push(arg2);
-                args.push(ArgValue::NUMBER(0));
+                args.push(ArgValue::Number(0));
 
                 v.push((Box::new(RV32I::ADDI), args));
             },
@@ -613,33 +627,33 @@ impl Pseudo for PseudoInstruction {
                 let arg2 = args.get(1).unwrap();
 
                 // TODO: remove the use of a number as the second argument
-                if let (ArgValue::REGISTER(_), ArgValue::NUMBER(n)) = (arg1, arg2) {
+                if let (ArgValue::Register(_), ArgValue::Number(n)) = (arg1, arg2) {
                     let mut args: Vec<ArgValue> = Vec::new();
                     let upper20bits: i32 = (n >> 12) & 0b11111_11111_11111_11111;
                     let lower12bits: i32 = n & 0b1111_1111_1111;
 
                     if (*n >= -2048) && (*n <= 2047) {
                         args.push(arg1.clone());
-                        args.push(ArgValue::REGISTER(Register::X0));
-                        args.push(ArgValue::NUMBER(lower12bits));
+                        args.push(ArgValue::Register(Register::X0));
+                        args.push(ArgValue::Number(lower12bits));
                         v.push((Box::new(RV32I::ADDI), args.drain(..).collect()));
                     }
                     else {
                         args.push(arg1.clone());
-                        args.push(ArgValue::NUMBER(upper20bits));
+                        args.push(ArgValue::Number(upper20bits));
                         v.push((Box::new(RV32I::AUIPC), args.drain(..).collect()));
 
                         args.clear();
                         args.push(arg1.clone());
                         args.push(arg1.clone());
-                        args.push(ArgValue::NUMBER(lower12bits));
+                        args.push(ArgValue::Number(lower12bits));
                         v.push((Box::new(RV32I::ADDI), args.drain(..).collect()));
                     }
                 }
-                else if let (ArgValue::REGISTER(_), ArgValue::USE(s)) = (arg1, arg2) {
+                else if let (ArgValue::Register(_), ArgValue::Use(s)) = (arg1, arg2) {
                     let mut args: Vec<ArgValue> = Vec::new();
-                    let upper20bits = ArgValue::USEHI(s.to_string());
-                    let lower12bits = ArgValue::USELO(s.to_string());
+                    let upper20bits = ArgValue::UseHi(s.to_string());
+                    let lower12bits = ArgValue::UseLo(s.to_string());
                     //We can't know if HI is 0 or not, therefore we can't optimize
                     args.push(arg1.clone());
                     args.push(upper20bits);
@@ -659,7 +673,7 @@ impl Pseudo for PseudoInstruction {
 
 
 
-// Directives implementation
+// Assembly Directives implementation
 
 #[derive(Debug)]
 pub enum DirectiveInstruction {
@@ -668,53 +682,35 @@ pub enum DirectiveInstruction {
     BYTE,
     SKIP,
     ASCII,
-    GLOBL,
 }
 
 impl Directive for DirectiveInstruction {
     fn translate(&self, args: &Vec<ArgValue>) -> Vec<u8>  {
-        let mut v = Vec::new();
         match self {
             DirectiveInstruction::WORD => {
-                let arg = &args[0];
-                match arg {
-                    ArgValue::NUMBER(n) => {
-                        v.push(((n & 0b00000000_00000000_00000000_11111111) >> 0).try_into().unwrap());
-                        v.push(((n & 0b00000000_00000000_11111111_00000000) >> 8).try_into().unwrap());
-                        v.push(((n & 0b00000000_11111111_00000000_00000000) >> 16).try_into().unwrap());
-                        v.push(((n & 0b11111111_00000000_00000000_00000000u32 as i32) >> 24).try_into().unwrap());
-                    },
-                    _ => panic!(),
-                }
-            },
-            DirectiveInstruction::SKIP => {
-                let arg = &args[0];
-                match arg {
-                    ArgValue::NUMBER(n) => {
-                        let capacity: usize = (*n).try_into().unwrap();
-                        v.reserve(capacity + capacity % 4);
-                    },
-                    _ => panic!(),
+                match &args[0] {
+                    ArgValue::Number(n) => n.to_le_bytes().to_vec(),
+                    _ => panic!("WORD directive got something other than a number"),
                 }
             },
             DirectiveInstruction::ASCII => {
-                let arg = &args[0];
-                match arg {
-                    ArgValue::LITERAL(s) => {
-                        let lits: Vec<u8> = s.bytes().collect();
-                        v.extend(lits);
-                    },
-                    _ => panic!(),
+                match &args[0] {
+                    ArgValue::Literal(s) => s.bytes().collect(),
+                    _ => panic!("ASCII directive got something other than a literal"),
                 }
             },
-            DirectiveInstruction::GLOBL => {
+            DirectiveInstruction::SKIP => {
+                match &args[0] {
+                    ArgValue::Number(n) => {
+                        let capacity: usize = (*n).try_into().unwrap();
+                        let mut v = Vec::new();
+                        v.reserve(capacity + capacity % 4);
+                        v
+                    },
+                    _ => panic!("SKIP directive got something other than a number"),
+                }
             },
-            DirectiveInstruction::HALF => {
-            },
-            DirectiveInstruction::BYTE => {
-
-            },
+            _ => panic!("Unsupported directive")
         }
-        v
     }
 }

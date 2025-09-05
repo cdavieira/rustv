@@ -137,6 +137,8 @@ fn wait_for_gdb_connection(port: u16) -> io::Result<(TcpStream, SocketAddr)> {
     println!("Waiting for GDB to connect to target at localhost:{}", port);
     println!("Enter gdb and type:");
     println!("  gdb> target remote :{}", port);
+    println!("  gdb> load");
+    println!("  gdb> x/1xw 0x10074");
     sock.accept()
 }
 
@@ -270,7 +272,7 @@ impl<T: Machine> SingleThreadSingleStep for SimpleTarget<T> {
         _signal: Option<Signal>,
     ) -> Result<(), Self::Error>
     {
-        self.machine.decode();
+        // self.machine.decode();
         Ok(())
     }
 }
@@ -291,7 +293,7 @@ impl<T: Machine> SwBreakpoint for SimpleTarget<T> {
         kind: usize,
     ) -> TargetResult<bool, Self>
     {
-        println!("Trying to add a sw breakpoint at {} {}", addr, kind);
+        // println!("Trying to add a sw breakpoint at {} {}", addr, kind);
         Ok(true)
     }
 
@@ -301,8 +303,8 @@ impl<T: Machine> SwBreakpoint for SimpleTarget<T> {
         kind: usize,
     ) -> TargetResult<bool, Self>
     {
-        println!("Trying to rm a sw breakpoint at {} {}", addr, kind);
-        Ok(false)
+        // println!("Trying to rm a sw breakpoint at {} {}", addr, kind);
+        Ok(true)
     }
 }
 
@@ -386,31 +388,31 @@ fn custom_handle_machine_state<'a, T: Machine>(
 {
     match stub_sm {
         gdbstub::stub::state_machine::GdbStubStateMachine::Idle(mut gdb_stub_state_machine_inner) => {
-            println!("Idle");
+            // println!("Idle");
             let read_result = gdb_stub_state_machine_inner.borrow_conn().read();
             match read_result {
                 Ok(byte) => {
                     if byte.is_ascii_graphic() {
                         let ch: char = byte.try_into().unwrap();
-                        println!("Got byte {}", ch);
+                        // println!("Got byte {}", ch);
                     }
                     else {
-                        println!("Got byte {}", byte);
+                        // println!("Got byte {}", byte);
                     }
                     let stub_result = gdb_stub_state_machine_inner.incoming_data(target, byte);
                     match stub_result {
                         Ok(stub_ok) => {
-                            println!("Stub Ok");
+                            // println!("Stub Ok");
                             Ok(stub_ok)
                         },
                         Err(stub_err) => {
-                            println!("Stub Err: {:?}", stub_err);
+                            // println!("Stub Err: {:?}", stub_err);
                             Err(())
                         }
                     }
                 },
                 Err(err) => {
-                    println!("Error in idle {:?}", err);
+                    // println!("Error in idle {:?}", err);
                     Err(())
                 }
             }
@@ -419,7 +421,7 @@ fn custom_handle_machine_state<'a, T: Machine>(
             use run_blocking::Event as BlockingEventLoopEvent;
             use run_blocking::WaitForStopReasonError;
 
-            println!("Running");
+            // println!("Running");
 
             // block waiting for the target to return a stop reason
             let event = <SimpleGdbBlockingEventLoop<T> as run_blocking::BlockingEventLoop>::
@@ -427,7 +429,7 @@ fn custom_handle_machine_state<'a, T: Machine>(
 
             match event {
                 Ok(BlockingEventLoopEvent::TargetStopped(stop_reason)) => {
-                    println!("Running - Got target stopped");
+                    // println!("Running - Got target stopped");
                     let gdb_res = gdb_stub_state_machine_inner.report_stop(target, stop_reason);
                     if let Ok(gdb_ok) = gdb_res {
                         Ok(gdb_ok)
@@ -440,10 +442,10 @@ fn custom_handle_machine_state<'a, T: Machine>(
                 Ok(BlockingEventLoopEvent::IncomingData(byte)) => {
                     if byte.is_ascii_graphic() {
                         let ch: char = byte.try_into().unwrap();
-                        println!("Running - Got byte {}", ch);
+                        // println!("Running - Got byte {}", ch);
                     }
                     else {
-                        println!("Running - Got byte {}", byte);
+                        // println!("Running - Got byte {}", byte);
                     }
                     let gdb_res = gdb_stub_state_machine_inner.incoming_data(target, byte);
                     if let Ok(gdb_ok) = gdb_res {
@@ -455,12 +457,12 @@ fn custom_handle_machine_state<'a, T: Machine>(
                 }
 
                 Err(WaitForStopReasonError::Target(_e)) => {
-                    println!("Running - Got target");
+                    // println!("Running - Got target");
                     // break Err(InternalError::TargetError(e).into());
                     Err(())
                 }
                 Err(WaitForStopReasonError::Connection(_e)) => {
-                    println!("Running - Got connection");
+                    // println!("Running - Got connection");
                     // break Err(InternalError::conn_read(e).into());
                     Err(())
                 }

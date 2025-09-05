@@ -116,9 +116,7 @@ impl Memory for SimpleMemory {
     }
 
     fn write_byte(&mut self, idx: usize, v: u8) -> () {
-        println!("Writing value {} at {} address", v, idx);
-        // *self.data.get_mut(idx).unwrap() = v;
-        println!("{}", self.data.len());
+        // println!("Writing value {} at {} address", v, idx);
         if idx < self.data.len() {
             self.data[idx] = v;
         }
@@ -160,7 +158,7 @@ impl Memory for SimpleMemory {
     }
 
     fn read_bytes(&self, start_addr: usize, count: usize, res_endian: DataEndianness, alignment: usize) -> Vec<u8> {
-        println!("Reading {} bytes starting at address {}", count, start_addr);
+        // println!("Reading {} bytes starting at address {}", count, start_addr);
         let data_len = self.data.len();
         if start_addr < data_len {
             let max_count = data_len - start_addr;

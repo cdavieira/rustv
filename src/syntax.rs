@@ -1,26 +1,37 @@
 pub mod gas {
-    use crate::assembler::{self};
+    use crate::spec::{
+        ArgValue, AssemblySectionName, Directive, DirectiveInstruction, Extension, KeyValue, Pseudo, PseudoInstruction, Register, SemanticBlock, RV32I
+    };
+
+    use crate::streamreader::{
+        StreamReader,
+        CharStreamReader,
+        StringStreamReader,
+    };
+
     use crate::tokenizer::CommonClassifier;
+
     use crate::lexer::{
-        self,
-        ToDirective,
-        ToExtension,
+        TokenClassifier,
         ToPseudo,
         ToRegister,
-        TokenClassifier
+        ToDirective,
+        ToExtension,
+        ToGenericToken,
+        GenericToken,
     };
-    use crate::parser::{self, ParserOutput};
-    use crate::spec::{
-        self,
-        AssemblyData,
-        Directive,
-        DirectiveInstruction,
-        Extension,
-        Pseudo,
-        PseudoInstruction,
-        Register,
-        RV32I
-    };
+
+    use crate::parser::{self};
+
+    // use crate::assembler::{self};
+    // use crate::lexer::{
+    //     self,
+    //     ToDirective,
+    //     ToExtension,
+    //     ToPseudo,
+    //     ToRegister,
+    //     TokenClassifier
+    // };
 
 
     /* Tokenizer */
@@ -31,6 +42,19 @@ pub mod gas {
         fn is_ambiguous(&self, ch: char) -> bool {
             ch == '+' || ch == '-'
         }
+        fn handle_ambiguous(&self, it: &mut CharStreamReader) -> Option<String> {
+            let Some(first_ch) = it.current_token() else {
+                return None;
+            };
+            let mut s = String::from(first_ch);
+            while let Some(lookahead) = it.advance_and_read() {
+                if !self.is_number(lookahead) {
+                    break;
+                }
+                s.push(lookahead);
+            }
+            Some(s)
+        }
 
         fn is_unit(&self, ch: char) -> bool {
             matches!(ch, ',' | '(' |')')
@@ -39,56 +63,61 @@ pub mod gas {
         fn is_comment(&self, ch: char) -> bool {
             ch == '/'
         }
+        fn handle_comment(&self, it: &mut CharStreamReader) -> Option<String> {
+            // let mut s = String::new();
+            while let Some(ch) = it.current_token() {
+                let _ = it.advance_and_read();
+                // s.push(ch);
+                if ch == '\n' {
+                    break;
+                }
+            }
+            // Some(s)
+            None
+        }
 
         fn is_identifier(&self, ch: char) -> bool {
             ch.is_ascii_alphanumeric() || ch == '.' || ch == ':' || ch == '_'
         }
-
-        fn handle_comment(&self, it: &mut impl Iterator<Item = char>) -> Option<char> {
-            let mut opt = it.next();
-            while let Some(ch) = opt {
-                if ch == '\n' {
-                    opt = it.next();
-                    break;
-                }
-                opt = it.next();
-            }
-            opt
-        }
-
-        fn handle_identifier(&self, it: &mut impl Iterator<Item = char>, name: &mut String) -> Option<char> {
-            let mut opt = it.next();
-            while let Some(ch) = opt {
+        fn handle_identifier(&self, it: &mut CharStreamReader) -> Option<String> {
+            let mut name = String::new();
+            while let Some(ch) = it.current_token() {
                 if !self.is_identifier(ch) {
                     break;
                 }
                 name.push(ch);
-                opt = it.next();
+                let _ = it.advance_and_read();
             }
-            opt
-        }
-
-        fn handle_ambiguous(&self, it: &mut impl Iterator<Item = char>, s: &mut String) -> Option<char> {
-            let mut ch = it.next();
-            while let Some(lookahead) = ch {
-                if !self.is_number(lookahead) {
-                    break;
-                }
-                s.push(lookahead);
-                ch = it.next();
-            }
-            ch
+            Some(name)
         }
     }
 
 
 
-    /* Lexer */
-
+    // /* Lexer */
     pub struct Lexer ;
 
+    #[derive(Debug)]
+    pub enum Token {
+        Op(Box<dyn Extension>),
+        Pseudo(Box<dyn Pseudo>),
+        AssemblyDirective(Box<dyn Directive>),
+        LinkerDirective(String),
+        Reg(Register),
+        Name(String),
+        Str(String),
+        Label(String),
+        Number(i32),
+        Section(String),
+        Plus,
+        Minus,
+        Lpar,
+        Rpar,
+        Comma,
+    }
+
     impl ToRegister for Lexer {
-        fn to_register(&self, token: &str) -> Option<crate::spec::Register>  {
+        fn to_register(&self, token: &str) -> Option<Register>  {
             match token {
                 "x0" | "zero" => Some(Register::X0),
                 "x1" | "ra"   => Some(Register::X1),
@@ -143,7 +172,6 @@ pub mod gas {
     impl ToDirective for Lexer {
         fn to_directive(&self, token: &str) -> Option<Box<dyn Directive>>  {
             match token {
-                ".globl" => Some(Box::new(DirectiveInstruction::GLOBL)),
                 ".word"  => Some(Box::new(DirectiveInstruction::WORD)),
                 ".ascii" => Some(Box::new(DirectiveInstruction::ASCII)),
                 _ => None
@@ -199,7 +227,7 @@ pub mod gas {
     }
 
     impl TokenClassifier for Lexer {
-        type Token = lexer::Token;
+        type Token = Token;
 
         fn is_register(&self, token: &str) -> bool {
             ToRegister::is_register(self, token)
@@ -222,7 +250,6 @@ pub mod gas {
         }
 
         fn is_section(&self, token: &str) -> bool {
-            // token.starts_with('.')
             token == ".section"
         }
 
@@ -235,19 +262,23 @@ pub mod gas {
         }
 
         fn is_custom(&self, token: &str) -> bool {
-            ToPseudo::is_pseudo(self, token)
+            ToPseudo::is_pseudo(self, token) || token == ".globl"
         }
 
-        fn str_to_number(&self, token: &str) -> Option<Self::Token> {
+        fn str_to_number(&self, it: &mut StringStreamReader) -> Option<Self::Token> {
+            let Some(token) = it.current_token_ref() else {
+                return None;
+            };
+
             if let Ok(n) = token.parse::<i32>() {
-                return Some(lexer::Token::NUMBER(n));
+                return Some(Token::Number(n));
             }
             let prefix    = &token[..2];
             let no_prefix = &token[2..];
             match prefix {
                 "0x" => {
                     if let Ok(hex) = i32::from_str_radix(no_prefix, 16) {
-                        Some(lexer::Token::NUMBER(hex))
+                        Some(Token::Number(hex))
                     }
                     else {
                         None
@@ -257,66 +288,129 @@ pub mod gas {
             }
         }
 
-        fn str_to_string(&self, token: &str) -> Option<Self::Token> {
-            Some(lexer::Token::STR(token.trim_matches('"').to_string()))
+        fn str_to_string(&self, it: &mut StringStreamReader) -> Option<Self::Token> {
+            let Some(token) = it.current_token_ref() else {
+                return None;
+            };
+            Some(Token::Str(token.trim_matches('"').to_string()))
         }
 
-        fn str_to_symbol(&self, token: &str) -> Option<Self::Token> {
-            match token {
-                "," => Some(lexer::Token::COMMA),
-                "(" => Some(lexer::Token::LPAR),
-                ")" => Some(lexer::Token::RPAR),
-                "+" => Some(lexer::Token::PLUS),
-                "-" => Some(lexer::Token::MINUS),
+        fn str_to_symbol(&self, it: &mut StringStreamReader) -> Option<Self::Token> {
+            let Some(token) = it.current_token_ref() else {
+                return None;
+            };
+            match token.as_str() {
+                "," => Some(Token::Comma),
+                "(" => Some(Token::Lpar),
+                ")" => Some(Token::Rpar),
+                "+" => Some(Token::Plus),
+                "-" => Some(Token::Minus),
                 _ => None
             }
         }
 
-        fn str_to_opcode(&self, token: &str) -> Option<Self::Token> {
+        fn str_to_opcode(&self, it: &mut StringStreamReader) -> Option<Self::Token> {
+            let Some(token) = it.current_token_ref() else {
+                return None;
+            };
             match self.to_extension(token) {
                 Some(e) => {
-                    Some(lexer::Token::OP(e))
+                    Some(Token::Op(e))
                 },
                 None => None
             }
         }
 
-        fn str_to_identifier(&self, token: &str) -> Option<Self::Token> {
-            Some(lexer::Token::NAME(token.to_string()))
+        fn str_to_identifier(&self, it: &mut StringStreamReader) -> Option<Self::Token> {
+            let Some(token) = it.current_token_ref() else {
+                return None;
+            };
+            Some(Token::Name(token.to_string()))
         }
 
-        fn str_to_section(&self, _: &str) -> Option<Self::Token> {
-            // Some(lexer::Token::SECTION(token[1..].to_string()))
-            Some(lexer::Token::SECTION)
+        fn str_to_section(&self, it: &mut StringStreamReader) -> Option<Self::Token> {
+            let Some(token) = it.advance_and_read() else {
+                return None;
+            };
+            Some(Token::Section(token[1..].to_string()))
         }
 
-        fn str_to_directive(&self, token: &str) -> Option<Self::Token> {
+        fn str_to_directive(&self, it: &mut StringStreamReader) -> Option<Self::Token> {
+            let Some(token) = it.current_token_ref() else {
+                return None;
+            };
             if let Some(d) = ToDirective::to_directive(self, token) {
-                Some(lexer::Token::DIRECTIVE(d))
+                Some(Token::AssemblyDirective(d))
             }
             else {
                 None
             }
         }
 
-        fn str_to_register(&self, token: &str) -> Option<Self::Token> {
+        fn str_to_register(&self, it: &mut StringStreamReader) -> Option<Self::Token> {
+            let Some(token) = it.current_token_ref() else {
+                return None;
+            };
             let Some(reg) = ToRegister::to_register(self, token.trim().to_lowercase().as_str()) else {
                 return None;
             };
-            Some(lexer::Token::REG(reg))
+            Some(Token::Reg(reg))
         }
 
-        fn str_to_custom(&self, token: &str) -> Option<Self::Token> {
+        fn str_to_custom(&self, it: &mut StringStreamReader) -> Option<Self::Token> {
+            let Some(token) = it.current_token_ref() else {
+                return None;
+            };
             if let Some(p) = ToPseudo::to_pseudo(self, token) {
-                Some(lexer::Token::PSEUDO(p))
+                Some(Token::Pseudo(p))
+            }
+            else if token == ".globl" {
+                Some(Token::LinkerDirective(token.to_string()))
             }
             else {
                 None
             }
         }
 
-        fn str_to_label(&self, token: &str) -> Option<Self::Token> {
-            Some(lexer::Token::LABEL(token.trim_end_matches(':').to_string()))
+        fn str_to_label(&self, it: &mut StringStreamReader) -> Option<Self::Token> {
+            let Some(token) = it.current_token_ref() else {
+                return None;
+            };
+            Some(Token::Label(token.trim_end_matches(':').to_string()))
+        }
+    }
+
+    impl ToGenericToken for Token {
+        fn to_generic_token(self) -> Option<GenericToken> {
+            match self {
+                Token::Plus                 => None,
+                Token::Minus                => None,
+                Token::Lpar                 => None,
+                Token::Rpar                 => None,
+                Token::Comma                => None,
+                Token::Op(extension)        => Some(GenericToken::KeyToken(KeyValue::Op(extension))),
+                Token::Pseudo(pseudo)       => Some(GenericToken::KeyToken(KeyValue::Pseudo(pseudo))),
+                Token::AssemblyDirective(directive) => Some(GenericToken::KeyToken(KeyValue::AssemblyDirective(directive))),
+                Token::Label(label)         => Some(GenericToken::KeyToken(KeyValue::Label(label))),
+                Token::Reg(register)        => Some(GenericToken::ArgToken(ArgValue::Register(register))),
+                Token::Name(name)           => Some(GenericToken::ArgToken(ArgValue::Use(name))),
+                Token::Str(literal)         => Some(GenericToken::ArgToken(ArgValue::Literal(literal))),
+                Token::Number(n)            => Some(GenericToken::ArgToken(ArgValue::Number(n))),
+                Token::Section(sec)         => {
+                    match sec.as_str() {
+                        "text" => Some(GenericToken::KeyToken(KeyValue::Section(AssemblySectionName::Text))),
+                        "data" => Some(GenericToken::KeyToken(KeyValue::Section(AssemblySectionName::Data))),
+                        "bss"  => Some(GenericToken::KeyToken(KeyValue::Section(AssemblySectionName::Bss))),
+                        other  => Some(GenericToken::KeyToken(KeyValue::Section(AssemblySectionName::Custom(other.to_string())))),
+                    }
+                },
+                Token::LinkerDirective(s)   => {
+                    match s.as_str() {
+                        ".globl" => Some(GenericToken::KeyToken(KeyValue::LinkerDirective(s))),
+                        _        => None,
+                    }
+                },
+            }
         }
     }
 
@@ -327,8 +421,8 @@ pub mod gas {
     pub struct Parser;
 
     impl parser::Parser for Parser {
-        type Token = lexer::Token;
-        type Output = ParserOutput;
+        type Token = Token;
+        type Output = Vec<SemanticBlock>;
 
         fn parse(&self, tokens: Vec<Self::Token>) -> Self::Output {
             parser::parse(tokens)
@@ -337,17 +431,17 @@ pub mod gas {
 
 
 
-    /* Assembler */
-
-    pub struct Assembler;
-
-    impl assembler::Assembler for Assembler {
-        type Input = spec::AssemblySection;
-
-        fn to_words(&self, instruction: Self::Input) -> AssemblyData {
-            assembler::to_u32(instruction)
-        }
-    }
+    // /* Assembler */
+    //
+    // pub struct Assembler;
+    //
+    // impl assembler::Assembler for Assembler {
+    //     type Input = spec::AssemblySection;
+    //
+    //     fn to_words(&self, instruction: Self::Input) -> AssemblyData {
+    //         assembler::to_u32(instruction)
+    //     }
+    // }
 
 
 

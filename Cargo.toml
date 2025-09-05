@@ -7,3 +7,4 @@ edition = "2024"
 gdbstub = "0.7.7"
 gdbstub_arch = "0.3.2"
 object = {version = "0.37.3", features = ["write"]}
+syscalls = {version = "0.6.18", features = ["riscv32"]}

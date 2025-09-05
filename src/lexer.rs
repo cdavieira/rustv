@@ -1,5 +1,18 @@
+use crate::spec::{ArgValue, KeyValue};
+use crate::streamreader::{StreamReader, StringStreamReader};
+
+#[derive(Debug)]
+pub enum GenericToken {
+    KeyToken(KeyValue),
+    ArgToken(ArgValue),
+}
+
+pub trait ToGenericToken {
+    fn to_generic_token(self) -> Option<GenericToken>;
+}
+
 pub trait Lexer {
-    type Token;
+    type Token: ToGenericToken;
     fn parse(&self, tokens: Vec<String>) -> Vec<<Self as Lexer>::Token> ;
 }
 
@@ -26,7 +39,7 @@ pub enum TokenClass {
 }
 
 /**
-Any entity which implements the 'lexer::TokenClassifier' trait can then use the function 'lexer::parse' as the backend for the implementation of 'Lexer::parse'
+The 'Lexer' Trait is implemented for any entity which implements the 'lexer::TokenClassifier' trait
 
 'lexer::TokenClassifier': a strategy where N chars can be mapped to one of the categories/variants stored in enum 'TokenClass'. The implementor is responsible for the mapping
 */
@@ -56,129 +69,92 @@ pub trait TokenClassifier {
         token.starts_with('"') && token.ends_with('"')
     }
 
-    fn str_to_number(&self, token: &str) -> Option<Self::Token> ;
-    fn str_to_string(&self, token: &str) -> Option<Self::Token> ;
-    fn str_to_symbol(&self, token: &str) -> Option<Self::Token> ;
-    fn str_to_register(&self, token: &str) -> Option<Self::Token> ;
-    fn str_to_opcode(&self, token: &str) -> Option<Self::Token> ;
-    fn str_to_identifier(&self, token: &str) -> Option<Self::Token> ;
-    fn str_to_section(&self, token: &str) -> Option<Self::Token> ;
-    fn str_to_directive(&self, token: &str) -> Option<Self::Token> ;
-    fn str_to_custom(&self, token: &str) -> Option<Self::Token> ;
-    fn str_to_label(&self, token: &str) -> Option<Self::Token> ;
+    fn str_to_number(&self, it: &mut StringStreamReader) -> Option<Self::Token> ;
+    fn str_to_string(&self, it: &mut StringStreamReader) -> Option<Self::Token> ;
+    fn str_to_symbol(&self, it: &mut StringStreamReader) -> Option<Self::Token> ;
+    fn str_to_register(&self, it: &mut StringStreamReader) -> Option<Self::Token> ;
+    fn str_to_opcode(&self, it: &mut StringStreamReader) -> Option<Self::Token> ;
+    fn str_to_identifier(&self, it: &mut StringStreamReader) -> Option<Self::Token> ;
+    fn str_to_section(&self, it: &mut StringStreamReader) -> Option<Self::Token> ;
+    fn str_to_directive(&self, it: &mut StringStreamReader) -> Option<Self::Token> ;
+    fn str_to_custom(&self, it: &mut StringStreamReader) -> Option<Self::Token> ;
+    fn str_to_label(&self, it: &mut StringStreamReader) -> Option<Self::Token> ;
 
     fn classify(&self, token: &str) -> TokenClass {
         if self.is_symbol(token) {
-            // println!("symbol!");
             return TokenClass::SYMBOL;
         }
 
         if self.is_register(token) {
-            // println!("register!");
             return TokenClass::REGISTER;
         }
 
         if self.is_opcode(token) {
-            // println!("opcode!");
             return TokenClass::OPCODE;
         }
 
         if self.is_directive(token) {
-            // println!("directive!");
             return TokenClass::DIRECTIVE;
         }
 
         if self.is_section(token) {
-            // println!("section!");
             return TokenClass::SECTION;
         }
 
         if self.is_custom(token) {
-            // println!("custom!");
             return TokenClass::CUSTOM;
         }
 
         if self.is_label(token) {
-            // println!("label!");
             return TokenClass::LABEL;
         }
 
         if self.is_number(token) {
-            // println!("number!");
             return TokenClass::NUMBER;
         }
 
         if self.is_string(token) {
-            // println!("string!");
             return TokenClass::STRING;
         }
 
         if self.is_identifier(token) {
-            // println!("identifier!");
             return TokenClass::IDENTIFIER;
         }
 
-        // println!("Ingore!");
         TokenClass::IGNORE
     }
 
-    fn str_to_token(&self, token: &str) -> Option<Self::Token> {
-        match self.classify(token) {
-            TokenClass::LABEL => {
-                Some(self.str_to_label(token).expect("str2label"))
-            },
-            TokenClass::NUMBER => {
-                Some(self.str_to_number(token).expect("str2number"))
-            },
-            TokenClass::SYMBOL => {
-                Some(self.str_to_symbol(token).expect("str2symbol"))
-            },
-            TokenClass::SECTION => {
-                Some(self.str_to_section(token).expect("str2section"))
-            },
-            TokenClass::DIRECTIVE => {
-                Some(self.str_to_directive(token).expect("str2directive"))
-            },
-            TokenClass::CUSTOM => {
-                Some(self.str_to_custom(token).expect("str2custom"))
-            },
-            TokenClass::OPCODE => {
-                Some(self.str_to_opcode(token).expect("str2opcode"))
-            },
-            TokenClass::STRING => {
-                Some(self.str_to_string(token).expect("str2string"))
-            },
-            TokenClass::IDENTIFIER => {
-                Some(self.str_to_identifier(token).expect("str2id"))
-            },
-            TokenClass::REGISTER => {
-                Some(self.str_to_register(token).expect("str2register"))
-            },
-            TokenClass::IGNORE => {
-                None
-            }
+    fn str_to_token(&self, it: &mut StringStreamReader) -> Option<Self::Token> {
+        let token = it.current_token().expect("Lexer failed when retrieving token");
+        match self.classify(token.as_str()) {
+            TokenClass::LABEL      => self.str_to_label(it),
+            TokenClass::NUMBER     => self.str_to_number(it),
+            TokenClass::SYMBOL     => self.str_to_symbol(it),
+            TokenClass::SECTION    => self.str_to_section(it),
+            TokenClass::DIRECTIVE  => self.str_to_directive(it),
+            TokenClass::CUSTOM     => self.str_to_custom(it),
+            TokenClass::OPCODE     => self.str_to_opcode(it),
+            TokenClass::STRING     => self.str_to_string(it),
+            TokenClass::IDENTIFIER => self.str_to_identifier(it),
+            TokenClass::REGISTER   => self.str_to_register(it),
+            TokenClass::IGNORE     => None
         }
     }
 }
 
-fn parse<T>(lexer: & impl TokenClassifier<Token = T>, tokens: Vec<String>) -> Vec<T> {
-    let mut lexemes = Vec::new();
-
-    for token in tokens {
-        // println!("Lexer is parsing {}...", token);
-        if let Some(lex) = lexer.str_to_token(&token) {
-            lexemes.push(lex);
-        }
-    }
-
-    lexemes
-}
-
-impl<E, T: TokenClassifier<Token = E>> Lexer for T {
-    type Token = E;
+impl<T: ToGenericToken, C: TokenClassifier<Token = T>> Lexer for C {
+    type Token = T;
 
     fn parse(&self, tokens: Vec<String>) -> Vec<<Self as Lexer>::Token>  {
-        parse(self, tokens)
+        let mut lexemes = Vec::new();
+        let mut it = StringStreamReader::new(tokens.into_iter(), String::from("\n"));
+        while let Some(_) = it.current_token() {
+            if let Some(lex) = self.str_to_token(&mut it) {
+                lexemes.push(lex);
+            }
+            it.advance();
+        }
+        lexemes
     }
 }
 
@@ -188,6 +164,7 @@ impl<E, T: TokenClassifier<Token = E>> Lexer for T {
 
 // Implementation 2
 
+// TODO: adapt this text
 /*
 'Implementation 1' is complemented by 'Implementation 2', which takes the responsability
 of defining what a token is, instead of letting this detail to be implemented by the trait
@@ -233,24 +210,6 @@ Extension/PseudoInstruction/Directive
 // Token standardization
 
 use crate::spec::{Extension, Pseudo, Directive, Register};
-
-#[derive(Debug)]
-pub enum Token {
-    OP(Box<dyn Extension>),
-    PSEUDO(Box<dyn Pseudo>),
-    DIRECTIVE(Box<dyn Directive>),
-    REG(Register),
-    NAME(String),
-    STR(String),
-    LABEL(String),
-    NUMBER(i32),
-    SECTION,
-    PLUS,
-    MINUS,
-    LPAR,
-    RPAR,
-    COMMA,
-}
 
 pub trait ToExtension<T> {
     fn to_extension(&self, token: T) -> Option<Box<dyn Extension>> ;

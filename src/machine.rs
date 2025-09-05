@@ -55,6 +55,7 @@ pub trait Machine {
 
 /* Possible implementation */
 
+use syscalls::riscv32::Sysno;
 use crate::cpu::{SimpleCPU, CPU};
 use crate::memory::{SimpleMemory, Memory};
 use crate::spec::InstructionFormat;
@@ -157,7 +158,20 @@ impl Machine for SimpleMachine {
                         let r1 = self.cpu.read(rs1 as usize);
                         let v = r1 + imm;
                         self.cpu.write(rd as usize, v);
-                    }
+                    },
+                    (0b000, 0b1110011) => {
+                        let a7: usize = self.cpu.read(17).try_into().unwrap();
+                        if let Some(sys) = Sysno::new(a7) {
+                            match sys {
+                                Sysno::write => {
+                                },
+                                Sysno::exit => {
+                                },
+                                _ => {
+                                }
+                            }
+                        }
+                    },
                     _ => {
 
                     }
@@ -183,9 +197,17 @@ impl Machine for SimpleMachine {
                     }
                 }
             },
-            InstructionFormat::U { imm: _, rd: _, opcode } => {
+            InstructionFormat::U { imm, rd, opcode } => {
                 match opcode {
-                    0b0110111  => { //LUI
+                    0b0110111 => { //LUI
+                        let upper20bits = imm << 12;
+                        self.cpu.write(rd as usize, upper20bits);
+                    },
+                    0b0010111 => { //AUIPC
+                        let offset = (imm << 12) as i32;
+                        let pc: u32 = self.cpu.read_pc().try_into().unwrap();
+                        let addr = (pc as i32) + offset;
+                        self.cpu.write(rd as usize, addr as u32);
                     },
                     _ => {
 
