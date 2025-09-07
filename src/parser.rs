@@ -5,17 +5,14 @@ pub trait Parser {
     fn parse(&self, token: Vec<Self::Token>) -> Self::Output ;
 }
 
-
-
 /* The following code was written to ease the process of implementing the 'Parser' trait. */
 
-
-use crate::spec::{
+use crate::lang::highassembly::{
     ArgValue,
-    AssemblySectionName,
+    SectionName,
     KeyValue,
-    SemanticLine,
-    SemanticBlock
+    GenericLine,
+    GenericBlock
 };
 
 use crate::lexer::{
@@ -23,9 +20,7 @@ use crate::lexer::{
     GenericToken,
 };
 
-
-
-//2.0 Generalizing tokens
+//2.1 Converting tokens to their generic representative
 
 fn generalize_tokens<T: ToGenericToken>(tokens: Vec<T>) -> Vec<GenericToken> {
     tokens
@@ -34,17 +29,16 @@ fn generalize_tokens<T: ToGenericToken>(tokens: Vec<T>) -> Vec<GenericToken> {
         .collect()
 }
 
-//2.1 Grouping tokens in lines
+//2.2 Grouping tokens in lines
 
-// TODO: this can be later simplified by introducing a EOL token to the GenericToken enum,
-// which would allow identifying end of lines and therefore lines
-fn group_tokens(tokens: Vec<GenericToken>) -> Vec<SemanticLine> {
+// TODO: introducing an EOL token to the GenericToken enum would allow this aswell
+fn group_tokens(tokens: Vec<GenericToken>) -> Vec<GenericLine> {
     let mut token_groups = Vec::new();
     let mut args = Vec::new();
     for token in tokens.into_iter().rev() {
         match token {
             GenericToken::KeyToken(k) =>  {
-                let group = SemanticLine {
+                let group = GenericLine {
                     keyword: k,
                     args: args.drain(..).rev().collect()
                 };
@@ -58,24 +52,17 @@ fn group_tokens(tokens: Vec<GenericToken>) -> Vec<SemanticLine> {
     token_groups.into_iter().rev().collect()
 }
 
+// 2.3 Expanding pseudo instructions into groups of real instructions
 
-// 2.2 Expanding pseudo instructions into groups of real instructions
-
-fn expand_pseudos(lines: Vec<SemanticLine>) -> Vec<SemanticLine> {
+fn expand_pseudos(lines: Vec<GenericLine>) -> Vec<GenericLine> {
     let mut expanded_lines = Vec::new();
     for line in lines {
         match &line.keyword {
             KeyValue::Pseudo(pseudo) => {
-                let extra_lines: Vec<SemanticLine> = pseudo
+                let extra_lines: Vec<GenericLine> = pseudo
                     .translate(line.args)
                     .into_iter()
-                    .map(|(i, a)| {
-                            SemanticLine{
-                                keyword: KeyValue::Op(i),
-                                args: a
-                            }
-                        }
-                    )
+                    .map(|opcode_line| opcode_line.into())
                     .collect()
                 ;
                 expanded_lines.extend(extra_lines);
@@ -88,11 +75,9 @@ fn expand_pseudos(lines: Vec<SemanticLine>) -> Vec<SemanticLine> {
     expanded_lines
 }
 
+// 2.4 Expanding directives into bytes
 
-
-// 2.3 Expanding directives into bytes
-
-fn expand_assembly_directives(lines: Vec<SemanticLine>) -> Vec<SemanticLine> {
+fn expand_assembly_directives(lines: Vec<GenericLine>) -> Vec<GenericLine> {
     let mut new_lines = Vec::new();
     for line in lines {
         match &line.keyword {
@@ -101,7 +86,7 @@ fn expand_assembly_directives(lines: Vec<SemanticLine>) -> Vec<SemanticLine> {
                     .into_iter()
                     .map(|a| ArgValue::Byte(a))
                     .collect();
-                new_lines.push(SemanticLine{
+                new_lines.push(GenericLine{
                     keyword: line.keyword,
                     args: new_args
                 });
@@ -114,35 +99,31 @@ fn expand_assembly_directives(lines: Vec<SemanticLine>) -> Vec<SemanticLine> {
     new_lines
 }
 
+// 2.5 Grouping instructions into sections
 
-
-// 2.4 Grouping instructions into sections
-
-fn group_blocks(lines: Vec<SemanticLine>) -> Vec<SemanticBlock> {
+fn group_blocks(lines: Vec<GenericLine>) -> Vec<GenericBlock> {
     let mut blocks = vec![];
     let mut block_lines = vec![];
-    let mut metadata = SemanticBlock{
-        name: AssemblySectionName::Metadata,
+    let mut metadata = GenericBlock{
+        name: SectionName::Metadata,
         lines: Vec::new(),
     };
     for line in lines.into_iter().rev() {
         match line.keyword {
             KeyValue::Section(s) => {
-                blocks.push(SemanticBlock{
+                blocks.push(GenericBlock{
                     name: s,
                     lines: block_lines.drain(..).rev().collect(),
                 });
             },
             KeyValue::LinkerDirective(_) => metadata.lines.push(line),
-            _ => {
-                block_lines.push(line);
-            }
+            _ => block_lines.push(line),
         }
     }
     //If there are instructions left without a session, wrap them in a text section 
     if block_lines.len() > 0 {
-        blocks.push(SemanticBlock{
-            name: AssemblySectionName::Text,
+        blocks.push(GenericBlock{
+            name: SectionName::Text,
             lines: block_lines.drain(..).rev().collect(),
         });
     }
@@ -150,27 +131,21 @@ fn group_blocks(lines: Vec<SemanticLine>) -> Vec<SemanticBlock> {
     blocks.into_iter().rev().collect()
 }
 
-fn merge_blocks(blocks: Vec<SemanticBlock>) -> Vec<SemanticBlock> {
-    let mut metadata = SemanticBlock{name: AssemblySectionName::Metadata, lines: Vec::new()};
-    let mut text = SemanticBlock{name: AssemblySectionName::Text, lines: vec![]};
-    let mut data = SemanticBlock{name: AssemblySectionName::Data, lines: vec![]};
-    let mut bss  = SemanticBlock{name: AssemblySectionName::Bss, lines: vec![]};
+// 2.6 Merging same groups
+
+fn merge_blocks(blocks: Vec<GenericBlock>) -> Vec<GenericBlock> {
+    let mut metadata = GenericBlock{name: SectionName::Metadata, lines: Vec::new()};
+    let mut text = GenericBlock{name: SectionName::Text, lines: vec![]};
+    let mut data = GenericBlock{name: SectionName::Data, lines: vec![]};
+    let mut bss  = GenericBlock{name: SectionName::Bss, lines: vec![]};
     let mut v = vec![];
     for block in blocks {
         match block.name {
-            AssemblySectionName::Text => {
-                text.lines.extend(block.lines);
-            },
-            AssemblySectionName::Data => {
-                data.lines.extend(block.lines);
-            },
-            AssemblySectionName::Bss  => {
-                bss.lines.extend(block.lines);
-            },
-            AssemblySectionName::Metadata  => {
-                metadata.lines.extend(block.lines);
-            },
-            AssemblySectionName::Custom(_) => panic!("Custom sections are not yet implemented :/"),
+            SectionName::Text => text.lines.extend(block.lines),
+            SectionName::Data => data.lines.extend(block.lines),
+            SectionName::Bss  => bss.lines.extend(block.lines),
+            SectionName::Metadata  => metadata.lines.extend(block.lines),
+            SectionName::Custom(_) => panic!("Custom sections are not yet implemented :/"),
         }
     }
     v.push(metadata);
@@ -180,7 +155,7 @@ fn merge_blocks(blocks: Vec<SemanticBlock>) -> Vec<SemanticBlock> {
     v
 }
 
-pub fn parse<T: ToGenericToken>(tokens: Vec<T>) -> Vec<SemanticBlock> {
+pub fn parse<T: ToGenericToken>(tokens: Vec<T>) -> Vec<GenericBlock> {
     let tokens = generalize_tokens(tokens);
     let groups = group_tokens(tokens);
     let lines  = expand_pseudos(groups);

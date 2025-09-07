@@ -74,8 +74,8 @@ fn build_section_table<'a>(
     desired_endian: &DataEndianness,
 ) -> HashMap<String, Vec<u8>> {
     let endian = match elf.endian() {
-        Endianness::Little => &DataEndianness::LE,
-        Endianness::Big => &DataEndianness::BE,
+        Endianness::Little => &DataEndianness::Le,
+        Endianness::Big => &DataEndianness::Be,
     };
     let mut section_table = HashMap::new();
     for section in elf.sections() {

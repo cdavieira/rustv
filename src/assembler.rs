@@ -1,182 +1,182 @@
-use crate::spec::{AssemblyData, SemanticBlock};
+use crate::lang::highassembly::{
+    ArgValue,
+    SectionName,
+    KeyValue,
+    GenericBlock,
+    GenericLine,
+};
+use crate::lang::lowassembly::{
+    instruction_to_binary,
+    EncodableBlock,
+    EncodableKey,
+    EncodableLine,
+    EncodedBlock,
+};
+use std::collections::HashMap;
 
 pub trait Assembler {
     type Input;
-    fn to_words(&self, instructions: Self::Input) -> AssemblyData ;
+    fn to_words(&self, instructions: Self::Input) -> AssemblerTools ;
 }
+
+
+
+
 
 /**/
 
-use crate::spec::{
-    instruction_to_binary, AssemblySectionName, KeyValue, ArgValue, AssemblySection
-};
-use crate::utils;
-use std::collections::HashMap;
+#[derive(Debug)]
+pub struct Symbol {
+    pub(crate) section: SectionName,
+    pub(crate) address: usize,
+    pub(crate) scope: String,
+}
 
 #[derive(Debug)]
-pub struct ParserOutput {
-    metadata: Vec<(KeyValue, Vec<ArgValue>)>,
-    section_table: HashMap<String, usize>,
-    symbol_table:  HashMap<String, (AssemblySectionName, usize)>,
-    sections: Vec<AssemblySection>,
+pub struct Section {
+    pub(crate) address: usize,
+    pub(crate) name: SectionName,
 }
 
-impl<'a> ParserOutput {
-    pub fn get_sections(&mut self) -> Vec<AssemblySection> {
-        if self.sections.len() < 2 {
-            return vec![];
-        }
-        let text = self.sections.remove(0);
-        let data = self.sections.remove(0);
-        let bss = self.sections.remove(0);
-        vec![text, data, bss]
-    }
-
-    pub fn get_all(self)
-    -> (
-        Vec<(KeyValue, Vec<ArgValue>)>,
-        HashMap<String, (AssemblySectionName, usize)>,
-        HashMap<String, usize>,
-        Vec<AssemblySection>
-    )
-    {
-        (self.metadata, self.symbol_table, self.section_table, self.sections)
-    }
-
-    pub fn text_section(&'a self) -> &'a AssemblySection {
-        &self.sections[0]
-    }
-
-    pub fn data_section(&'a self) -> &'a AssemblySection {
-        &self.sections[1]
-    }
-
-    pub fn bss_section(&'a self) -> &'a AssemblySection {
-        &self.sections[2]
-    }
-
-    // pub fn symbol_table(&'a self) -> &'a HashMap<String, usize> {
-    //     &self.symbol_table
-    // }
-
-    pub fn metadata(&'a self) -> &'a Vec<(KeyValue, Vec<ArgValue>)> {
-        &self.metadata
-    }
-
-    // pub fn start_symbol(&self) -> usize {
-    //     *self.symbol_table.get(&String::from("_start")).unwrap()
-    // }
-}
-
-// 2.5.2 Merging same sections
-
-fn merge_sections(blocks: Vec<SemanticBlock>) -> Vec<SemanticBlock> {
-    let mut text = SemanticBlock{address: 0, name: AssemblySectionName::TEXT, lines: vec![]};
-    let mut data = SemanticBlock{address: 0, name: AssemblySectionName::DATA, lines: vec![]};
-    let mut bss  = SemanticBlock{address: 0, name: AssemblySectionName::BSS, lines: vec![]};
-    let mut v = vec![];
-    for block in blocks {
-        match block.name {
-            AssemblySectionName::TEXT => text.lines.extend(block.lines),
-            AssemblySectionName::DATA => data.lines.extend(block.lines),
-            AssemblySectionName::BSS  => bss.lines.extend(block.lines),
-            AssemblySectionName::CUSTOM(_) => panic!("Custom sections are not yet implemented :/"),
-        }
-    }
-    v.push(data);
-    v.push(text);
-    v.push(bss);
-    v
+#[derive(Debug)]
+pub struct AssemblerTools {
+    pub(crate) metadata: Option<GenericBlock>,
+    pub(crate) sections: HashMap<String, Section>,
+    pub(crate) symbols:  HashMap<String, Symbol>,
+    pub(crate) strings:  Vec<String>,
+    pub(crate) blocks: Vec<EncodedBlock>,
 }
 
 
 
-// 2.6.1 Generating the start address of each section
 
-fn gen_section_address(blocks: Vec<SemanticBlock>) -> Vec<SemanticBlock> {
+
+fn extract_metadata(
+    blocks: &mut Vec<GenericBlock>
+) -> Option<GenericBlock>
+{
+    let pair = blocks.iter().enumerate().find(|(_, block)| block.name == SectionName::Metadata);
+    if let Some((index, _)) = pair {
+        Some(blocks.remove(index))
+    }
+    else {
+        None
+    }
+}
+
+fn gen_positions(
+    blocks: Vec<GenericBlock>
+) -> Vec<PositionedGenericBlock>
+{
+    blocks.
+        into_iter()
+        .map(|block| {
+            PositionedGenericBlock {
+                address: 0,
+                name: block.name,
+                lines: block.lines
+                    .into_iter()
+                    .map(|line| {
+                        PositionedGenericLine {
+                            address: 0,
+                            line,
+                        }
+                    })
+                    .collect(),
+            }
+        })
+        .collect()
+}
+
+// 2.1 Generating the start address of each section
+
+pub struct PositionedGenericLine {
+    address: usize, /* relative address */
+    line: GenericLine,
+}
+
+pub struct PositionedGenericBlock {
+    address: usize,
+    name: SectionName,
+    lines: Vec<PositionedGenericLine>,
+}
+
+fn gen_section_address(
+    blocks: Vec<PositionedGenericBlock>,
+    initial_addr: usize,
+    block_offset: usize,
+) -> Vec<PositionedGenericBlock>
+{
+    //OBS: if block_offset % 4 != 0, then this could lead to section alignment problems
     let mut new_blocks = Vec::new();
-    let mut block_addr = 0;
-    let mut block_len: usize;
-    //OBS: if block_off % 4 != 0, then this could lead to section alignment problems
-    let block_off = 0x4;
+    let mut next_block_address = initial_addr;
     for block in blocks {
-        block_len = block.lines
+        let block_size: usize = block.lines
             .iter()
-            .map(|item| match item.keyword {
-                KeyValue::OP(_)        => 4usize,
-                KeyValue::DIRECTIVE(_) => {
-                    let len = item.args.len();
-                    let exceeding = len % 4;
-                    //ensure word alignment for sections
-                    let pad = if exceeding > 0 { 4 - exceeding } else { 0 };
-                    len + pad
-                },
-                _ => 0usize
-            })
+            .map(|line| line.line.size_bytes_with_alignment(4usize))
             .sum();
-        new_blocks.push(SemanticBlock{
-            address: block_addr,
+        new_blocks.push(PositionedGenericBlock{
+            address: next_block_address,
             ..block
         });
-        block_addr += block_len + block_off;
+        next_block_address += block_size + block_offset;
     }
     new_blocks
 }
 
+// 2.2 Generating the relative address of each instruction
 
-
-// 2.6.2 Generating the relative address of each instruction
-
-fn gen_line_address(blocks: Vec<SemanticBlock>) -> Vec<SemanticBlock> {
-    let mut v = Vec::new();
+fn gen_line_address(blocks: Vec<PositionedGenericBlock>) -> Vec<PositionedGenericBlock> {
+    let mut new_blocks = Vec::new();
     for block in blocks {
-        let mut rel_addr = 0;
+        let mut relative_address = 0;
         let lines_with_address = block.lines
             .into_iter()
             .map(|line| {
-                let new_line = SemanticLine{
-                    rel_addr,
+                let new_line = PositionedGenericLine {
+                    address: relative_address,
                     ..line
                 };
-                // TODO: What about KeyValue::Directive?
-                if let KeyValue::OP(_) = &new_line.keyword {
-                    rel_addr += 4;
-                }
+                relative_address += new_line.line.size_bytes_with_alignment(4);
                 new_line
-            }).collect();
-        v.push(SemanticBlock{
+            })
+            .collect();
+        new_blocks.push(PositionedGenericBlock{
             lines: lines_with_address,
             ..block
         });
     }
-    v
+    new_blocks
 }
 
+// 2.3 Generating section table
 
-
-// 2.7.1 Generating section and symbolic table
-
-fn gen_section_table(sections: &Vec<SemanticBlock>) -> HashMap<String, usize> {
+fn gen_section_table(sections: &Vec<PositionedGenericBlock>) -> HashMap<String, Section> {
     let mut map = HashMap::new();
     for section in sections {
-        let key = match &section.name {
-            AssemblySectionName::TEXT => ".text".to_string(),
-            AssemblySectionName::DATA => ".data".to_string(),
-            AssemblySectionName::BSS  => ".bss".to_string(),
-            AssemblySectionName::CUSTOM(s) => s.clone(),
+        let value = Section {
+            name: section.name.clone(),
+            address: section.address,
         };
-        map.insert(key, section.address);
+        map.insert(section.name.default_name(), value);
     }
     map
 }
 
-fn gen_symbol_table(sections: &Vec<SemanticBlock>) -> HashMap<String, (AssemblySectionName, usize)> {
+// 2.4 Generating symbol table
+
+fn gen_symbol_table(sections: &Vec<PositionedGenericBlock>) -> HashMap<String, Symbol> {
     let mut v = HashMap::new();
     for section in sections {
         for line in &section.lines {
-            match &line.keyword {
-                KeyValue::LABEL(s) => {
-                    v.insert(s.clone(), (section.name.clone(), line.rel_addr));
+            match &line.line.keyword {
+                KeyValue::Label(s) => {
+                    let value = Symbol {
+                        section: section.name.clone(),
+                        address: line.address,
+                        scope: String::from("File"),
+                    };
+                    v.insert(s.clone(), value);
                 },
                 _ => {
                 }
@@ -186,84 +186,93 @@ fn gen_symbol_table(sections: &Vec<SemanticBlock>) -> HashMap<String, (AssemblyS
     v
 }
 
-// 2.7.2 Resolving symbols
+// 2.5 Generating string table
 
-fn get_symb_addrs(
-    symb: &str,
-    symbtable: &HashMap<String, (AssemblySectionName, usize)>,
-    secttable: &HashMap<String, usize>,
-) -> Result<(usize, usize), String> {
-    if let Some((symb_sec, symb_val)) = symbtable.get(symb) {
-        let symb_sec_key = match symb_sec {
-            AssemblySectionName::TEXT => ".text".to_string(),
-            AssemblySectionName::DATA => ".data".to_string(),
-            AssemblySectionName::BSS  => ".bss".to_string(),
-            AssemblySectionName::CUSTOM(s) => s.clone(),
-        };
-        let symb_sec_addr = secttable.get(&symb_sec_key).unwrap();
-        Ok((*symb_sec_addr, *symb_val))
-    }
-    else {
-        let errmsg = std::format!("Couldnt find {} in the symb map", symb);
-        Err(errmsg)
-    }
+fn gen_string_table(sections: &Vec<PositionedGenericBlock>) -> Vec<String> {
+    let mut v = Vec::new();
+    // for section in sections {
+    //     for line in &section.lines {
+    //         if let KeyValue::AssemblyDirective(_) = line.line.keyword {
+    //         }
+    //     }
+    // }
+    v
 }
 
-fn handle_symb(res: Result<(usize, usize), String>, mut f: impl FnMut(usize, usize) -> ()) {
+// 2.6 Resolving symbols
+
+fn get_symb_addrs<'a, 'b>(
+    symb: &str,
+    symbols: &'a HashMap<String, Symbol>,
+    sections: &'b HashMap<String, Section>,
+) -> Result<(&'a Symbol, &'b Section), ()> {
+    let Some(symb) = symbols.get(symb) else {
+        return Err(());
+    };
+    let Some(section) = sections.get(&symb.section.default_name()) else {
+        return Err(());
+    };
+    Ok((symb, section))
+}
+
+fn handle_symb(
+    res: Result<(&Symbol, &Section), ()>,
+    mut f: impl FnMut(&Symbol, &Section) -> ()
+)
+{
     match res {
         Ok((symb_sec_addr, symb_rel_addr)) => {
             f(symb_sec_addr, symb_rel_addr);
         },
-        Err(errmsg) => {
-            eprintln!("{}", errmsg);
+        Err(_) => {
+            panic!("handle_symb")
         }
     }
 }
 
 fn resolve_symbols(
-    sections: Vec<SemanticBlock>,
-    symbtable: &HashMap<String, (AssemblySectionName, usize)>,
-    secttable: &HashMap<String, usize>
-) -> Vec<SemanticBlock>
+    blocks: Vec<PositionedGenericBlock>,
+    symbols: &HashMap<String, Symbol>,
+    sections: &HashMap<String, Section>
+) -> Vec<PositionedGenericBlock>
 {
     let mut resolved_sections = Vec::new();
-    for section in sections {
+    for section in blocks {
         let mut new_lines = Vec::new();
         for line in section.lines {
             let mut new_args = Vec::new();
-            for arg in line.args {
+            for arg in line.line.args {
                 match arg {
                     //TODO: this could be a problem if the jump is attempted to a symbol in
                     //another section! We need to somehow store the section associated with the
                     //symbol and add some logic here to deal with this
-                    ArgValue::USE(s) => {
-                        let res = get_symb_addrs(&s, symbtable, secttable);
-                        handle_symb(res, |symb_sec_addr, symb_rel_addr| {
-                            let start : i32 = line.rel_addr.try_into().unwrap();
-                            let end   : i32 = symb_rel_addr.try_into().unwrap();
+                    ArgValue::Use(s) => {
+                        let res = get_symb_addrs(&s, symbols, sections);
+                        handle_symb(res, |symb, sect| {
+                            let start : i32 = line.address.try_into().unwrap();
+                            let end   : i32 = symb.address.try_into().unwrap();
                             let offset: i32 = end - start;
-                            new_args.push(ArgValue::OFFSET(symb_sec_addr, offset));
+                            new_args.push(ArgValue::Offset(sect.address, offset));
                         });
                     },
-                    ArgValue::USEHI(s) => {
-                        let res = get_symb_addrs(&s, symbtable, secttable);
-                        handle_symb(res, |symb_sec_addr, symb_rel_addr| {
-                            let start : i32 = line.rel_addr.try_into().unwrap();
-                            let end   : i32 = symb_rel_addr.try_into().unwrap();
+                    ArgValue::UseHi(s) => {
+                        let res = get_symb_addrs(&s, symbols, sections);
+                        handle_symb(res, |symb, sect| {
+                            let start : i32 = line.address.try_into().unwrap();
+                            let end   : i32 = symb.address.try_into().unwrap();
                             let offset: i32 = end - start;
                             let hi = (offset >> 12) & 0b11111_11111_11111_11111;
-                            // println!("{} {} {} {} {}", symb_sec_addr, end, start, offset, hi);
-                            new_args.push(ArgValue::OFFSET(symb_sec_addr, hi));
+                            new_args.push(ArgValue::Offset(sect.address, hi));
                         });
                     },
-                    ArgValue::USELO(s) => {
-                        let res = get_symb_addrs(&s, symbtable, secttable);
-                        handle_symb(res, |symb_sec_addr, symb_rel_addr| {
-                            let start : i32 = line.rel_addr.try_into().unwrap();
-                            let end   : i32 = symb_rel_addr.try_into().unwrap();
+                    ArgValue::UseLo(s) => {
+                        let res = get_symb_addrs(&s, symbols, sections);
+                        handle_symb(res, |symb, sect| {
+                            let start : i32 = line.address.try_into().unwrap();
+                            let end   : i32 = symb.address.try_into().unwrap();
                             let offset: i32 = end - start;
                             let lo = offset & 0b1111_1111_1111;
-                            new_args.push(ArgValue::OFFSET(symb_sec_addr, lo));
+                            new_args.push(ArgValue::Offset(sect.address, lo));
                         });
                     },
                     _ => {
@@ -271,12 +280,15 @@ fn resolve_symbols(
                     }
                 }
             }
-            new_lines.push(SemanticLine{
-                args: new_args,
+            new_lines.push(PositionedGenericLine{
+                line: GenericLine {
+                    keyword: line.line.keyword,
+                    args: new_args
+                },
                 ..line
             });
         }
-        resolved_sections.push(SemanticBlock{
+        resolved_sections.push(PositionedGenericBlock{
             lines: new_lines,
             ..section
         });
@@ -284,59 +296,35 @@ fn resolve_symbols(
     resolved_sections
 }
 
+// 2.7 Converting all arguments to numbers
 
-
-// 3 Converting all arguments to numbers (i32)
-
-fn args_to_numbers(blocks: Vec<SemanticBlock>) -> Vec<AssemblySection> {
+fn args_to_numbers(blocks: Vec<PositionedGenericBlock>) -> Vec<EncodableBlock> {
     let mut sections = Vec::new();
     let mut instructions = Vec::new();
     for block in blocks {
         for line in block.lines {
-            let new_args: Vec<i32> = match &line.keyword {
-                KeyValue::OP(_) => {
-                    line.args.iter().filter_map(|arg| match *arg {
-                        ArgValue::REGISTER(register) => Some(register.id().into()),
-                        ArgValue::NUMBER(n) => Some(n),
-                        ArgValue::OFFSET(abs_addr, rel_addr) => {
-                            let abs_addr_unsafe = TryInto::<i32>::try_into(abs_addr)
-                                .expect("Fail when converting absolute address to relative");
-                            let final_addr: i32 = abs_addr_unsafe + rel_addr;
-                            Some(final_addr)
-                        },
-                        ArgValue::BYTE(b)   => Some(b.try_into().unwrap()),
-                        _ => panic!(),
-                    }).collect()
+            match line.line.keyword {
+                KeyValue::Op(op) => {
+                    let args: Vec<i32> = line.line.args.iter().filter_map(|arg| arg.to_number()).collect();
+                    instructions.push(EncodableLine {
+                        key: EncodableKey::Op(op),
+                        args
+                    });
                 },
-                KeyValue::DIRECTIVE(_) => {
-                    let values: Vec<i32> = line.args
+                KeyValue::AssemblyDirective(d) => {
+                    let args: Vec<i32> = line.line.args
                         .into_iter()
-                        .filter_map(
-                            |v| match v {
-                                ArgValue::BYTE(b) => Some(b.into()),
-                                _ => None,
-                            }
-                        ).collect();
-                    if values.len() > 3 {
-                        let (b0, b1, b2, b3) = (values[0], values[1], values[2], values[3]);
-                        let n: i32 = (b3 << 24) | (b2 << 16) | (b1 << 8) | b0;
-                        vec![n]
-                    }
-                    else {
-                        vec![]
-                    }
+                        .filter_map(|arg| arg.to_number()).collect();
+                    instructions.push(EncodableLine {
+                        key: EncodableKey::Directive(d),
+                        args,
+                    });
                 },
                 _ => {
-                    vec![]
                 },
             };
-            instructions.push(AssemblyInstruction {
-                addr: line.rel_addr,
-                key: line.keyword,
-                args: new_args
-            });
         }
-        sections.push(AssemblySection {
+        sections.push(EncodableBlock {
             addr: block.address,
             name: block.name,
             instructions: instructions.drain(..).collect(),
@@ -345,73 +333,53 @@ fn args_to_numbers(blocks: Vec<SemanticBlock>) -> Vec<AssemblySection> {
     sections
 }
 
-pub fn tunnel(blocks: Vec<SemanticBlock>) -> Vec{
-    let merged_blocks = merge_sections(blocks);
-    let blocks = gen_section_address(merged_blocks);
+fn encode_blocks(blocks: Vec<EncodableBlock>) -> Vec<EncodedBlock> {
+    let mut new_blocks = Vec::new();
+    for block in blocks {
+        // println!("Processing {:?}", &i.key);
+        new_blocks.push(EncodedBlock {
+            addr: block.addr,
+            name: block.name,
+            instructions: block.instructions
+                .into_iter()
+                .map(|line| line.encode())
+                .flatten()
+                .collect(),
+        });
+    }
+    new_blocks
+}
+
+pub fn to_u32(mut blocks: Vec<GenericBlock>) -> AssemblerTools {
+    let metadata = extract_metadata(&mut blocks);
+
+    let blocks = gen_positions(blocks);
+    // println!("{:?}", blocks);
+
+    let blocks = gen_section_address(blocks, 0, 4);
+    // println!("{:?}", blocks);
+
     let blocks = gen_line_address(blocks);
     // println!("{:?}", blocks);
 
-    let section_table = gen_section_table(&blocks);
-    let symbol_table  = gen_symbol_table(&blocks);
+    let sections = gen_section_table(&blocks);
+    let symbols  = gen_symbol_table(&blocks);
+    let strings  = gen_string_table(&blocks);
 
-
-    // The only difference between a SectionBlock and an AssemblySection is that the args of an
-    // assemblysection are all numbers, while sectionblocks are still unresolved (symbols + labels
-    // + other definitions)
-    // 1. Move the functions above to the assembler
-    // 2. What happens with the type associated then with the resulting output (Vec<SectionBlock>)?
-    //    it will need to be shared with the assembler, or it could be standardized
-    // 3. Enhance what a symbol is and what a section is and share those types so that the
-    //    assembler can work with them
-    //    3.1 In 'gen_symbol_table' -> a symbol has at least an address and a section
-    // 4. maybe separate the functions which produce metadata/remove directives
-
-    let blocks        = resolve_symbols(blocks, &symbol_table, &section_table);
+    let blocks = resolve_symbols(blocks, &symbols, &sections);
     // dbg!(&blocks);
 
-    let sections = args_to_numbers(blocks);
-    let metadata = metadata
-        .into_iter()
-        .map(|line| (line.keyword, line.args))
-        .collect();
-    dbg!(&sections);
+    let blocks = args_to_numbers(blocks);
+    // println!("{:?}", blocks);
 
-    ParserOutput {
+    let blocks = encode_blocks(blocks);
+    // println!("{:?}", blocks);
+
+    AssemblerTools {
         metadata,
-        section_table,
-        symbol_table,
-        sections
-    }
-}
-
-pub fn to_u32(section: AssemblySection) -> AssemblyData {
-    let mut data = Vec::new();
-
-    for i in &section.instructions {
-        // println!("Processing {:?}", &i.key);
-        match &i.key {
-            KeyValue::OP(extension) => {
-                let word = instruction_to_binary(extension, &i.args);
-                // println!("Turned into {}", word);
-                data.push(word);
-            },
-            KeyValue::DIRECTIVE(_) => {
-                let words: Vec<u32> = i.args
-                        .iter()
-                        .map(|x| *x as u32)
-                        .collect();
-                // println!("Turned into {:?}", words);
-                data.extend(words);
-            },
-            _ => {}
-        }
-    }
-    // println!("Len 1: {}", data.len());
-
-    let (addr, name) = (section.addr, section.name);
-    AssemblyData {
-        addr,
-        name,
-        data,
+        sections,
+        symbols,
+        strings,
+        blocks,
     }
 }

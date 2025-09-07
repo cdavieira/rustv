@@ -1,0 +1,60 @@
+use crate::lang::highassembly::ArgValue;
+
+
+
+
+/**
+A directive was thought to be a sequence of tokens which can be turned into a sequence of
+raw bytes (4-byte aligned)
+
+The length of the resulting vector is expected to be a multiple of 4 (to ensure 4bytes alignment)
+*/
+pub trait Directive: std::fmt::Debug {
+    fn translate(&self, args: &Vec<ArgValue>) -> Vec<u8> ;
+}
+
+
+
+
+
+// Assembly Directives implementation
+
+#[derive(Debug)]
+pub enum DirectiveInstruction {
+    Word,
+    Half,
+    Byte,
+    Skip,
+    Ascii,
+}
+
+impl Directive for DirectiveInstruction {
+    fn translate(&self, args: &Vec<ArgValue>) -> Vec<u8>  {
+        match self {
+            DirectiveInstruction::Word => {
+                match &args[0] {
+                    ArgValue::Number(n) => n.to_le_bytes().to_vec(),
+                    _ => panic!("WORD directive got something other than a number"),
+                }
+            },
+            DirectiveInstruction::Ascii => {
+                match &args[0] {
+                    ArgValue::Literal(s) => s.bytes().collect(),
+                    _ => panic!("ASCII directive got something other than a literal"),
+                }
+            },
+            DirectiveInstruction::Skip => {
+                match &args[0] {
+                    ArgValue::Number(n) => {
+                        let capacity: usize = (*n).try_into().unwrap();
+                        let mut v = Vec::new();
+                        v.reserve(capacity + capacity % 4);
+                        v
+                    },
+                    _ => panic!("SKIP directive got something other than a number"),
+                }
+            },
+            _ => panic!("Unsupported directive")
+        }
+    }
+}

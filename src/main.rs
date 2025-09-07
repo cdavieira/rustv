@@ -1,22 +1,33 @@
 pub mod tokenizer;
 pub mod streamreader;
 pub mod syntax;
-pub mod spec;
 pub mod lexer;
 pub mod utils;
 pub mod parser;
-// pub mod assembler;
-// pub mod memory;
-// pub mod cpu;
-// pub mod machine;
-// pub mod elfwriter;
-// pub mod debugger;
-// pub mod elfreader;
+pub mod assembler;
+pub mod emu {
+    pub mod cpu;
+    pub mod debugger;
+    pub mod machine;
+    pub mod memory;
+}
+pub mod lang {
+    pub mod directive;
+    pub mod ext;
+    pub mod highassembly;
+    pub mod lowassembly;
+    pub mod pseudo;
+}
+pub mod obj {
+    pub mod elfreader;
+    pub mod elfwriter;
+}
 
 use crate::tokenizer::Tokenizer;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
-// use crate::machine::Machine;
+use crate::assembler::Assembler;
+use crate::emu::machine::Machine;
 
 fn main() {
     // let code = "
@@ -69,14 +80,19 @@ fn main() {
     let mut tokenizer = syntax::gas::Tokenizer;
     let lexer = syntax::gas::Lexer;
     let parser = syntax::gas::Parser;
-    // let assembler = syntax::gas::Assembler;
+    let assembler = syntax::gas::Assembler;
 
     let tokens = tokenizer.get_tokens(code);
     println!("{:?}", &tokens);
+
     let lexemes = lexer.parse(tokens);
     println!("{:?}", &lexemes);
+
     let blocks = parser.parse(lexemes);
     println!("{:?}", &blocks);
+
+    let output = assembler.to_words(blocks);
+    println!("{:?}", output);
 
     // Export to ELF
     // let outputfile = "main.o";

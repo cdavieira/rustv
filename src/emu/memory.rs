@@ -1,7 +1,5 @@
 use std::io;
 
-// TODO: add a way to deal with the endianness
-
 pub trait Memory {
     fn endianness(&self) -> DataEndianness;
 
@@ -24,14 +22,17 @@ pub trait Memory {
     fn read_word(&self, idx: usize, res_endian: DataEndianness) -> u32 ;
     fn write_word(&mut self, idx: usize, val: u32) -> () ;
 
-    fn read_bytes(&self, start_addr: usize, count: usize, res_endian: DataEndianness, alignment: usize) -> Vec<u8> ;
+    fn read_bytes(&self, start_addr: usize, count: usize,
+        res_endian: DataEndianness, alignment: usize
+    ) -> Vec<u8> ;
     fn write_bytes(&mut self, start_addr: usize, data: &Vec<u8>) -> () {
         for (idx, i) in data.iter().enumerate() {
             self.write_byte(start_addr + idx, *i);
         }
     }
 
-    fn read_words(&self, start_addr: usize, count: usize, res_endian: DataEndianness) -> Vec<u32> ;
+    fn read_words(&self, start_addr: usize, count: usize,
+        res_endian: DataEndianness) -> Vec<u32> ;
     fn write_words(&mut self, start_addr: usize, data: &Vec<u32>) -> () {
         for (idx, i) in data.iter().enumerate() {
             self.write_word(start_addr + idx, *i);
@@ -44,9 +45,7 @@ pub trait Memory {
 /* Basic implementation */
 
 use std::fs;
-
 use object::ReadRef;
-
 use crate::utils::{DataEndianness, swap_chunk_endianness};
 
 pub struct SimpleMemory {

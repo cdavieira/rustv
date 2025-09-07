@@ -56,9 +56,15 @@ pub trait Machine {
 /* Possible implementation */
 
 use syscalls::riscv32::Sysno;
-use crate::cpu::{SimpleCPU, CPU};
-use crate::memory::{SimpleMemory, Memory};
-use crate::spec::InstructionFormat;
+use crate::emu::{
+    cpu::SimpleCPU,
+    cpu::CPU,
+};
+use crate::emu::{
+    memory::SimpleMemory,
+    memory::Memory
+};
+use crate::lang::ext::InstructionFormat;
 use crate::utils::DataEndianness;
 
 pub struct SimpleMachine {
@@ -69,7 +75,7 @@ pub struct SimpleMachine {
 
 impl Machine for SimpleMachine {
     fn from_bytes_size(byte_count: usize, machine_endian: DataEndianness) -> Self  {
-        let mut mem = SimpleMemory::new(DataEndianness::BE);
+        let mut mem = SimpleMemory::new(DataEndianness::Be);
         mem.reserve_bytes(byte_count);
         for i in 0..byte_count {
             mem.write_byte(i, 0);
@@ -82,7 +88,7 @@ impl Machine for SimpleMachine {
     }
 
     fn from_words_size(word_count: usize, machine_endian: DataEndianness) -> Self  {
-        let mut mem = SimpleMemory::new(DataEndianness::BE);
+        let mut mem = SimpleMemory::new(DataEndianness::Be);
         mem.reserve_words(word_count);
         for i in 0..word_count {
             mem.write_word(i, 0);
@@ -95,7 +101,7 @@ impl Machine for SimpleMachine {
     }
 
     fn from_bytes(data: &Vec<u8>, machine_endian: DataEndianness) -> Self  {
-        let mut mem = SimpleMemory::new(DataEndianness::BE);
+        let mut mem = SimpleMemory::new(DataEndianness::Be);
         mem.reserve_bytes(data.len());
         mem.write_bytes(0, data);
         SimpleMachine {
@@ -106,7 +112,7 @@ impl Machine for SimpleMachine {
     }
 
     fn from_words(data: &Vec<u32>, machine_endian: DataEndianness) -> Self {
-        let mut mem = SimpleMemory::new(DataEndianness::BE);
+        let mut mem = SimpleMemory::new(DataEndianness::Be);
         mem.reserve_words(data.len());
         mem.write_words(0, data);
         SimpleMachine {

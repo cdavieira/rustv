@@ -11,7 +11,7 @@ use object::write::{
     SectionId,
 };
 
-use crate::spec::AssemblySectionName;
+use crate::lang::highassembly::SectionName;
 
 
 
@@ -24,6 +24,7 @@ use crate::spec::AssemblySectionName;
 pub enum ElfWriterError {
     Build(write::Error),
     IO(std::io::Error),
+    WrongSection(String)
 }
 
 impl std::fmt::Display for ElfWriterError {
@@ -74,25 +75,19 @@ impl<'a> ElfWriter<'a> {
 
     pub fn set_section_data(
         &mut self,
-        section_name: AssemblySectionName,
+        section_name: SectionName,
         data: Vec<u8>,
         align: u64
-    )
+    ) -> Result<()>
     {
-        match section_name {
-            AssemblySectionName::TEXT => {
-                self.obj.section_mut(self.text).set_data(data, align);
-            },
-            AssemblySectionName::DATA => {
-                self.obj.section_mut(self.data).set_data(data, align);
-            },
-            AssemblySectionName::BSS  => {
-                // self.obj.section_mut(self.bss).set_data(data, align);
-            },
-            _ => {
-
-            }
-        }
+        let secid = match section_name {
+            SectionName::Text => self.text,
+            SectionName::Data => self.data,
+            SectionName::Bss  => self.bss,
+            _ => return Err(ElfWriterError::WrongSection(String::from("Can't data to custom sections yet")))
+        };
+        self.obj.section_mut(secid).set_data(data, align);
+        Ok(())
     }
 
     pub fn set_start_address(&mut self, rel_addr_to_text_sec: u64) {
@@ -111,17 +106,17 @@ impl<'a> ElfWriter<'a> {
 
     pub fn add_symbol(
         &mut self,
-        section_name: AssemblySectionName,
+        section_name: SectionName,
         rel_addr_to_sec_start: u64,
         name: &str,
         len: u64
     )
     {
         let (kind, section) = match section_name {
-            AssemblySectionName::TEXT => {
+            SectionName::Text => {
                 (write::SymbolKind::Label, self.text)
             },
-            AssemblySectionName::DATA => {
+            SectionName::Data => {
                 (write::SymbolKind::Data, self.data)
             },
             _ => panic!("Can't add symbol to this type of section"),

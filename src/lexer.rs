@@ -1,4 +1,4 @@
-use crate::spec::{ArgValue, KeyValue};
+use crate::lang::highassembly::{ArgValue, KeyValue};
 use crate::streamreader::{StreamReader, StringStreamReader};
 
 #[derive(Debug)]
@@ -18,7 +18,7 @@ pub trait Lexer {
 
 
 
-// Note: the code above was written to ease the process of implementing the 'Lexer' trait.
+// Note: the code below was written to ease the process of implementing the 'Lexer' trait.
 
 
 
@@ -209,7 +209,12 @@ Extension/PseudoInstruction/Directive
 
 // Token standardization
 
-use crate::spec::{Extension, Pseudo, Directive, Register};
+use crate::lang::{
+    ext::Extension,
+    pseudo::Pseudo,
+    directive::Directive,
+    highassembly::Register,
+};
 
 pub trait ToExtension<T> {
     fn to_extension(&self, token: T) -> Option<Box<dyn Extension>> ;

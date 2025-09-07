@@ -1,6 +1,16 @@
 pub mod gas {
-    use crate::spec::{
-        ArgValue, AssemblySectionName, Directive, DirectiveInstruction, Extension, KeyValue, Pseudo, PseudoInstruction, Register, SemanticBlock, RV32I
+    use crate::lang::{
+        highassembly::ArgValue,
+        highassembly::SectionName,
+        highassembly::KeyValue,
+        highassembly::Register,
+        highassembly::GenericBlock,
+        ext::Extension,
+        ext::RV32I,
+        pseudo::Pseudo,
+        pseudo::PseudoInstruction,
+        directive::Directive,
+        directive::DirectiveInstruction,
     };
 
     use crate::streamreader::{
@@ -23,15 +33,7 @@ pub mod gas {
 
     use crate::parser::{self};
 
-    // use crate::assembler::{self};
-    // use crate::lexer::{
-    //     self,
-    //     ToDirective,
-    //     ToExtension,
-    //     ToPseudo,
-    //     ToRegister,
-    //     TokenClassifier
-    // };
+    use crate::assembler::{self, AssemblerTools};
 
 
     /* Tokenizer */
@@ -172,8 +174,8 @@ pub mod gas {
     impl ToDirective for Lexer {
         fn to_directive(&self, token: &str) -> Option<Box<dyn Directive>>  {
             match token {
-                ".word"  => Some(Box::new(DirectiveInstruction::WORD)),
-                ".ascii" => Some(Box::new(DirectiveInstruction::ASCII)),
+                ".word"  => Some(Box::new(DirectiveInstruction::Word)),
+                ".ascii" => Some(Box::new(DirectiveInstruction::Ascii)),
                 _ => None
             }
         }
@@ -390,18 +392,19 @@ pub mod gas {
                 Token::Comma                => None,
                 Token::Op(extension)        => Some(GenericToken::KeyToken(KeyValue::Op(extension))),
                 Token::Pseudo(pseudo)       => Some(GenericToken::KeyToken(KeyValue::Pseudo(pseudo))),
-                Token::AssemblyDirective(directive) => Some(GenericToken::KeyToken(KeyValue::AssemblyDirective(directive))),
                 Token::Label(label)         => Some(GenericToken::KeyToken(KeyValue::Label(label))),
+                Token::AssemblyDirective(directive) =>
+                    Some(GenericToken::KeyToken(KeyValue::AssemblyDirective(directive))),
                 Token::Reg(register)        => Some(GenericToken::ArgToken(ArgValue::Register(register))),
                 Token::Name(name)           => Some(GenericToken::ArgToken(ArgValue::Use(name))),
                 Token::Str(literal)         => Some(GenericToken::ArgToken(ArgValue::Literal(literal))),
                 Token::Number(n)            => Some(GenericToken::ArgToken(ArgValue::Number(n))),
                 Token::Section(sec)         => {
                     match sec.as_str() {
-                        "text" => Some(GenericToken::KeyToken(KeyValue::Section(AssemblySectionName::Text))),
-                        "data" => Some(GenericToken::KeyToken(KeyValue::Section(AssemblySectionName::Data))),
-                        "bss"  => Some(GenericToken::KeyToken(KeyValue::Section(AssemblySectionName::Bss))),
-                        other  => Some(GenericToken::KeyToken(KeyValue::Section(AssemblySectionName::Custom(other.to_string())))),
+                        "text" => Some(GenericToken::KeyToken(KeyValue::Section(SectionName::Text))),
+                        "data" => Some(GenericToken::KeyToken(KeyValue::Section(SectionName::Data))),
+                        "bss"  => Some(GenericToken::KeyToken(KeyValue::Section(SectionName::Bss))),
+                        other  => Some(GenericToken::KeyToken(KeyValue::Section(SectionName::Custom(other.to_string())))),
                     }
                 },
                 Token::LinkerDirective(s)   => {
@@ -422,7 +425,7 @@ pub mod gas {
 
     impl parser::Parser for Parser {
         type Token = Token;
-        type Output = Vec<SemanticBlock>;
+        type Output = Vec<GenericBlock>;
 
         fn parse(&self, tokens: Vec<Self::Token>) -> Self::Output {
             parser::parse(tokens)
@@ -432,16 +435,16 @@ pub mod gas {
 
 
     // /* Assembler */
-    //
-    // pub struct Assembler;
-    //
-    // impl assembler::Assembler for Assembler {
-    //     type Input = spec::AssemblySection;
-    //
-    //     fn to_words(&self, instruction: Self::Input) -> AssemblyData {
-    //         assembler::to_u32(instruction)
-    //     }
-    // }
+
+    pub struct Assembler;
+
+    impl assembler::Assembler for Assembler {
+        type Input = Vec<GenericBlock>;
+
+        fn to_words(&self, instruction: Self::Input) -> AssemblerTools {
+            assembler::to_u32(instruction)
+        }
+    }
 
 
 

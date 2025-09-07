@@ -34,7 +34,7 @@ use gdbstub::stub::{run_blocking, DisconnectReason, GdbStub};
 use gdbstub::stub::SingleThreadStopReason;
 
 
-use crate::machine::Machine;
+use crate::emu::machine::Machine;
 use crate::utils::DataEndianness;
 
 
@@ -154,7 +154,7 @@ struct SimpleTarget<T: Machine> {
 
 impl<T: Machine> SimpleTarget<T> {
     pub fn from_words(mem: Vec<u32>) -> Self {
-        let machine = <T>::from_words(&mem, DataEndianness::LE);
+        let machine = <T>::from_words(&mem, DataEndianness::Le);
         SimpleTarget { machine }
     }
 }
@@ -289,8 +289,8 @@ impl<T: Machine> Breakpoints for SimpleTarget<T> {
 impl<T: Machine> SwBreakpoint for SimpleTarget<T> {
     fn add_sw_breakpoint(
         &mut self,
-        addr: u32,
-        kind: usize,
+        _addr: u32,
+        _kind: usize,
     ) -> TargetResult<bool, Self>
     {
         // println!("Trying to add a sw breakpoint at {} {}", addr, kind);
@@ -299,8 +299,8 @@ impl<T: Machine> SwBreakpoint for SimpleTarget<T> {
 
     fn remove_sw_breakpoint(
         &mut self,
-        addr: u32,
-        kind: usize,
+        _addr: u32,
+        _kind: usize,
     ) -> TargetResult<bool, Self>
     {
         // println!("Trying to rm a sw breakpoint at {} {}", addr, kind);
