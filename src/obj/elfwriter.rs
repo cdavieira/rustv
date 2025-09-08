@@ -1,15 +1,27 @@
+use object::elf::{
+    R_RISCV_HI20,
+    R_RISCV_LO12_I,
+    R_RISCV_PCREL_HI20,
+    R_RISCV_PCREL_LO12_I, R_RISCV_RELAX
+};
 use object::{
     ObjectSection,
     Endianness,
     Architecture,
     BinaryFormat,
     SectionKind,
+    RelocationTarget
 };
 
 use object::write::{
     self,
     SectionId,
+    SymbolId,
+    Relocation,
+    RelocationKind,
 };
+
+use std::collections::hash_map::HashMap;
 
 use crate::lang::highassembly::SectionName;
 
@@ -58,6 +70,7 @@ pub struct ElfWriter<'a> {
     text: SectionId,
     data: SectionId,
     bss: SectionId,
+    symbol_ids: HashMap<String, SymbolId>,
 }
 
 impl<'a> ElfWriter<'a> {
@@ -70,7 +83,8 @@ impl<'a> ElfWriter<'a> {
         let text = obj.add_section(Vec::new(), b".text".to_vec(), SectionKind::Text);
         let data = obj.add_section(Vec::new(), b".data".to_vec(), SectionKind::Data);
         let bss  = obj.add_section(Vec::new(), b".bss".to_vec(), SectionKind::UninitializedData);
-        ElfWriter { obj, text, data, bss, }
+        let symbol_ids = HashMap::new();
+        ElfWriter { obj, text, data, bss, symbol_ids, }
     }
 
     pub fn set_section_data(
@@ -121,12 +135,13 @@ impl<'a> ElfWriter<'a> {
             },
             _ => panic!("Can't add symbol to this type of section"),
         };
+
         //the symbol is going to span from
         //<start of section + rel_addr>
         //to
         //<start of section + rel_addr + len>
         //OBS: linkage scope works like static scope in C and this is what we currently support
-        self.obj.add_symbol(write::Symbol {
+        let symbol_id = self.obj.add_symbol(write::Symbol {
             name: name.bytes().collect(),
             value: rel_addr_to_sec_start,
             size: len, // ?
@@ -136,6 +151,43 @@ impl<'a> ElfWriter<'a> {
             weak: false,
             flags: write::SymbolFlags::None,
         });
+
+        self.symbol_ids.insert(name.to_string(), symbol_id);
+    }
+
+    pub fn magic(&mut self) -> Result<()> {
+        let symb0 = self.symbol_ids.get("msg").unwrap();
+        let symb = self.obj.add_symbol(write::Symbol {
+            name: b".Ltmp".to_vec(),
+            value: 4,
+            size: 0,
+            kind: object::SymbolKind::Text,
+            scope: write::SymbolScope::Compilation,
+            weak: false,
+            section: object::write::SymbolSection::Section(self.text),
+            flags: object::SymbolFlags::None,
+        });
+        let rel1 = Relocation {
+            offset: 4,
+            symbol: *symb0,
+            addend: 0,
+            flags: write::RelocationFlags::Elf { r_type: R_RISCV_PCREL_HI20 },
+        };
+        let rel2 = Relocation {
+            offset: 8,
+            symbol: symb,
+            addend: 0,
+            flags: write::RelocationFlags::Elf { r_type: R_RISCV_PCREL_LO12_I },
+        };
+        let rels = [rel1, rel2];
+        for rel in rels {
+            self.obj.add_relocation(
+                self.text,
+                rel,
+            ).unwrap();
+        }
+
+        Ok(())
     }
 
     pub fn save(&self, filename: &str) -> Result<()> {

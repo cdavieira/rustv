@@ -149,8 +149,8 @@ fn merge_blocks(blocks: Vec<GenericBlock>) -> Vec<GenericBlock> {
         }
     }
     v.push(metadata);
-    v.push(data);
     v.push(text);
+    v.push(data);
     v.push(bss);
     v
 }

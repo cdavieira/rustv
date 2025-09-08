@@ -128,10 +128,7 @@ impl ArgValue {
             ArgValue::Number(n)          => Some(*n),
             ArgValue::Register(register) => Some(register.id().into()),
             ArgValue::Offset(abs_addr, rel_addr)       => {
-                let abs_addr_unsafe = TryInto::<i32>::try_into(*abs_addr)
-                    .expect("Fail when converting absolute address to relative");
-                let final_addr: i32 = abs_addr_unsafe + rel_addr;
-                Some(final_addr)
+                todo!();
             },
             _ => None
         }

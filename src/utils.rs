@@ -63,7 +63,7 @@ pub fn encode_to_elf(code: &str, output_file: &str) -> elfwriter::Result<()> {
 
     if symbol_table.contains_key("_start") {
         let symb = symbol_table.get("_start").expect("No _start found");
-        writer.set_start_address(symb.address.try_into().unwrap());
+        writer.set_start_address(symb.relative_address.try_into().unwrap());
         symbol_table.remove("_start").unwrap();
     }
     else {
@@ -72,8 +72,10 @@ pub fn encode_to_elf(code: &str, output_file: &str) -> elfwriter::Result<()> {
 
     for (name, symb) in symbol_table {
         // TODO:
-        let length = 0;
-        writer.add_symbol(symb.section.clone(), symb.address.try_into().unwrap(), &name, length);
+        let symbol_section = symb.section.clone();
+        let symbol_addr = symb.relative_address.try_into().unwrap();
+        let length = symb.length;
+        writer.add_symbol(symbol_section, symbol_addr, &name, length as u64);
     }
     for block in blocks {
         if block.instructions.len() > 0 {
@@ -81,17 +83,25 @@ pub fn encode_to_elf(code: &str, output_file: &str) -> elfwriter::Result<()> {
             let data = words_to_bytes_le(&block.instructions);
 
             //TODO: alignment?
+            //TODO: 'data_bytes' was a workaround for adding chars of a string to the data section,
+            //as converting a u32 to u8 for ascii chars will leave 3 0's for each char converted
             match name {
                 SectionName::Text => {
                     writer.set_section_data(name.clone(), data, 4).expect("");
                 },
                 SectionName::Data => {
-                    writer.set_section_data(name.clone(), data, 1).expect("");
+                    let data_bytes: Vec<u8> = data
+                        .chunks_exact(4)
+                        .map(|chunk| chunk[0])
+                        .collect();
+                    writer.set_section_data(name.clone(), data_bytes, 1).expect("");
                 },
                 _ => {}
             }
         }
     }
+
+    writer.magic().unwrap();
 
     writer.save(output_file)
 }

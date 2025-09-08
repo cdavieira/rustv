@@ -28,7 +28,8 @@ pub trait Assembler {
 #[derive(Debug)]
 pub struct Symbol {
     pub(crate) section: SectionName,
-    pub(crate) address: usize,
+    pub(crate) relative_address: usize,
+    pub(crate) length: usize,
     pub(crate) scope: String,
 }
 
@@ -78,7 +79,7 @@ fn gen_positions(
                     .into_iter()
                     .map(|line| {
                         PositionedGenericLine {
-                            address: 0,
+                            relative_address: 0,
                             line,
                         }
                     })
@@ -90,11 +91,13 @@ fn gen_positions(
 
 // 2.1 Generating the start address of each section
 
+#[derive(Debug)]
 pub struct PositionedGenericLine {
-    address: usize, /* relative address */
+    relative_address: usize, /* relative address */
     line: GenericLine,
 }
 
+#[derive(Debug)]
 pub struct PositionedGenericBlock {
     address: usize,
     name: SectionName,
@@ -134,7 +137,7 @@ fn gen_line_address(blocks: Vec<PositionedGenericBlock>) -> Vec<PositionedGeneri
             .into_iter()
             .map(|line| {
                 let new_line = PositionedGenericLine {
-                    address: relative_address,
+                    relative_address,
                     ..line
                 };
                 relative_address += new_line.line.size_bytes_with_alignment(4);
@@ -171,10 +174,23 @@ fn gen_symbol_table(sections: &Vec<PositionedGenericBlock>) -> HashMap<String, S
         for line in &section.lines {
             match &line.line.keyword {
                 KeyValue::Label(s) => {
+                    let symbol_size = section
+                        .lines
+                        .iter()
+                        .find_map(|line| {
+                            match line.line.keyword {
+                                KeyValue::AssemblyDirective(_) => Some(line.line.size_bytes_with_alignment(1)),
+                                _ => None,
+                            }
+                        });
                     let value = Symbol {
                         section: section.name.clone(),
-                        address: line.address,
+                        relative_address: line.relative_address,
                         scope: String::from("File"),
+                        length: match symbol_size {
+                                Some(size) => size,
+                                None => 0,
+                            },
                     };
                     v.insert(s.clone(), value);
                 },
@@ -248,31 +264,46 @@ fn resolve_symbols(
                     //symbol and add some logic here to deal with this
                     ArgValue::Use(s) => {
                         let res = get_symb_addrs(&s, symbols, sections);
-                        handle_symb(res, |symb, sect| {
-                            let start : i32 = line.address.try_into().unwrap();
-                            let end   : i32 = symb.address.try_into().unwrap();
-                            let offset: i32 = end - start;
-                            new_args.push(ArgValue::Offset(sect.address, offset));
+                        handle_symb(res, |symb, symb_sect| {
+                            let line_faddr: i32 =  (section.address + line.relative_address)
+                                .try_into()
+                                .unwrap();
+                            let symb_faddr: i32 = (symb_sect.address + symb.relative_address)
+                                .try_into()
+                                .unwrap();
+                            new_args.push(ArgValue::Number(symb_faddr - line_faddr));
                         });
                     },
                     ArgValue::UseHi(s) => {
                         let res = get_symb_addrs(&s, symbols, sections);
-                        handle_symb(res, |symb, sect| {
-                            let start : i32 = line.address.try_into().unwrap();
-                            let end   : i32 = symb.address.try_into().unwrap();
-                            let offset: i32 = end - start;
-                            let hi = (offset >> 12) & 0b11111_11111_11111_11111;
-                            new_args.push(ArgValue::Offset(sect.address, hi));
+                        handle_symb(res, |symb, symb_sect| {
+                            let line_faddr: i32 =  (section.address + line.relative_address)
+                                .try_into()
+                                .unwrap();
+                            let symb_faddr: i32 = (symb_sect.address + symb.relative_address)
+                                .try_into()
+                                .unwrap();
+                            let faddr = symb_faddr - line_faddr;
+                            let hi: i32 = ((faddr >> 12) & 0b11111_11111_11111_11111)
+                                .try_into()
+                                .unwrap();
+                            new_args.push(ArgValue::Number(hi));
                         });
                     },
                     ArgValue::UseLo(s) => {
                         let res = get_symb_addrs(&s, symbols, sections);
-                        handle_symb(res, |symb, sect| {
-                            let start : i32 = line.address.try_into().unwrap();
-                            let end   : i32 = symb.address.try_into().unwrap();
-                            let offset: i32 = end - start;
-                            let lo = offset & 0b1111_1111_1111;
-                            new_args.push(ArgValue::Offset(sect.address, lo));
+                        handle_symb(res, |symb, symb_sect| {
+                            let line_faddr: i32 =  (section.address + line.relative_address)
+                                .try_into()
+                                .unwrap();
+                            let symb_faddr: i32 = (symb_sect.address + symb.relative_address)
+                                .try_into()
+                                .unwrap();
+                            let faddr = symb_faddr - line_faddr;
+                            let lo: i32 = (faddr & 0b1111_1111_1111)
+                                .try_into()
+                                .unwrap();
+                            new_args.push(ArgValue::Number(lo));
                         });
                     },
                     _ => {
@@ -305,7 +336,12 @@ fn args_to_numbers(blocks: Vec<PositionedGenericBlock>) -> Vec<EncodableBlock> {
         for line in block.lines {
             match line.line.keyword {
                 KeyValue::Op(op) => {
-                    let args: Vec<i32> = line.line.args.iter().filter_map(|arg| arg.to_number()).collect();
+                    let args: Vec<i32> = line
+                        .line
+                        .args
+                        .iter()
+                        .filter_map(|arg| arg.to_number())
+                        .collect();
                     instructions.push(EncodableLine {
                         key: EncodableKey::Op(op),
                         args
@@ -314,7 +350,8 @@ fn args_to_numbers(blocks: Vec<PositionedGenericBlock>) -> Vec<EncodableBlock> {
                 KeyValue::AssemblyDirective(d) => {
                     let args: Vec<i32> = line.line.args
                         .into_iter()
-                        .filter_map(|arg| arg.to_number()).collect();
+                        .filter_map(|arg| arg.to_number())
+                        .collect();
                     instructions.push(EncodableLine {
                         key: EncodableKey::Directive(d),
                         args,
@@ -361,19 +398,26 @@ pub fn to_u32(mut blocks: Vec<GenericBlock>) -> AssemblerTools {
 
     let blocks = gen_line_address(blocks);
     // println!("{:?}", blocks);
+    // dbg!(&blocks);
 
     let sections = gen_section_table(&blocks);
     let symbols  = gen_symbol_table(&blocks);
     let strings  = gen_string_table(&blocks);
+    // dbg!(&sections);
+    // dbg!(&symbols);
+    // dbg!(&strings);
 
     let blocks = resolve_symbols(blocks, &symbols, &sections);
+    // println!("{:?}", blocks);
     // dbg!(&blocks);
 
     let blocks = args_to_numbers(blocks);
     // println!("{:?}", blocks);
+    dbg!(&blocks);
 
     let blocks = encode_blocks(blocks);
     // println!("{:?}", blocks);
+    // dbg!(&blocks);
 
     AssemblerTools {
         metadata,

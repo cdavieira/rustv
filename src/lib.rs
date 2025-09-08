@@ -180,8 +180,8 @@ mod tests {
             assert_eq!(res, expected);
         }
 
-        #[test]
         //add, and, or (R), lui (U), jal (J), addi, andi, ori, lw (I), sw (S), beq, blt (B)
+        #[test]
         fn tokenize_rv32i_subset0(){
             let code = "
                 addi    sp, sp, 16

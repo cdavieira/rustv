@@ -1,4 +1,4 @@
-src := src/exit.s
+src := src/x7.s
 obj := $(subst src,obj,$(src:.s=.o))
 log := $(subst src,log,$(src:.s=.txt))
 elf := /home/carlos/projs/riscv32/initramfs/home/$(notdir $(subst .o,,$(obj)))
@@ -21,7 +21,7 @@ OBJDUMPFLAGS := -d
 all:
 	$(AS) $(ASFLAGS) $(src) -o $(obj)
 	@echo "$(HEXDUMP) $(HEXDUMPFLAGS) $(obj)" > $(log)
-	$(HEXDUMP) $(obj) $(HEXDUMPFLAGS) >> $(log)
+	$(HEXDUMP) $(HEXDUMPFLAGS) $(obj) >> $(log)
 	@echo -e "\n\n\n"     >> $(log)
 	@echo "$(READELF) $(READELFFLAGS) $(obj)" >> $(log)
 	$(READELF) $(READELFFLAGS) $(obj) >> $(log)

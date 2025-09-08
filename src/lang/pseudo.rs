@@ -1,7 +1,4 @@
-use crate::lang::ext::{
-    Extension,
-    RV32I,
-};
+use crate::lang::ext::RV32I;
 
 use crate::lang::highassembly::{
     ArgValue,

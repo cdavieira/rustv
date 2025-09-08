@@ -77,31 +77,31 @@ fn main() {
             ecall
     ";
 
-    let mut tokenizer = syntax::gas::Tokenizer;
-    let lexer = syntax::gas::Lexer;
-    let parser = syntax::gas::Parser;
-    let assembler = syntax::gas::Assembler;
+    // let mut tokenizer = syntax::gas::Tokenizer;
+    // let lexer = syntax::gas::Lexer;
+    // let parser = syntax::gas::Parser;
+    // let assembler = syntax::gas::Assembler;
 
-    let tokens = tokenizer.get_tokens(code);
-    println!("{:?}", &tokens);
+    // let tokens = tokenizer.get_tokens(code);
+    // println!("{:?}", &tokens);
 
-    let lexemes = lexer.parse(tokens);
-    println!("{:?}", &lexemes);
+    // let lexemes = lexer.parse(tokens);
+    // println!("{:?}", &lexemes);
 
-    let blocks = parser.parse(lexemes);
-    println!("{:?}", &blocks);
+    // let blocks = parser.parse(lexemes);
+    // println!("{:?}", &blocks);
 
-    let output = assembler.to_words(blocks);
-    println!("{:?}", output);
+    // let output = assembler.to_words(blocks);
+    // dbg!(output);
 
     // Export to ELF
-    // let outputfile = "main.o";
+    let outputfile = "main.o";
     // let code = "
     //     li a7, 93
     //     li a0, 1000
     //     ecall
     // ";
-    // utils::encode_to_elf(code, outputfile).unwrap();
+    utils::encode_to_elf(code, outputfile).unwrap();
 
     // Read ELF and execute the Machine
     // let inputfile = "main.o";
