@@ -15,8 +15,6 @@ Focus
 
 * throw errors on lexical and syntax mistakes
 
-* entender o que o auipc faz
-
 * fazer entidade Loader
 * fazer entidade Executor
 * fazer alterações propostas no Parser e Assembler (jogar resolução de simbolos para assembler)

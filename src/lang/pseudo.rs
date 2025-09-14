@@ -39,46 +39,27 @@ impl Pseudo for PseudoInstruction {
             // lui x7 1
             // addi x7 x7 2048
             PseudoInstruction::LI => {
-                let arg1 = args.get(0).unwrap();
-                let arg2 = args.get(1).unwrap();
+                let arg1 = args[0].clone();
+                let arg2 = args[1].clone();
                 match (arg1, arg2) {
-                    (ArgValue::Register(_), ArgValue::Number(n)) => {
-                        if fits_in_12bit_immediate(*n) {
+                    (ArgValue::Register(rd), ArgValue::Number(n)) => {
+                        let lo = ArgValue::Number(lower_12_bits(n));
+                        if fits_in_12bit_immediate(n) {
                             //'li' gets simplified to a 'addi' op
-                            let addi_line = OpcodeLine {
-                                keyword: Box::new(RV32I::ADDI),
-                                args: vec![
-                                    arg1.clone(),
-                                    ArgValue::Register(Register::X0),
-                                    ArgValue::Number(lower_12_bits(*n))
-                                ],
-                            };
+                            let addi_line = build_addi_line(rd, Register::ZERO, lo);
                             return vec![addi_line];
                         }
                         else {
                             //Otherwise we have to:
                             //1. load the upper 20 bits of the immediate using 'lui'
                             //2. add the upper 20 bits with 'addi'
-                            let lui_line = OpcodeLine {
-                                keyword: Box::new(RV32I::LUI),
-                                args: vec![
-                                    arg1.clone(),
-                                    ArgValue::Number(upper_20_bits(*n))
-                                ],
-                            };
-                            let addi_line = OpcodeLine {
-                                keyword: Box::new(RV32I::ADDI),
-                                args: vec![
-                                    arg1.clone(),
-                                    arg1.clone(),
-                                    ArgValue::Number(lower_12_bits(*n))
-                                ],
-                            };
+                            let hi = ArgValue::Number(upper_20_bits(n));
+                            let lui_line  = build_lui_line(rd, hi);
+                            let addi_line = build_addi_line(rd, rd, lo);
                             return vec![lui_line, addi_line];
                         }
                     }
                     _ => {
-
                     }
                 }
             },
@@ -89,8 +70,8 @@ impl Pseudo for PseudoInstruction {
                 let jalr_line = OpcodeLine {
                     keyword: Box::new(RV32I::JALR),
                     args: vec![
-                        ArgValue::Register(Register::X0),
-                        ArgValue::Register(Register::X1),
+                        ArgValue::Register(Register::ZERO),
+                        ArgValue::Register(Register::RA),
                         ArgValue::Number(0),
                     ],
                 };
@@ -100,17 +81,16 @@ impl Pseudo for PseudoInstruction {
             //mv rd, rs1, becomes:
             //addi rd, rs1, 0
             PseudoInstruction::MV => {
-                let arg1: ArgValue = args.get(0).unwrap().clone();
-                let arg2: ArgValue = args.get(1).unwrap().clone();
-                let addi_line = OpcodeLine {
-                    keyword: Box::new(RV32I::ADDI),
-                    args: vec![
-                        arg1,
-                        arg2,
-                        ArgValue::Number(0),
-                    ],
-                };
-                return vec![addi_line];
+                let arg1: ArgValue = args[0].clone();
+                let arg2: ArgValue = args[1].clone();
+                match (arg1, arg2) {
+                    (ArgValue::Register(rd), ArgValue::Register(rsrc)) => {
+                        let addi_line = build_addi_line(rd, rsrc, ArgValue::Number(0));
+                        return vec![addi_line];
+                    },
+                    _ => {
+                    }
+                }
             },
 
             // la x5, my_label, becomes:
@@ -120,61 +100,30 @@ impl Pseudo for PseudoInstruction {
             // or if %hi(my_label) == 0:
             // addi x5, x0, %lo(my_label) //12 bits
             PseudoInstruction::LA => {
-                let arg1 = args.get(0).unwrap();
-                let arg2 = args.get(1).unwrap();
+                let arg1 = args[0].clone();
+                let arg2 = args[1].clone();
 
                 // TODO: remove the use of a number as the second argument
                 match (arg1, arg2) {
-                    (ArgValue::Register(_), ArgValue::Number(n)) => {
-                        if fits_in_12bit_immediate(*n) {
-                            let addi_line = OpcodeLine {
-                                keyword: Box::new(RV32I::ADDI),
-                                args: vec![
-                                    arg1.clone(),
-                                    ArgValue::Register(Register::X0),
-                                    ArgValue::Number(lower_12_bits(*n))
-                                ],
-                            };
+                    (ArgValue::Register(rd), ArgValue::Number(n)) => {
+                        let lo = ArgValue::Number(lower_12_bits(n));
+                        if fits_in_12bit_immediate(n) {
+                            let addi_line = build_addi_line(rd, Register::ZERO, lo);
                             return vec![addi_line];
                         }
                         else {
-                            let auipc_line = OpcodeLine {
-                                keyword: Box::new(RV32I::AUIPC),
-                                args: vec![
-                                    arg1.clone(),
-                                    ArgValue::Number(upper_20_bits(*n))
-                                ],
-                            };
-                            let addi_line = OpcodeLine {
-                                keyword: Box::new(RV32I::ADDI),
-                                args: vec![
-                                    arg1.clone(),
-                                    arg1.clone(),
-                                    ArgValue::Number(lower_12_bits(*n))
-                                ],
-                            };
+                            let hi = ArgValue::Number(upper_20_bits(n));
+                            let auipc_line = build_auipc_line(rd, hi);
+                            let addi_line = build_addi_line(rd, rd, lo);
                             return vec![auipc_line, addi_line];
                         }
                     },
-                    (ArgValue::Register(_), ArgValue::Use(s)) => {
+                    (ArgValue::Register(rd), ArgValue::Use(s)) => {
                         //We can't know if HI is 0 or not, therefore we can't optimize
-                        let upper20bits = ArgValue::UseHi(s.to_string());
-                        let lower12bits = ArgValue::UseLo(s.to_string());
-                        let auipc_line = OpcodeLine {
-                            keyword: Box::new(RV32I::AUIPC),
-                            args: vec![
-                                arg1.clone(),
-                                upper20bits,
-                            ],
-                        };
-                        let addi_line = OpcodeLine {
-                            keyword: Box::new(RV32I::ADDI),
-                            args: vec![
-                                arg1.clone(),
-                                arg1.clone(),
-                                lower12bits,
-                            ],
-                        };
+                        let hi = ArgValue::UseHi(s.to_string());
+                        let lo = ArgValue::UseLo(s.to_string());
+                        let auipc_line = build_auipc_line(rd, hi);
+                        let addi_line = build_addi_line(rd, rd, lo);
                         return vec![auipc_line, addi_line];
                     },
                     _ => {
@@ -198,4 +147,35 @@ fn upper_20_bits(n: i32) -> i32 {
 
 fn lower_12_bits(n: i32) -> i32 {
     n & 0b1111_1111_1111
+}
+
+fn build_addi_line(reg1: Register, reg2: Register, n: ArgValue) -> OpcodeLine {
+    OpcodeLine {
+        keyword: Box::new(RV32I::ADDI),
+        args: vec![
+            ArgValue::Register(reg1),
+            ArgValue::Register(reg2),
+            n
+        ],
+    }
+}
+
+fn build_lui_line(reg: Register, n: ArgValue) -> OpcodeLine {
+    OpcodeLine {
+        keyword: Box::new(RV32I::LUI),
+        args: vec![
+            ArgValue::Register(reg),
+            n,
+        ],
+    }
+}
+
+fn build_auipc_line(reg: Register, n: ArgValue) -> OpcodeLine {
+    OpcodeLine {
+        keyword: Box::new(RV32I::AUIPC),
+        args: vec![
+            ArgValue::Register(reg),
+            n,
+        ],
+    }
 }

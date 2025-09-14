@@ -1,3 +1,4 @@
+use crate::lang::lowassembly::EncodedData;
 // General utilities
 use crate::tokenizer::Tokenizer;
 use crate::lexer::Lexer;
@@ -31,7 +32,11 @@ pub fn encode_to_words(code: &str) -> Vec<u32> {
     assembler.
         to_words(text)
         .blocks[0]
-        .instructions.clone()
+        .instructions
+        .iter()
+        .map(|data| data.data.clone())
+        .flatten()
+        .collect()
 }
 
 pub fn encode_to_word(code: &str) -> u32 {
@@ -58,9 +63,11 @@ pub fn encode_to_elf(code: &str, output_file: &str) -> elfwriter::Result<()> {
     // Writing to ELF
     let mut writer = elfwriter::ElfWriter::new();
     let symbol_table = &mut output.symbols;
+    let relocation_table = &output.relocations;
     let blocks = &output.blocks;
     // let section_table = &output.sections;
 
+    // TODO: how is this working if _start is in 'metadata'?
     if symbol_table.contains_key("_start") {
         let symb = symbol_table.get("_start").expect("No _start found");
         writer.set_start_address(symb.relative_address.try_into().unwrap());
@@ -80,28 +87,22 @@ pub fn encode_to_elf(code: &str, output_file: &str) -> elfwriter::Result<()> {
     for block in blocks {
         if block.instructions.len() > 0 {
             let name = &block.name;
-            let data = words_to_bytes_le(&block.instructions);
-
-            //TODO: alignment?
-            //TODO: 'data_bytes' was a workaround for adding chars of a string to the data section,
-            //as converting a u32 to u8 for ascii chars will leave 3 0's for each char converted
-            match name {
-                SectionName::Text => {
-                    writer.set_section_data(name.clone(), data, 4).expect("");
-                },
-                SectionName::Data => {
-                    let data_bytes: Vec<u8> = data
-                        .chunks_exact(4)
-                        .map(|chunk| chunk[0])
-                        .collect();
-                    writer.set_section_data(name.clone(), data_bytes, 1).expect("");
-                },
-                _ => {}
-            }
+            let data = encoded_data_to_bytes_le(&block.instructions);
+            let alignment = match name {
+                SectionName::Text => 4,
+                SectionName::Data => 1,
+                _ => panic!(""),
+            };
+            writer.set_section_data(name.clone(), data, alignment).expect("");
         }
     }
 
-    writer.magic().unwrap();
+    // writer.handle_symbol_relocation("tmp", 4u64).unwrap();
+    for (symbname, relocation) in relocation_table {
+        let offset = relocation.address.try_into().unwrap();
+        // println!("Handling relocation for symb {} at text+{}", symbname, offset);
+        writer.handle_symbol_relocation(symbname, offset).unwrap();
+    }
 
     writer.save(output_file)
 }
@@ -223,6 +224,21 @@ pub fn words_to_bytes_le(words: &Vec<u32>) -> Vec<u8> {
     words
         .iter()
         .map(|word| u32::to_le_bytes(*word))
+        .flatten()
+        .collect()
+}
+
+pub fn encoded_data_to_bytes_le(data: &Vec<EncodedData>) -> Vec<u8> {
+    data
+        .into_iter()
+        .map(|words_data| {
+            let mut raw_bytes = Vec::new();
+            for word in &words_data.data {
+                let word_bytes = u32::to_le_bytes(*word);
+                raw_bytes.extend(&word_bytes);
+            }
+            raw_bytes
+        })
         .flatten()
         .collect()
 }

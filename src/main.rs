@@ -61,6 +61,10 @@ fn main() {
             .section .data
         msg:
             .ascii \"Hello world!\n\"   // 13 bytes including newline
+        msg2:
+            .ascii \"Burrito!\n\"   // 9 bytes including newline
+        myvar:
+            .word 32
 
             .section .text
         _start:
@@ -71,6 +75,15 @@ fn main() {
             li a7, 64             // syscall: write
             ecall
 
+            // write(stdout=1, msg, len)
+       write2:
+            li a0, 1              // fd = 1 (stdout)
+            la a1, msg2           // buffer address
+            li a2, 9              // length
+            li a7, 64             // syscall: write
+            ecall
+
+       exit:
             // exit(0)
             li a0, 0              // status
             li a7, 93             // syscall: exit
@@ -95,13 +108,13 @@ fn main() {
     // dbg!(output);
 
     // Export to ELF
-    let outputfile = "main.o";
+    // let outputfile = "main.o";
     // let code = "
     //     li a7, 93
     //     li a0, 1000
     //     ecall
     // ";
-    utils::encode_to_elf(code, outputfile).unwrap();
+    // utils::encode_to_elf(code, outputfile).unwrap();
 
     // Read ELF and execute the Machine
     // let inputfile = "main.o";
@@ -112,8 +125,8 @@ fn main() {
     // assert!(m.assert_reg(10u32, 1000));
 
     // Run with GDB support
-    // let memsize = 1024*1024;
-    // let port = 9999u16;
-    // let riscv32_dbg = utils::wait_for_new_debugger_at_port(memsize, port);
-    // riscv32_dbg.custom_gdb_event_loop_thread();
+    let memsize = 1024*1024;
+    let port = 9999u16;
+    let riscv32_dbg = utils::wait_for_new_debugger_at_port(memsize, port);
+    riscv32_dbg.custom_gdb_event_loop_thread();
 }

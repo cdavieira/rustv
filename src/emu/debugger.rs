@@ -1,5 +1,9 @@
 use std::io;
-use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::net::{
+    SocketAddr,
+    TcpListener,
+    TcpStream
+};
 use std::marker::PhantomData;
 
 
@@ -70,7 +74,7 @@ impl<'a, T: Machine> SimpleGdbStub<'a, T> {
             SimpleGdbStub {
                 addr,
                 target,
-                stub
+                stub,
             }
         )
     }
@@ -150,12 +154,17 @@ fn wait_for_gdb_connection(port: u16) -> io::Result<(TcpStream, SocketAddr)> {
 // Target
 struct SimpleTarget<T: Machine> {
     machine: T,
+    breakpoints: Vec<(u32, usize)>,
 }
 
 impl<T: Machine> SimpleTarget<T> {
     pub fn from_words(mem: Vec<u32>) -> Self {
         let machine = <T>::from_words(&mem, DataEndianness::Le);
-        SimpleTarget { machine }
+        let breakpoints = Vec::new();
+        SimpleTarget {
+            machine,
+            breakpoints,
+        }
     }
 }
 
@@ -289,21 +298,35 @@ impl<T: Machine> Breakpoints for SimpleTarget<T> {
 impl<T: Machine> SwBreakpoint for SimpleTarget<T> {
     fn add_sw_breakpoint(
         &mut self,
-        _addr: u32,
-        _kind: usize,
+        addr: u32,
+        kind: usize,
     ) -> TargetResult<bool, Self>
     {
-        // println!("Trying to add a sw breakpoint at {} {}", addr, kind);
+        // According to the docs found in 'gdbstub_arch::riscv::Riscv32', kind is the 'size' to be
+        // used by this breakpoint (whatever that means)
+        println!("Trying to add a sw breakpoint at {} {}", addr, kind);
+        self.breakpoints.push((addr, kind));
         Ok(true)
     }
 
     fn remove_sw_breakpoint(
         &mut self,
-        _addr: u32,
-        _kind: usize,
+        addr: u32,
+        kind: usize,
     ) -> TargetResult<bool, Self>
     {
-        // println!("Trying to rm a sw breakpoint at {} {}", addr, kind);
+        println!("Trying to rm a sw breakpoint at {} {}", addr, kind);
+        if let Some(pair) = self.breakpoints
+            .iter()
+            .enumerate()
+            .find(|pair| {
+                    let b = pair.1;
+                    b.0 == addr && b.1 == kind
+                }
+            )
+        {
+            self.breakpoints.remove(pair.0);
+        }
         Ok(true)
     }
 }
@@ -364,8 +387,22 @@ impl<T: Machine> run_blocking::BlockingEventLoop for SimpleGdbBlockingEventLoop<
         //
         // Ok(event)
 
+        let pc_before = target.machine.read_registers()[32];
         target.machine.decode();
-        Ok(run_blocking::Event::TargetStopped(SingleThreadStopReason::DoneStep))
+        let pc_after = target.machine.read_registers()[32];
+        println!("PC updated: {} -> {}", pc_before, pc_after);
+
+        let pc_at_bkp = target.breakpoints
+            .iter()
+            .find(|bkp| {
+                bkp.0 == pc_after
+            });
+        if pc_at_bkp.is_some() {
+            Ok(run_blocking::Event::TargetStopped(SingleThreadStopReason::SwBreak(())))
+        }
+        else {
+            Ok(run_blocking::Event::TargetStopped(SingleThreadStopReason::DoneStep))
+        }
     }
 
     // Invoked when the GDB client sends a Ctrl-C interrupt.
@@ -421,7 +458,7 @@ fn custom_handle_machine_state<'a, T: Machine>(
             use run_blocking::Event as BlockingEventLoopEvent;
             use run_blocking::WaitForStopReasonError;
 
-            // println!("Running");
+            println!("Running");
 
             // block waiting for the target to return a stop reason
             let event = <SimpleGdbBlockingEventLoop<T> as run_blocking::BlockingEventLoop>::
@@ -442,7 +479,7 @@ fn custom_handle_machine_state<'a, T: Machine>(
                 Ok(BlockingEventLoopEvent::IncomingData(byte)) => {
                     if byte.is_ascii_graphic() {
                         let ch: char = byte.try_into().unwrap();
-                        // println!("Running - Got byte {}", ch);
+                        // println!("Running - Got character {}", ch);
                     }
                     else {
                         // println!("Running - Got byte {}", byte);

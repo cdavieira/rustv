@@ -1,5 +1,7 @@
 use crate::lang::highassembly::ArgValue;
 
+use super::highassembly::Datatype;
+
 
 
 
@@ -11,6 +13,7 @@ The length of the resulting vector is expected to be a multiple of 4 (to ensure 
 */
 pub trait Directive: std::fmt::Debug {
     fn translate(&self, args: &Vec<ArgValue>) -> Vec<u8> ;
+    fn datatype(&self) -> Datatype ;
 }
 
 
@@ -28,6 +31,9 @@ pub enum DirectiveInstruction {
     Ascii,
 }
 
+// WARNING: when translating a directive into its sequence of bytes, the resulting endianness
+// should be little endian, as to standardize how this data gets handled later on. If this doesn't
+// happen, then things might not work
 impl Directive for DirectiveInstruction {
     fn translate(&self, args: &Vec<ArgValue>) -> Vec<u8>  {
         match self {
@@ -55,6 +61,16 @@ impl Directive for DirectiveInstruction {
                 }
             },
             _ => panic!("Unsupported directive")
+        }
+    }
+
+    fn datatype(&self) -> Datatype {
+        match self {
+            DirectiveInstruction::Word  => Datatype::Word,
+            DirectiveInstruction::Half  => Datatype::Half,
+            DirectiveInstruction::Byte  => Datatype::Byte,
+            DirectiveInstruction::Skip  => Datatype::Byte,
+            DirectiveInstruction::Ascii => Datatype::Ascii,
         }
     }
 }

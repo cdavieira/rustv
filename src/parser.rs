@@ -155,12 +155,22 @@ fn merge_blocks(blocks: Vec<GenericBlock>) -> Vec<GenericBlock> {
     v
 }
 
-pub fn parse<T: ToGenericToken>(tokens: Vec<T>) -> Vec<GenericBlock> {
+pub fn tokens_to_lines<T: ToGenericToken>(tokens: Vec<T>) -> Vec<GenericLine> {
     let tokens = generalize_tokens(tokens);
     let groups = group_tokens(tokens);
     let lines  = expand_pseudos(groups);
     let lines  = expand_assembly_directives(lines);
+    lines
+}
+
+fn lines_to_blocks(lines: Vec<GenericLine>) -> Vec<GenericBlock> {
     let blocks = group_blocks(lines);
     let blocks = merge_blocks(blocks);
+    blocks
+}
+
+pub fn parse<T: ToGenericToken>(tokens: Vec<T>) -> Vec<GenericBlock> {
+    let lines  = tokens_to_lines(tokens);
+    let blocks = lines_to_blocks(lines);
     blocks
 }

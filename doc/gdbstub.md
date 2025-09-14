@@ -137,3 +137,42 @@ channel which is serial and uses TCP and the GDB REMOTE PROTOCOL)
 initial negotiation is handled in the code, how the gdbstub takes care of
 modifying the emulated context once an instruction arrives. All of these things
 are (somehow) documented here (somewhere)
+
+---
+
+ON HOW GDB TRANSFERS CONTROL BACK TO THE STUB WHEN THE USER RUNS THE STEP COMMAND
+
+* after the user runs the step command, the gdb client hands control to the
+stub, which gets set to the 'Running' state
+
+* the stub then hands control to the target (the emulated context), which
+proceeds its normal execution
+> notice that the steps yet to be executed by the target are expected to be
+> known by it at this point. This makes total sense, considering that the
+> target should have the program loaded into memory
+>> in code, this corresponds to a call to 'wait_for_stop_reason'
+
+* the target eventually has to hand control back to the stub and this is done
+by notifying the reason for why it has decided to stop the execution
+> the stop reason lets the stub know why the target decided to stop its
+> execution
+>> in code, this corresponds to the implementation of the
+>> 'wait_for_stop_reason' method
+>>> all stop reasons can be found in the enum 'MultiThreadStopReason'
+
+* once the stub gets handed back the control over the transmission, it informs
+the gdb client whatever had just happened in the target side
+> in code, this corresponds to a call to 'report_stop'
+>> the stub might inform different things to the gdb client (the target decided
+>> to stop, there's an incoming byte being transmitted, something happened to
+>> the connection itself or with the target)
+
+* after notifying the gdb client and if everything worked just fine, then the
+stub goes back to the 'Idle' state and keeps on waiting for more instructions
+
+* if the gdb client doesn't see a reason to stop its own execution (or
+whatever), it hands control back to the stub, waking it up once more and
+setting its state to Running
+
+* this process keeps happening until the machine informs there's nothing else
+to be done

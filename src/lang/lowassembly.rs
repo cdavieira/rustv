@@ -1,8 +1,6 @@
-use crate::lang::{
-    ext::Extension,
-    directive::Directive,
-    highassembly::SectionName,
-};
+use crate::{lang::{
+    directive::Directive, ext::Extension, highassembly::SectionName
+}, utils::print_words_hex};
 
 use super::ext::{
     ArgName,
@@ -11,6 +9,14 @@ use super::ext::{
 
 // Post symbol resolution + Post address assignment + Post block creation
 
+
+
+
+#[derive(Debug)]
+pub struct EncodedData {
+    pub data: Vec<u32>,
+    pub alignment: usize,
+}
 
 
 
@@ -30,16 +36,49 @@ pub struct EncodableLine {
 }
 
 impl EncodableLine {
-    pub fn encode(self) -> Vec<u32> {
+    pub fn encode(self) -> EncodedData {
         match self.key {
             EncodableKey::Op(op) => {
-                vec![instruction_to_binary(&op, &self.args)]
+                let data = vec![instruction_to_binary(&op, &self.args)];
+                EncodedData {
+                    data,
+                    alignment: 4,
+                }
             },
-            EncodableKey::Directive(_) => {
-                self.args
-                        .iter()
-                        .map(|x| *x as u32)
+            EncodableKey::Directive(d) => {
+                let alignment = d.datatype().alignment();
+                // println!("{:?}", &self.args);
+                let data: Vec<u32> = {
+                    let len_args = self.args.len();
+                    let exceeding_bytes = len_args % 4; //for word boundary
+                    let pad = if exceeding_bytes > 0 {
+                        4 - exceeding_bytes
+                    } else {
+                        0
+                    };
+                    let mut args = self.args.clone();
+                    for _ in 0..pad {
+                        args.push(0);
+                    }
+                    let args: Vec<u8> = args
+                        .into_iter()
+                        .map(|arg| arg as u8)
+                        .collect();
+                    args
+                        .chunks(4)
+                        .map(|chunk| {
+                            let word_bytes: [u8; 4] = chunk
+                                .try_into()
+                                .expect("Error encoding data for directive");
+                            u32::from_le_bytes(word_bytes)
+                        })
                         .collect()
+                };
+                // print_words_hex(&data[..]);
+                EncodedData {
+                    data,
+                    alignment,
+                }
             },
         }
     }
@@ -59,17 +98,17 @@ pub struct PositionedEncodableLine {
 
 
 #[derive(Debug)]
-pub struct EncodableBlock {
+pub struct PositionedEncodableBlock {
     pub addr: usize,
     pub name: SectionName,
     pub instructions: Vec<EncodableLine>
 }
 
 #[derive(Debug)]
-pub struct EncodedBlock {
+pub struct PositionedEncodedBlock {
     pub addr: usize,
     pub name: SectionName,
-    pub instructions: Vec<u32>
+    pub instructions: Vec<EncodedData>
 }
 
 

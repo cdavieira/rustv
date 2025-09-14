@@ -5,12 +5,7 @@ use object::elf::{
     R_RISCV_PCREL_LO12_I, R_RISCV_RELAX
 };
 use object::{
-    ObjectSection,
-    Endianness,
-    Architecture,
-    BinaryFormat,
-    SectionKind,
-    RelocationTarget
+    Architecture, BinaryFormat, Endianness, ObjectSection, RelocationTarget, SectionKind, SymbolSection
 };
 
 use object::write::{
@@ -155,39 +150,17 @@ impl<'a> ElfWriter<'a> {
         self.symbol_ids.insert(name.to_string(), symbol_id);
     }
 
-    pub fn magic(&mut self) -> Result<()> {
-        let symb0 = self.symbol_ids.get("msg").unwrap();
-        let symb = self.obj.add_symbol(write::Symbol {
-            name: b".Ltmp".to_vec(),
-            value: 4,
-            size: 0,
-            kind: object::SymbolKind::Text,
-            scope: write::SymbolScope::Compilation,
-            weak: false,
-            section: object::write::SymbolSection::Section(self.text),
-            flags: object::SymbolFlags::None,
-        });
-        let rel1 = Relocation {
-            offset: 4,
-            symbol: *symb0,
-            addend: 0,
-            flags: write::RelocationFlags::Elf { r_type: R_RISCV_PCREL_HI20 },
-        };
-        let rel2 = Relocation {
-            offset: 8,
-            symbol: symb,
-            addend: 0,
-            flags: write::RelocationFlags::Elf { r_type: R_RISCV_PCREL_LO12_I },
-        };
-        let rels = [rel1, rel2];
-        for rel in rels {
-            self.obj.add_relocation(
-                self.text,
-                rel,
-            ).unwrap();
-        }
-
-        Ok(())
+    pub fn handle_symbol_relocation(
+        &mut self, symbname: &str,
+        text_section_off: u64,
+    ) -> Result<()>
+    {
+        create_ext_symbol_relocatable_reference(
+            &mut self.obj,
+            self.text,
+            text_section_off,
+            &self.symbol_ids,
+            symbname)
     }
 
     pub fn save(&self, filename: &str) -> Result<()> {
@@ -195,4 +168,60 @@ impl<'a> ElfWriter<'a> {
         std::fs::write(filename, elf_bytes)?;
         Ok(())
     }
+}
+
+
+fn create_ext_symbol_relocatable_reference<'a>(
+    obj: &mut write::Object<'a>,
+    text_section_id: SectionId,
+    text_section_off: u64,
+    symbol_ids: &HashMap<String, SymbolId>,
+    symbol_name: &str,
+) -> Result<()>
+{
+    let symbol_id = symbol_ids
+        .get(symbol_name)
+        .expect("Symbol id not found when creating relocation");
+    let hi_off = text_section_off;
+    let lo_off = text_section_off + 4;
+
+    let tmp_label_name = String::from(".L") + symbol_name;
+
+    let tmp_label = write::Symbol {
+        name: tmp_label_name.bytes().collect(),
+        //4 bytes, if this label refers to an opcode instruction
+        value: hi_off,
+        size: 0,
+        kind: object::SymbolKind::Text,
+        //this label is only needed during the compilation, no need to expose it in the resulting
+        //ELF file
+        scope: write::SymbolScope::Compilation,
+        weak: false,
+        section: object::write::SymbolSection::Section(text_section_id),
+        flags: object::SymbolFlags::None,
+    };
+
+    let tmp_label_id = obj.add_symbol(tmp_label);
+
+    let symbol_hi_relocation = Relocation {
+        offset: hi_off,
+        symbol: *symbol_id,
+        addend: 0,
+        flags: write::RelocationFlags::Elf { r_type: R_RISCV_PCREL_HI20 },
+    };
+
+    let tmp_symbol_lo_relocation = Relocation {
+        offset: lo_off,
+        symbol: tmp_label_id,
+        addend: 0,
+        flags: write::RelocationFlags::Elf { r_type: R_RISCV_PCREL_LO12_I },
+    };
+
+    obj.add_relocation(text_section_id, symbol_hi_relocation)
+        .expect("Failed adding Hi relocation");
+
+    obj.add_relocation(text_section_id, tmp_symbol_lo_relocation)
+        .expect("Failed adding Lo relocation");
+
+    Ok(())
 }

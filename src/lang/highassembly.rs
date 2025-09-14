@@ -16,12 +16,13 @@ pub enum Register {
     PC,
 
     // Semantic names for the numerical variants
-    RA, // Return Address
-    SP, // Stack Pointer
-    GP, // Global Pointer
-    TP, // Thread Pointer
+    ZERO, // Null Register
+    RA,   // Return Address
+    SP,   // Stack Pointer
+    GP,   // Global Pointer
+    TP,   // Thread Pointer
     FP, S0, // Saved Register/Frame Pointer
-    S1, // Saved Register
+    S1,   // Saved Register
     A0, A1, // Function Arguments/Return Values
     A2, A3, A4, A5, A6, A7, // Function Arguments
     S2, S3, S4, S5, S6, S7, S8, S9, S10, S11, // Saved Registers
@@ -31,38 +32,38 @@ pub enum Register {
 impl Register {
     pub fn id(&self) -> u8 {
         match self {
-            Register::X0  => 0,
-            Register::X1  | Register::RA => 1,
-            Register::X2  | Register::SP => 2,
-            Register::X3  | Register::GP => 3,
-            Register::X4  | Register::TP => 4,
-            Register::X5  | Register::T0 => 5,
-            Register::X6  | Register::T1 => 6,
-            Register::X7  | Register::T2 => 7,
+            Register::X0  | Register::ZERO => 0,
+            Register::X1  | Register::RA   => 1,
+            Register::X2  | Register::SP   => 2,
+            Register::X3  | Register::GP   => 3,
+            Register::X4  | Register::TP   => 4,
+            Register::X5  | Register::T0   => 5,
+            Register::X6  | Register::T1   => 6,
+            Register::X7  | Register::T2   => 7,
             Register::X8  | Register::S0 | Register::FP => 8,
-            Register::X9  | Register::S1 => 9,
-            Register::X10 | Register::A0 => 10,
-            Register::X11 | Register::A1 => 11,
-            Register::X12 | Register::A2 => 12,
-            Register::X13 | Register::A3 => 13,
-            Register::X14 | Register::A4 => 14,
-            Register::X15 | Register::A5 => 15,
-            Register::X16 | Register::A6 => 16,
-            Register::X17 | Register::A7 => 17,
-            Register::X18 | Register::S2 => 18,
-            Register::X19 | Register::S3 => 19,
-            Register::X20 | Register::S4 => 20,
-            Register::X21 | Register::S5 => 21,
-            Register::X22 | Register::S6 => 22,
-            Register::X23 | Register::S7 => 23,
-            Register::X24 | Register::S8 => 24,
-            Register::X25 | Register::S9 => 25,
-            Register::X26 | Register::S10=> 26,
-            Register::X27 | Register::S11=> 27,
-            Register::X28 | Register::T3 => 28,
-            Register::X29 | Register::T4 => 29,
-            Register::X30 | Register::T5 => 30,
-            Register::X31 | Register::T6 => 31,
+            Register::X9  | Register::S1   => 9,
+            Register::X10 | Register::A0   => 10,
+            Register::X11 | Register::A1   => 11,
+            Register::X12 | Register::A2   => 12,
+            Register::X13 | Register::A3   => 13,
+            Register::X14 | Register::A4   => 14,
+            Register::X15 | Register::A5   => 15,
+            Register::X16 | Register::A6   => 16,
+            Register::X17 | Register::A7   => 17,
+            Register::X18 | Register::S2   => 18,
+            Register::X19 | Register::S3   => 19,
+            Register::X20 | Register::S4   => 20,
+            Register::X21 | Register::S5   => 21,
+            Register::X22 | Register::S6   => 22,
+            Register::X23 | Register::S7   => 23,
+            Register::X24 | Register::S8   => 24,
+            Register::X25 | Register::S9   => 25,
+            Register::X26 | Register::S10  => 26,
+            Register::X27 | Register::S11  => 27,
+            Register::X28 | Register::T3   => 28,
+            Register::X29 | Register::T4   => 29,
+            Register::X30 | Register::T5   => 30,
+            Register::X31 | Register::T6   => 31,
             Register::PC  => todo!(),
         }
     }
@@ -91,6 +92,28 @@ impl SectionName {
     }
     
 }
+
+
+
+
+pub enum Datatype {
+    Word,
+    Half,
+    Byte,
+    Ascii,
+}
+
+impl Datatype {
+    pub fn alignment(&self) -> usize {
+        match self {
+            Datatype::Word  => 4usize,
+            Datatype::Half  => 4usize,
+            Datatype::Byte  => 1usize,
+            Datatype::Ascii => 1usize,
+        }
+    }
+}
+
 
 
 

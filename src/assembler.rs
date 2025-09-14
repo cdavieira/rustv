@@ -6,11 +6,7 @@ use crate::lang::highassembly::{
     GenericLine,
 };
 use crate::lang::lowassembly::{
-    instruction_to_binary,
-    EncodableBlock,
-    EncodableKey,
-    EncodableLine,
-    EncodedBlock,
+    instruction_to_binary, EncodableKey, EncodableLine, EncodedData, PositionedEncodableBlock, PositionedEncodedBlock
 };
 use std::collections::HashMap;
 
@@ -40,12 +36,18 @@ pub struct Section {
 }
 
 #[derive(Debug)]
+pub struct RelocationEntry {
+    pub(crate) address: usize,
+}
+
+#[derive(Debug)]
 pub struct AssemblerTools {
     pub(crate) metadata: Option<GenericBlock>,
     pub(crate) sections: HashMap<String, Section>,
     pub(crate) symbols:  HashMap<String, Symbol>,
     pub(crate) strings:  Vec<String>,
-    pub(crate) blocks: Vec<EncodedBlock>,
+    pub(crate) relocations:  HashMap<String, RelocationEntry>,
+    pub(crate) blocks: Vec<PositionedEncodedBlock>,
 }
 
 
@@ -215,6 +217,42 @@ fn gen_string_table(sections: &Vec<PositionedGenericBlock>) -> Vec<String> {
     v
 }
 
+// 2.X Generating relocatable table
+
+fn gen_relocation_table(
+    blocks: &Vec<PositionedGenericBlock>,
+    symbols: &HashMap<String, Symbol>,
+    sections: &HashMap<String, Section>,
+) -> HashMap<String, RelocationEntry> {
+    let mut relocation_table = HashMap::new();
+    for section in blocks {
+        if section.name != SectionName::Text {
+            continue;
+        }
+        for line in &section.lines {
+            for arg in &line.line.args {
+                match arg {
+                    ArgValue::UseHi(s) => {
+                        let res = get_symb_addrs(&s, symbols, sections);
+                        handle_symb(res, |_, symb_sect| {
+                            if symb_sect.name != section.name {
+                                let relocation = RelocationEntry {
+                                    address: line.relative_address
+                                };
+                                relocation_table.insert(s.clone(), relocation);
+                            }
+                        });
+                    },
+                    ArgValue::Use(_) => panic!(),
+                    _ => {
+                    },
+                }
+            }
+        }
+    }
+    relocation_table 
+}
+
 // 2.6 Resolving symbols
 
 fn get_symb_addrs<'a, 'b>(
@@ -329,7 +367,7 @@ fn resolve_symbols(
 
 // 2.7 Converting all arguments to numbers
 
-fn args_to_numbers(blocks: Vec<PositionedGenericBlock>) -> Vec<EncodableBlock> {
+fn args_to_numbers(blocks: Vec<PositionedGenericBlock>) -> Vec<PositionedEncodableBlock> {
     let mut sections = Vec::new();
     let mut instructions = Vec::new();
     for block in blocks {
@@ -361,7 +399,7 @@ fn args_to_numbers(blocks: Vec<PositionedGenericBlock>) -> Vec<EncodableBlock> {
                 },
             };
         }
-        sections.push(EncodableBlock {
+        sections.push(PositionedEncodableBlock {
             addr: block.address,
             name: block.name,
             instructions: instructions.drain(..).collect(),
@@ -370,18 +408,17 @@ fn args_to_numbers(blocks: Vec<PositionedGenericBlock>) -> Vec<EncodableBlock> {
     sections
 }
 
-fn encode_blocks(blocks: Vec<EncodableBlock>) -> Vec<EncodedBlock> {
+fn encode_blocks(blocks: Vec<PositionedEncodableBlock>) -> Vec<PositionedEncodedBlock> {
     let mut new_blocks = Vec::new();
     for block in blocks {
         // println!("Processing {:?}", &i.key);
-        new_blocks.push(EncodedBlock {
+        new_blocks.push(PositionedEncodedBlock {
             addr: block.addr,
             name: block.name,
             instructions: block.instructions
                 .into_iter()
                 .map(|line| line.encode())
-                .flatten()
-                .collect(),
+                .collect()
         });
     }
     new_blocks
@@ -403,6 +440,7 @@ pub fn to_u32(mut blocks: Vec<GenericBlock>) -> AssemblerTools {
     let sections = gen_section_table(&blocks);
     let symbols  = gen_symbol_table(&blocks);
     let strings  = gen_string_table(&blocks);
+    let relocations = gen_relocation_table(&blocks, &symbols, &sections);
     // dbg!(&sections);
     // dbg!(&symbols);
     // dbg!(&strings);
@@ -413,7 +451,7 @@ pub fn to_u32(mut blocks: Vec<GenericBlock>) -> AssemblerTools {
 
     let blocks = args_to_numbers(blocks);
     // println!("{:?}", blocks);
-    dbg!(&blocks);
+    // dbg!(&blocks);
 
     let blocks = encode_blocks(blocks);
     // println!("{:?}", blocks);
@@ -424,6 +462,7 @@ pub fn to_u32(mut blocks: Vec<GenericBlock>) -> AssemblerTools {
         sections,
         symbols,
         strings,
+        relocations,
         blocks,
     }
 }
