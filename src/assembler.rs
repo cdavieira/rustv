@@ -6,7 +6,10 @@ use crate::lang::highassembly::{
     GenericLine,
 };
 use crate::lang::lowassembly::{
-    instruction_to_binary, EncodableKey, EncodableLine, EncodedData, PositionedEncodableBlock, PositionedEncodedBlock
+    EncodableKey,
+    EncodableLine,
+    PositionedEncodableBlock,
+    PositionedEncodedBlock,
 };
 use std::collections::HashMap;
 
@@ -58,7 +61,10 @@ fn extract_metadata(
     blocks: &mut Vec<GenericBlock>
 ) -> Option<GenericBlock>
 {
-    let pair = blocks.iter().enumerate().find(|(_, block)| block.name == SectionName::Metadata);
+    let pair = blocks
+        .iter()
+        .enumerate()
+        .find(|(_, block)| block.name == SectionName::Metadata);
     if let Some((index, _)) = pair {
         Some(blocks.remove(index))
     }
@@ -234,14 +240,14 @@ fn gen_relocation_table(
                 match arg {
                     ArgValue::UseHi(s) => {
                         let res = get_symb_addrs(&s, symbols, sections);
-                        handle_symb(res, |_, symb_sect| {
+                        if let Ok((_, symb_sect)) = res {
                             if symb_sect.name != section.name {
                                 let relocation = RelocationEntry {
                                     address: line.relative_address
                                 };
                                 relocation_table.insert(s.clone(), relocation);
                             }
-                        });
+                        };
                     },
                     ArgValue::Use(_) => panic!(),
                     _ => {
@@ -269,19 +275,20 @@ fn get_symb_addrs<'a, 'b>(
     Ok((symb, section))
 }
 
-fn handle_symb(
-    res: Result<(&Symbol, &Section), ()>,
-    mut f: impl FnMut(&Symbol, &Section) -> ()
-)
+fn compute_offset(
+    src_section: usize,
+    src_line: usize,
+    symbol: &Symbol,
+    symbol_section: &Section,
+) -> i32
 {
-    match res {
-        Ok((symb_sec_addr, symb_rel_addr)) => {
-            f(symb_sec_addr, symb_rel_addr);
-        },
-        Err(_) => {
-            panic!("handle_symb")
-        }
-    }
+    let line_faddr: i32 = (src_section + src_line)
+        .try_into()
+        .unwrap();
+    let symb_faddr: i32 = (symbol_section.address + symbol.relative_address)
+        .try_into()
+        .unwrap();
+    symb_faddr - line_faddr
 }
 
 fn resolve_symbols(
@@ -297,55 +304,34 @@ fn resolve_symbols(
             let mut new_args = Vec::new();
             for arg in line.line.args {
                 match arg {
-                    //TODO: this could be a problem if the jump is attempted to a symbol in
-                    //another section! We need to somehow store the section associated with the
-                    //symbol and add some logic here to deal with this
                     ArgValue::Use(s) => {
                         let res = get_symb_addrs(&s, symbols, sections);
-                        handle_symb(res, |symb, symb_sect| {
-                            let line_faddr: i32 =  (section.address + line.relative_address)
-                                .try_into()
-                                .unwrap();
-                            let symb_faddr: i32 = (symb_sect.address + symb.relative_address)
-                                .try_into()
-                                .unwrap();
-                            new_args.push(ArgValue::Number(symb_faddr - line_faddr));
-                        });
+                        if let Ok((symb, symb_sect)) = res {
+                            let offset = compute_offset(
+                                section.address, line.relative_address, symb, symb_sect);
+                            new_args.push(ArgValue::Number(offset));
+                        }
                     },
                     ArgValue::UseHi(s) => {
                         let res = get_symb_addrs(&s, symbols, sections);
-                        handle_symb(res, |symb, symb_sect| {
-                            let line_faddr: i32 =  (section.address + line.relative_address)
-                                .try_into()
-                                .unwrap();
-                            let symb_faddr: i32 = (symb_sect.address + symb.relative_address)
-                                .try_into()
-                                .unwrap();
-                            let faddr = symb_faddr - line_faddr;
-                            let hi: i32 = ((faddr >> 12) & 0b11111_11111_11111_11111)
-                                .try_into()
-                                .unwrap();
+                        if let Ok((symb, symb_sect)) = res {
+                            let offset = compute_offset(
+                                section.address, line.relative_address, symb, symb_sect);
+                            let hi = (offset >> 12) & 0b11111_11111_11111_11111;
                             new_args.push(ArgValue::Number(hi));
-                        });
+                        }
                     },
                     ArgValue::UseLo(s) => {
                         let res = get_symb_addrs(&s, symbols, sections);
-                        handle_symb(res, |symb, symb_sect| {
-                            let line_faddr: i32 =  (section.address + line.relative_address)
-                                .try_into()
-                                .unwrap();
-                            let symb_faddr: i32 = (symb_sect.address + symb.relative_address)
-                                .try_into()
-                                .unwrap();
-                            let faddr = symb_faddr - line_faddr;
-                            let lo: i32 = (faddr & 0b1111_1111_1111)
-                                .try_into()
-                                .unwrap();
+                        if let Ok((symb, symb_sect)) = res {
+                            let offset = compute_offset(
+                                section.address, line.relative_address, symb, symb_sect);
+                            let lo = offset & 0b1111_1111_1111;
                             new_args.push(ArgValue::Number(lo));
-                        });
+                        }
                     },
                     _ => {
-                        new_args.push(arg);
+                        new_args.push(arg.clone());
                     }
                 }
             }

@@ -1,5 +1,4 @@
 use crate::lang::lowassembly::EncodedData;
-// General utilities
 use crate::tokenizer::Tokenizer;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
@@ -207,7 +206,6 @@ pub fn rsh_mask_bits(n: &u32, bit_idx: u8, bit_amount: usize) -> u32 {
 }
 
 /// Converts a vector of u32 into a vector of u8, ensuring Big Endianness for the resulting bytes
-/// in the process
 pub fn words_to_bytes_be(words: &Vec<u32>) -> Vec<u8> {
     //n.to_be_bytes() = [n[24..32], n[16..24], n[8..16], n[0..8]]
     words
@@ -218,7 +216,7 @@ pub fn words_to_bytes_be(words: &Vec<u32>) -> Vec<u8> {
 }
 
 /// Converts a vector of u32 into a vector of u8, ensuring Little Endianness for the resulting
-/// bytes in the process
+/// bytes
 pub fn words_to_bytes_le(words: &Vec<u32>) -> Vec<u8> {
     //n.to_le_bytes() = [n[0..8], n[8..16], n[16..24], n[24..32]]
     words

@@ -425,7 +425,8 @@ mod tests {
             for reg in 0..32 {
                 cpu.write(reg, default_value);
             }
-            for reg in 0..32 {
+            assert_eq!(cpu.read(0), 0);
+            for reg in 1..32 {
                 assert_eq!(cpu.read(reg), default_value);
             }
         }

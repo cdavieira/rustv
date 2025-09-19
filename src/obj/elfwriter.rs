@@ -210,7 +210,7 @@ fn create_ext_symbol_relocatable_reference<'a>(
         flags: write::RelocationFlags::Elf { r_type: R_RISCV_PCREL_HI20 },
     };
 
-    let tmp_symbol_lo_relocation = Relocation {
+    let symbol_lo_relocation = Relocation {
         offset: lo_off,
         symbol: tmp_label_id,
         addend: 0,
@@ -220,7 +220,7 @@ fn create_ext_symbol_relocatable_reference<'a>(
     obj.add_relocation(text_section_id, symbol_hi_relocation)
         .expect("Failed adding Hi relocation");
 
-    obj.add_relocation(text_section_id, tmp_symbol_lo_relocation)
+    obj.add_relocation(text_section_id, symbol_lo_relocation)
         .expect("Failed adding Lo relocation");
 
     Ok(())

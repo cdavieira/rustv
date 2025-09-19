@@ -1,13 +1,21 @@
-use crate::{lang::{
-    directive::Directive, ext::Extension, highassembly::SectionName
-}, utils::print_words_hex};
+// Low Assembly Types are types which handle:
+// * symbol resolution
+// * absolute/relative address assignment
+// * low level details (such as binary encoding/representation)
+
+use crate::{
+    lang::{
+        directive::Directive,
+        ext::Extension,
+        highassembly::SectionName,
+    },
+    utils::print_words_hex,
+};
 
 use super::ext::{
     ArgName,
     ArgSyntax,
 };
-
-// Post symbol resolution + Post address assignment + Post block creation
 
 
 

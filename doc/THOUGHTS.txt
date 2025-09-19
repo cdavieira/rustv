@@ -63,6 +63,9 @@ Extension>, Vec<Arg>)', we wouldn't need to copy the tokens, but still thats
 kind of problematic, because this would require turning tokens into such tuples
 in at least two different places in the code.
 
+
+
+ON HOW ASSEMBLY-TO-ELF COULD WORK
 design 0
     //0. &str
     // -> 1. Vec<String>
@@ -148,6 +151,7 @@ design 2
     //3 -> 4: 
 
 
+
 ON WHAT WOULD LATER BECOME THE 'Pseudo' and 'Directive' TRAITS
 Criar trait object para pseudo e para directive (que sera uma directiva
 especifica de inserção de bytes raw)
@@ -174,3 +178,25 @@ lexer.rs, ja que nao precisara mais de tipos parametrizados.
 
 Tudo isso por sua vez vai facilitar a implementação do parser, visto que o tipo
 token podera ser utilizado diretamente nele.
+
+
+
+ON MEMORY AND MACHINE ENDIANNESS 
+* FIX how memory gets interpreted (in terms of endianness) by the debugger!
+> maybe the machine will need this additional information (memory endianness
+> and target endianness)
+>> this problem needs to be solved at the memory level... one solution would be
+>> to require the callee to specify the source endianness of the data being
+>> written and the target endianness. Then, when reading data, the callee would
+>> only have to specify the target endianness
+
+>> the machine might expect to handle data in a certain endianness which has
+>> nothing to do with the endianness used by the memory itself to store the
+>> data. Therefore, the design chosen opts to let the machine and memory have
+>> different endianness, so that they handle data however they want. The memory
+>> stores data according to the memory endianness (defined during its
+>> instantiation), and can retrieve data with the same endianness that was
+>> stored or a different one. this allows a machine (which expects data to be
+>> in a different endianness) to store the data on the memory and ask for it to
+>> give that same data back with the endianness that it understands. This
+>> allows for a complete separation of concerns.

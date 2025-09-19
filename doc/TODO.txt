@@ -1,118 +1,67 @@
 Focus
+* Prepare tests to test out all instructions from the RV32I (running in memory)
+* Improve debugger (maybe with dwarf info through gimli or addr2line)
+* Support arrays
+* Execute functions
+* Execute recursion
+
 * Set starting code address
-* Support .data section
-* Symbolic label resolution
 * Parse riscv32 elf files, decode instructions and execute them in a Virtual Context
 * Fix the binary encoding of some instruction formats
-* Organize bitwise operations in utils.rs module
-* Use relative addresses for offsets instead of absolute ones
 * Create tests to check memory alignment after Parser runs
-
-* Create and test a interface to allow writing the MVP assembly file and reading the same thing
-> Take a look at how things are parsed by the riscv32-*as assembler in alt/asm/
-
-* labels need to belong to a section. The symbol table will therefore change.
-
-* throw errors on lexical and syntax mistakes
-
-* fazer entidade Loader
-* fazer entidade Executor
-* fazer alterações propostas no Parser e Assembler (jogar resolução de simbolos para assembler)
-* possivelmente splitar o arquivo spec.rs em varios
-
--> document the different types of executor (assembly into &[u32]), debugger,
-elf parse and the differences of how data flows into the memory for each case
-
--> gather all TODOS from: utils.rs, memory.rs, machine.rs, spec.rs and lib.rs
-
--> logger?
-
-* FIX how memory gets interpreted (in terms of endianness) by the debugger!
-> maybe the machine will need this additional information (memory endianness
-> and target endianness)
->> this problem needs to be solved at the memory level... one solution would be
->> to require the callee to specify the source endianness of the data being
->> written and the target endianness. Then, when reading data, the callee would
->> only have to specify the target endianness
-
->> the machine might expect to handle data in a certain endianness which has
->> nothing to do with the endianness used by the memory itself to store the
->> data. Therefore, the design chosen opts to let the machine and memory have
->> different endianness, so that they handle data however they want. The memory
->> stores data according to the memory endianness (defined during its
->> instantiation), and can retrieve data with the same endianness that was
->> stored or a different one. this allows a machine (which expects data to be
->> in a different endianness) to store the data on the memory and ask for it to
->> give that same data back with the endianness that it understands. This
->> allows for a complete separation of concerns.
-
-* move dataendianness struct to spec?
-
-* the 'imm_*' family of functions in spec.rs cant use utils::rsh_mask_bits
-  because they operate i32 instead of u32...
-* read notes in parser.rs::parse and start from there
-* pub(crate), pub(self), pub(in path) where needed instead of raw pub
-* split spec in different files and possibly organize 'Assembly Instruction'
+* Create Loader entity
+* Create Executor entity
+	* assembly into &[u32]
+	* debugger
+	* elf parser
 
 
 Code
-* Assess the use of u32, i32, usize, ... in spec.rs and lexer::Token
+* Assess the use of u32, i32, usize, ... throughout the project
 	* Watch out for places in the code using 'as' casts
-* Write simple field evaluator
+* Write simple field evaluator to handle constant expressions?
 * Create spec::ImmediateFormat ?
-* Indicate (row, col) error for the Tokenizer trait
-	* 'reader.rs' offers a possible implementation for that
-* Wrap the return types (tokenizer, lexer, parser, ...) with 'Result<_, Box<dyn Error>>' 
 * Rewrite parts of the code where 'eprintln' is (poorly) used or isn't adequate
 * Make sure the minimal instruction set is fully supported
 	* Fix binary encoding of some instructions
-* Write code for symbolic label resolution (name to address)
-	* Read '( offset )' as one single Number or as 3 separate tokens?
-	* Right now, '( label )' is parsed as 'LPAR IDENTIFIER RPAR'
 * Support running real code in a virtual machine
 	* (cpu.rs) Prepare set of 32 registers to be R/W
 	* (memory.rs) R/W of in-memory addresses
 	* (stack.rs)
+* Write logger
 * (isa.rs) ?
 * (execcontext.rs) ?
 * (machine.rs) ?
+* Move DataEndianness to ???
+* pub(crate), pub(self), pub(in path) instead of raw pub
+* The 'imm_*' family of functions cant use utils::rsh_mask_bits because they
+  operate i32 instead of u32...
 
 
 
 Design/Improvements
 * Use &str instead of String for the Tokenizer
-* Review how pseudo instruction can be added
-	* Pseudo instructions: a set of one or more real instructions, with or
-	  without default parameters/variables
 * Review lexer/tokenizer names
 	* Lexer isnt really a lexer, more like a categorizer/classifier/parser
-* Save the tokenizer/lexer classification and maybe reuse it later
-* Standardize the implementation of the Token enum for the lexer could become a standard
 * Review how args (for instructions) are being handled
 	* This is a vector of 0-3 elements
 	* The instruction requires a syntax and args, which are then parsed by the function 'get_args'
 * Improve how 'parser::group_tokens' is implemented
 * Review using 'Rc' in order to reduce the number of duplicates for instances of 'dyn Extension'
-* Rename 'parser::Keyword' to 'parser::StartOfInstruction' or smth?
 
 
 
 Test
 * Add second extension
 	* Check how hard it is to add a new extension
-* Add tests for the gas syntax implementation
-	* Test if its assembler is generating the right instruction binaries
 
 
 
 Docs
-* Document Parser.rs
 
 
 
 Misc
-* Write CPU and tests
-* Write Memory and tests
 
 
 

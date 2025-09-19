@@ -22,8 +22,6 @@ pub trait Lexer {
 
 
 
-// Implementation 1
-
 pub enum TokenClass {
     NUMBER,
     STRING,
@@ -39,8 +37,6 @@ pub enum TokenClass {
 }
 
 /**
-The 'Lexer' Trait is implemented for any entity which implements the 'lexer::TokenClassifier' trait
-
 'lexer::TokenClassifier': a strategy where N chars can be mapped to one of the categories/variants stored in enum 'TokenClass'. The implementor is responsible for the mapping
 */
 pub trait TokenClassifier {
@@ -142,6 +138,9 @@ pub trait TokenClassifier {
     }
 }
 
+/*
+The 'Lexer' Trait is implemented for any entity which implements the 'lexer::TokenClassifier' trait
+*/
 impl<T: ToGenericToken, C: TokenClassifier<Token = T>> Lexer for C {
     type Token = T;
 
@@ -162,28 +161,17 @@ impl<T: ToGenericToken, C: TokenClassifier<Token = T>> Lexer for C {
 
 
 
-// Implementation 2
-
-// TODO: adapt this text
 /*
-'Implementation 1' is complemented by 'Implementation 2', which takes the responsability
-of defining what a token is, instead of letting this detail to be implemented by the trait
-implementor. This eases the process of building the parser later on, as the parser can reliably
-work with that token definition, instead of having to work with a myriad of possible inputs.
-
 In this implementation, it's the lexer job to:
-0. (Optional, not recommended) Implement extensions to be supported as an Enum which implements the
-   'spec::Extension' trait
+0. (Optional, not recommended) Implement extensions to be supported as an Enum which implements the 'Extension' trait
 1. Map the symbolic representation of all or a subset of the instructions of an Extension to their
    correspondent enum variant through the 'ToExtension' trait
 
-2. (Optional) Implement the pseudo instructions to be supported as an Enum which
-   implements the 'spec::Pseudo' trait
+2. (Optional) Implement pseudo instructions to be supported as an Enum which implements the 'Pseudo' trait
 3. Map the symbolic representation of each pseudo instruction to their correspondent enum variant
    through the 'ToPseudo' trait
 
-4. (Optional) Implement the directives to be supported as an Enum which implements the
-   'spec::Directive' trait
+4. (Optional) Implement the directives to be supported as an Enum which implements the 'Directive' trait
 5. Map the symbolic representation of each directive to their correspondent enum variant through
    the 'ToDirective' trait
 

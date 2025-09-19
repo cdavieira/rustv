@@ -129,9 +129,9 @@ fn main() {
     // assert!(m.assert_reg(10u32, 1000));
 
     // Run with GDB support
-    let memsize = 1024*1024;
-    let port = 9999u16;
-    let riscv32_dbg = utils::wait_for_new_debugger_at_port(memsize, port);
-    riscv32_dbg.custom_gdb_event_loop_thread();
+    // let memsize = 1024*1024;
+    // let port = 9999u16;
+    // let riscv32_dbg = utils::wait_for_new_debugger_at_port(memsize, port);
+    // riscv32_dbg.custom_gdb_event_loop_thread();
     // riscv32_dbg.default_gdb_event_loop_thread();
 }

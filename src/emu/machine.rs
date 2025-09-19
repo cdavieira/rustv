@@ -149,7 +149,7 @@ impl Machine for SimpleMachine {
                     (0b0000000, 0b000) => {
                         self.cpu.write(rd as usize, v1 + v2);
                     }, //ADD
-                    (0b1000000, 0b000) => {
+                    (0b0100000, 0b000) => {
                         self.cpu.write(rd as usize, v1 - v2);
                     }, //SUB
                     (0b0000000, 0b111) => {

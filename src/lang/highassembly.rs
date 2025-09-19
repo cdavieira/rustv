@@ -1,3 +1,7 @@
+// High Assembly Types are types which predate:
+// * symbol resolution
+// * absolute/relative address assignment
+
 use crate::lang::{
     directive::Directive,
     ext::Extension,
@@ -116,8 +120,6 @@ impl Datatype {
 
 
 
-
-// Pre symbol resolution + Pre address assignment + Pre block creation
 
 #[derive(Debug)]
 pub enum KeyValue {
