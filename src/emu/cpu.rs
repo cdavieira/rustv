@@ -30,6 +30,9 @@ impl SimpleCPU {
 
 impl CPU for SimpleCPU {
     fn write(&mut self, reg: usize, v: u32) {
+        if reg == 0 {
+            return;
+        }
         if let Some(r) = self.registers.get_mut(reg) {
             *r = v;
         }
@@ -55,6 +58,7 @@ impl CPU for SimpleCPU {
         state
     }
 
+    // TODO: avoid writing to the ZERO register
     fn write_all(&mut self, gps: Vec<u32>, pc: usize) -> () {
         // println!("Writing all registers");
         for (idx, reg) in gps.into_iter().enumerate() {

@@ -82,6 +82,10 @@ fn main() {
             li a2, 9              // length
             li a7, 64             // syscall: write
             ecall
+       sub_op:
+            sub a7,a2,t2
+       xor_op:
+            xor a1,a1,a1
 
        exit:
             // exit(0)
@@ -129,4 +133,5 @@ fn main() {
     let port = 9999u16;
     let riscv32_dbg = utils::wait_for_new_debugger_at_port(memsize, port);
     riscv32_dbg.custom_gdb_event_loop_thread();
+    // riscv32_dbg.default_gdb_event_loop_thread();
 }
