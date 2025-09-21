@@ -1,4 +1,4 @@
-src := src/x7.s
+src := src/addi.s
 obj := $(subst src,obj,$(src:.s=.o))
 log := $(subst src,log,$(src:.s=.txt))
 elf := /home/carlos/projs/riscv32/initramfs/home/$(notdir $(subst .o,,$(obj)))

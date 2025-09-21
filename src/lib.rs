@@ -36,7 +36,7 @@ mod tests {
         use crate::lexer::Lexer;
         use crate::parser::Parser;
         use crate::assembler::Assembler;
-        use crate::lang::highassembly::SectionName;
+        use crate::lang::highassembly::{Register, SectionName};
         use crate::emu::{
             memory::Memory,
             memory::SimpleMemory,
@@ -527,6 +527,131 @@ mod tests {
 
 
 
+
+        // Test ISA
+        fn isa_rvi32(code: &str) -> SimpleMachine {
+            let words = encode_to_words(code);
+            let mut m = SimpleMachine::from_words(&words, DataEndianness::Be);
+            for _word in words {
+                m.decode();
+            }
+            m
+        }
+
+        #[test]
+        fn isa_rvi32_add() {
+            let code = "
+                li a2, 90
+                li a3, 150
+                add a1, a2, a3
+            ";
+            let m = isa_rvi32(code);
+            assert!(m.assert_reg(Register::A1.id().into(), 240));
+        }
+
+        #[test]
+        fn isa_rvi32_sub() {
+            let code = "
+                li a2, 90
+                li a3, 150
+                sub a1, a2, a3
+            ";
+            let m = isa_rvi32(code);
+            let n = -60;
+            assert!(m.assert_reg(Register::A1.id().into(), n as u32));
+        }
+
+        #[test]
+        fn isa_rvi32_and() {
+            let code = "
+                li a2, 6
+                li a3, 2
+                and a1, a2, a3
+            ";
+            let m = isa_rvi32(code);
+            assert!(m.assert_reg(Register::A1.id().into(), 2));
+        }
+
+        #[test]
+        fn isa_rvi32_or() {
+            let code = "
+                li a2, 1
+                li a3, 2
+                or a1, a2, a3
+            ";
+            let m = isa_rvi32(code);
+            assert!(m.assert_reg(Register::A1.id().into(), 3));
+        }
+
+        #[test]
+        fn isa_rvi32_xor() {
+            let code = "
+                li a2, 90
+                xor a2, a2, a2
+            ";
+            let m = isa_rvi32(code);
+            assert!(m.assert_reg(Register::A1.id().into(), 0));
+        }
+
+        #[test]
+        fn isa_rvi32_sll() {
+            let code = "
+                li a2, 4
+                li a3, 2
+                sll a1, a2, a3
+            ";
+            let m = isa_rvi32(code);
+            assert!(m.assert_reg(Register::A1.id().into(), 16));
+        }
+
+        #[test]
+        fn isa_rvi32_srl() {
+            let code = "
+                li a2, 4
+                li a3, 2
+                srl a1, a2, a3
+            ";
+            let m = isa_rvi32(code);
+            assert!(m.assert_reg(Register::A1.id().into(), 1));
+        }
+
+        #[test]
+        fn isa_rvi32_jalr() {
+            let code = "
+                li a2, 4
+                jalr ra, a2, 8
+            ";
+            let m = isa_rvi32(code);
+            assert!(m.assert_reg(Register::RA.id().into(), 8));
+            assert!(m.assert_pc(16));
+        }
+
+        #[test]
+        fn isa_rvi32_addi() {
+            let code = "
+                li a2, 4
+                addi a1, a2, 8
+                addi a3, a2, 80000
+            ";
+            let m = isa_rvi32(code);
+            assert!(m.assert_reg(Register::A1.id().into(), 12));
+            assert!(m.assert_reg(Register::A3.id().into(), 80004));
+        }
+
+        #[test]
+        fn isa_rvi32_andi() {
+            let code = "
+                li a2, 6
+                andi a1, a2, 4
+            ";
+            let m = isa_rvi32(code);
+            assert!(m.assert_reg(Register::A1.id().into(), 4));
+        }
+
+
+
+
+
         // Test elf R/W
         #[test]
         fn elf_write() {
@@ -539,7 +664,8 @@ mod tests {
 
             let mut writer = ElfWriter::new();
             writer.set_start_address(0);
-            writer.set_section_data(SectionName::Text, bytes, 4);
+            writer.set_section_data(SectionName::Text, bytes, 4)
+                .expect("error setting text data");
             let write_res = writer.save(filename);
             let rem_res = std::fs::remove_file(filename);
 
@@ -558,7 +684,8 @@ mod tests {
             // Writing temporary ELF file
             let mut writer = ElfWriter::new();
             writer.set_start_address(0);
-            writer.set_section_data(SectionName::Text, bytes, 4);
+            writer.set_section_data(SectionName::Text, bytes, 4)
+                .expect("error setting text data");
             let write_res = writer.save(filename);
             assert!(write_res.is_ok());
 
@@ -579,7 +706,7 @@ mod tests {
 
         #[test]
         fn elf_rw() {
-            let filename = "test_elf_write.o";
+            let filename = "test_elf_rw.o";
             let code = "
                 li a7, 93 // Linux syscall: exit
                 li a0, 0  // return code 0
@@ -593,7 +720,8 @@ mod tests {
             // Saving the binary code in the ELF format
             let mut writer = ElfWriter::new();
             writer.set_start_address(0);
-            writer.set_section_data(SectionName::Text, bytes_written.clone(), 4);
+            writer.set_section_data(SectionName::Text, bytes_written.clone(), 4)
+                .expect("error setting text data");
             let write_res = writer.save(filename);
             assert!(write_res.is_ok());
 

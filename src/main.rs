@@ -27,7 +27,14 @@ use crate::tokenizer::Tokenizer;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
 use crate::assembler::Assembler;
-use crate::emu::machine::Machine;
+use crate::emu::machine::{
+    Machine,
+    SimpleMachine,
+};
+use crate::utils::{
+    encode_to_words,
+    DataEndianness,
+};
 
 fn main() {
     // let code = "
@@ -93,6 +100,10 @@ fn main() {
             li a7, 93             // syscall: exit
             ecall
     ";
+    let code = "
+        li a2, 4
+        jalr ra, a2, 8
+    ";
 
     // let mut tokenizer = syntax::gas::Tokenizer;
     // let lexer = syntax::gas::Lexer;
@@ -134,4 +145,17 @@ fn main() {
     // let riscv32_dbg = utils::wait_for_new_debugger_at_port(memsize, port);
     // riscv32_dbg.custom_gdb_event_loop_thread();
     // riscv32_dbg.default_gdb_event_loop_thread();
+
+    // Run instructions in memory
+    let words = encode_to_words(code);
+    let mut m = SimpleMachine::from_words(&words, DataEndianness::Be);
+    for _word in words {
+        m.decode();
+    }
+    let r: Vec<_> = m
+        .read_registers()
+        .into_iter()
+        .map(|reg| reg as i32)
+        .collect();
+    println!("{:?}", r);
 }

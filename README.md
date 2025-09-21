@@ -141,7 +141,7 @@ gdb> load
 # add breakpoints
 gdb> b _start
 # step/run the program execution
-gdb> s
+gdb> si
 ```
 
 

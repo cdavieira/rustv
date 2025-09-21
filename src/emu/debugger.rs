@@ -1,4 +1,7 @@
-use std::io;
+use std::io::{
+    self,
+    Read,
+};
 use std::net::{
     SocketAddr,
     TcpListener,
@@ -152,18 +155,30 @@ fn wait_for_gdb_connection(port: u16) -> io::Result<(TcpStream, SocketAddr)> {
 
 
 // Target
+
+enum TargetState {
+    Idle,
+    Running,
+    Continuing,
+    Stepping,
+    Trapped,
+}
+
 struct SimpleTarget<T: Machine> {
     machine: T,
     breakpoints: Vec<(u32, usize)>,
+    state: TargetState,
 }
 
 impl<T: Machine> SimpleTarget<T> {
     pub fn from_words(mem: Vec<u32>) -> Self {
         let machine = <T>::from_words(&mem, DataEndianness::Le);
         let breakpoints = Vec::new();
+        let state = TargetState::Idle;
         SimpleTarget {
             machine,
             breakpoints,
+            state,
         }
     }
 }
@@ -261,7 +276,7 @@ impl<T: Machine> SingleThreadResume for SimpleTarget<T> {
         &mut self,
         _signal: Option<Signal>,
     ) -> Result<(), Self::Error> {
-        println!("\n###Resume!");
+        self.state = TargetState::Running;
         Ok(())
     }
 
@@ -282,8 +297,7 @@ impl<T: Machine> SingleThreadSingleStep for SimpleTarget<T> {
         _signal: Option<Signal>,
     ) -> Result<(), Self::Error>
     {
-        println!("\n###Step!");
-        // self.machine.decode();
+        self.state = TargetState::Stepping;
         Ok(())
     }
 }
@@ -358,7 +372,7 @@ impl<T: Machine> run_blocking::BlockingEventLoop for SimpleGdbBlockingEventLoop<
     // reports a stop reason, or if new data was sent over the connection.
     fn wait_for_stop_reason(
         target: &mut SimpleTarget<T>,
-        _conn: &mut Self::Connection,
+        conn: &mut Self::Connection,
     ) -> Result<
         run_blocking::Event<SingleThreadStopReason<u32>>,
         run_blocking::WaitForStopReasonError<
@@ -389,26 +403,91 @@ impl<T: Machine> run_blocking::BlockingEventLoop for SimpleGdbBlockingEventLoop<
         //
         // Ok(event)
 
-        println!("\nBreakpoints:");
-        for bkp in &target.breakpoints {
-            println!("{:x}: {}", bkp.0, bkp.1);
-        }
+        // println!("\nBreakpoints:");
+        // for bkp in &target.breakpoints {
+        //     println!("{:x}: {}", bkp.0, bkp.1);
+        // }
+        //
+        // let pc_before = target.machine.read_registers()[32];
+        // let pc_at_bkp = target.breakpoints
+        //     .iter()
+        //     .find(|bkp| {
+        //         bkp.0 == pc_before
+        //     });
+        // if pc_at_bkp.is_some() {
+        //     println!("PC frozen because of breakpoint");
+        //     return Ok(run_blocking::Event::TargetStopped(SingleThreadStopReason::SwBreak(())));
+        // }
+        //
+        // target.machine.decode();
+        // let pc_after = target.machine.read_registers()[32];
+        // println!("PC updated: {:x} -> {:x}", pc_before, pc_after);
+        // Ok(run_blocking::Event::TargetStopped(SingleThreadStopReason::DoneStep))
 
-        let pc_before = target.machine.read_registers()[32];
-        let pc_at_bkp = target.breakpoints
-            .iter()
-            .find(|bkp| {
-                bkp.0 == pc_before
-            });
-        if pc_at_bkp.is_some() {
-            println!("PC frozen because of breakpoint");
-            return Ok(run_blocking::Event::TargetStopped(SingleThreadStopReason::SwBreak(())));
-        }
+        loop {
+            // Try a non-blocking read for incoming data (so GDB can interrupt).
+            // Connection here is TcpStream; set nonblocking briefly.
+            let _ = conn.set_nonblocking(true);
+            let mut buf = [0u8; 1];
+            match Read::read(conn, &mut buf) {
+                Ok(1) => {
+                    let _ = conn.set_nonblocking(false);
+                    return Ok(run_blocking::Event::IncomingData(buf[0]));
+                }
+                Ok(0) => {
+                    let _ = conn.set_nonblocking(false);
+                    return Err(run_blocking::WaitForStopReasonError::Connection(
+                        std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "connection closed").into()
+                    ));
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                    let _ = conn.set_nonblocking(false);
+                    // no data pending; fall through and run the target for one insn
+                }
+                Err(e) => {
+                    let _ = conn.set_nonblocking(false);
+                    return Err(run_blocking::WaitForStopReasonError::Connection(e.into()));
+                }
+                Ok(_) => panic!(),
+            }
 
-        target.machine.decode();
-        let pc_after = target.machine.read_registers()[32];
-        println!("PC updated: {:x} -> {:x}", pc_before, pc_after);
-        Ok(run_blocking::Event::TargetStopped(SingleThreadStopReason::DoneStep))
+            match target.state {
+                TargetState::Stepping => {
+                    let pc_before = target.machine.read_registers()[32];
+                    target.machine.decode(); // execute one instruction
+                    let pc_after = target.machine.read_registers()[32];
+
+                    // if we hit a breakpoint, report SwBreak; else DoneStep
+                    if target.breakpoints.iter().any(|b| b.0 == pc_after) {
+                        target.state = TargetState::Idle;
+                        return Ok(run_blocking::Event::TargetStopped(SingleThreadStopReason::SwBreak(())));
+                    } else {
+                        target.state = TargetState::Idle;
+                        return Ok(run_blocking::Event::TargetStopped(SingleThreadStopReason::DoneStep));
+                    }
+                }
+
+                TargetState::Running => {
+                    // Execute a single instruction per loop to remain responsive.
+                    target.machine.decode();
+                    let pc = target.machine.read_registers()[32];
+                    if target.breakpoints.iter().any(|b| b.0 == pc) {
+                        target.state = TargetState::Idle;
+                        return Ok(run_blocking::Event::TargetStopped(SingleThreadStopReason::SwBreak(())));
+                    }
+                    // continue the loop (we'll check incoming data every iteration)
+                }
+
+                TargetState::Idle => {
+                    // nothing to do: sleep a bit to avoid burning CPU
+                    std::thread::sleep(std::time::Duration::from_millis(1));
+                }
+
+                _ => {
+
+                }
+            }
+        }
     }
 
     // Invoked when the GDB client sends a Ctrl-C interrupt.
@@ -439,7 +518,7 @@ fn custom_handle_machine_state<'a, T: Machine>(
     match stub_sm {
         gdbstub::stub::state_machine::GdbStubStateMachine::Idle(mut gdb_stub_state_machine_inner) => {
             // println!("Idle");
-            let read_result = gdb_stub_state_machine_inner.borrow_conn().read();
+            let read_result = ConnectionExt::read(gdb_stub_state_machine_inner.borrow_conn());
             match read_result {
                 Ok(byte) => {
                     if byte.is_ascii_graphic() {

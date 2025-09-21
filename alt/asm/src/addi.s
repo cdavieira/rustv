@@ -10,6 +10,8 @@ main:
 	lw	ra, 12(sp)
 	lw	s0, 8(sp)
 	addi	sp, sp, 16
+	li      t2, 400
+	addi	t1, t2, 80000
 
 	addi	t3,t2,8
 
