@@ -9,7 +9,7 @@ pub trait Machine {
 
 
     // Core
-    fn load(&mut self, instrs: &Vec<u32>) -> () ;
+    fn load(&mut self, start_addr: usize, instrs: &Vec<u32>) -> () ;
     fn fetch(&self) -> u32 ;
     fn jump(&mut self, off: usize) -> () ;
     fn decode(&mut self) -> () ;
@@ -61,9 +61,11 @@ use crate::emu::{
     memory::SimpleMemory,
     memory::Memory
 };
-use crate::lang::ext::{Extension, InstructionFormat, RV32I};
+use crate::lang::ext::{
+    InstructionFormat,
+};
 use crate::lang::highassembly::Register;
-use crate::utils::DataEndianness;
+use crate::lang::lowassembly::DataEndianness;
 
 pub struct SimpleMachine {
     cpu: SimpleCPU,
@@ -120,8 +122,8 @@ impl Machine for SimpleMachine {
         }
     }
 
-    fn load(&mut self, instrs: &Vec<u32>) -> () {
-        self.mem.write_words(0, instrs);
+    fn load(&mut self, start_addr: usize, instrs: &Vec<u32>) -> () {
+        self.mem.write_words(start_addr, instrs);
     }
 
     fn fetch(&self) -> u32  {
@@ -313,7 +315,7 @@ fn handle(m: &mut SimpleMachine, word: u32) -> () {
                 }, // XORI  
                 (0b010, 0b0000011) => {
                     // TODO: use sign extension
-                    let addr = rs1_val + (imm << 20);
+                    let addr = (rs1_val as i32) + (imm as i32);
                     let v = m.mem.read_word(addr as usize, m.endian);
                     m.cpu.write(rd as usize, v);
                 }, // LW

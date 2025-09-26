@@ -118,10 +118,10 @@ impl Pseudo for PseudoInstruction {
                             return vec![auipc_line, addi_line];
                         }
                     },
-                    (ArgValue::Register(rd), ArgValue::Use(s)) => {
+                    (ArgValue::Register(rd), ArgValue::Use(s, off)) => {
                         //We can't know if HI is 0 or not, therefore we can't optimize
-                        let hi = ArgValue::UseHi(s.to_string());
-                        let lo = ArgValue::UseLo(s.to_string());
+                        let hi = ArgValue::UseHi(s.to_string(), off);
+                        let lo = ArgValue::UseLo(s.to_string(), off);
                         let auipc_line = build_auipc_line(rd, hi);
                         let addi_line = build_addi_line(rd, rd, lo);
                         return vec![auipc_line, addi_line];

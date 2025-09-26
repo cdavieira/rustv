@@ -1,41 +1,50 @@
-use crate::lang::lowassembly::EncodedData;
+use crate::lang::lowassembly::{
+    DataEndianness,
+    EncodedData,
+};
 use crate::tokenizer::Tokenizer;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
-use crate::assembler::Assembler;
+use crate::assembler::{
+    Assembler,
+    AssemblerTools,
+};
 use crate::syntax;
-use crate::lang::highassembly::{GenericBlock, SectionName};
-use crate::emu::machine::{Machine, SimpleMachine};
+use crate::lang::highassembly::{
+    SectionName,
+};
+use crate::emu::machine::{
+    Machine,
+    SimpleMachine,
+};
 use crate::emu::debugger::SimpleGdbStub;
 use crate::obj::elfwriter;
 use crate::obj::elfreader;
 
-pub fn encode_to_words(code: &str) -> Vec<u32> {
+pub fn build_code_repr(code: &str) -> AssemblerTools {
     let mut tokenizer = syntax::gas::Tokenizer;
     let lexer = syntax::gas::Lexer;
     let parser = syntax::gas::Parser;
     let assembler = syntax::gas::Assembler;
 
     let tokens = tokenizer.get_tokens(code);
+    // println!("{:?}", &tokens);
+
     let lexemes = lexer.parse(tokens);
+    println!("{:?}", &lexemes);
+
     let blocks = parser.parse(lexemes);
-    let text: Vec<GenericBlock> = blocks
-        .into_iter()
-        .filter(|block| {
-            match block.name {
-                SectionName::Text => true,
-                _ => false
-            }
-        })
-        .collect();
-    assembler.
-        to_words(text)
-        .blocks[0]
-        .instructions
-        .iter()
-        .map(|data| data.data.clone())
-        .flatten()
-        .collect()
+    // println!("{:?}", &blocks);
+
+    let tools = assembler.assemble(blocks);
+    // dbg!(&tools);
+
+    tools
+}
+
+pub fn encode_to_words(code: &str) -> Vec<u32> {
+    build_code_repr(code)
+        .text_section_words()
 }
 
 pub fn encode_to_word(code: &str) -> u32 {
@@ -43,21 +52,7 @@ pub fn encode_to_word(code: &str) -> u32 {
 }
 
 pub fn encode_to_elf(code: &str, output_file: &str) -> elfwriter::Result<()> {
-    let mut t = syntax::gas::Tokenizer;
-    let l = syntax::gas::Lexer;
-    let p = syntax::gas::Parser;
-    let s = syntax::gas::Assembler;
-
-    let tokens = t.get_tokens(code);
-    // println!("{:?}", &tokens);
-
-    let lexemes = l.parse(tokens);
-    // println!("{:?}", &lexemes);
-
-    let blocks = p.parse(lexemes);
-    // println!("{:?}", &lexemes);
-
-    let mut output = s.to_words(blocks);
+    let mut output = build_code_repr(code);
 
     // Writing to ELF
     let mut writer = elfwriter::ElfWriter::new();
@@ -99,8 +94,9 @@ pub fn encode_to_elf(code: &str, output_file: &str) -> elfwriter::Result<()> {
     // writer.handle_symbol_relocation("tmp", 4u64).unwrap();
     for (symbname, relocation) in relocation_table {
         let offset = relocation.address.try_into().unwrap();
+        let addend = relocation.addend;
         // println!("Handling relocation for symb {} at text+{}", symbname, offset);
-        writer.handle_symbol_relocation(symbname, offset).unwrap();
+        writer.handle_symbol_relocation(symbname, offset, addend).unwrap();
     }
 
     writer.save(output_file)
@@ -116,10 +112,80 @@ pub fn new_machine_from_elf_textsection(filename: &str) -> SimpleMachine {
     )
         .expect("Failed instantiating elf file reader");
 
-    let textdata = reader.text_section();
-    print_bytes_hex(textdata);
+    let textdata = &reader.section(".text").data;
+    // print_bytes_hex(textdata);
 
     SimpleMachine::from_bytes(textdata, DataEndianness::Be)
+}
+
+pub fn new_machine_from_tools(
+    tools: &AssemblerTools,
+) -> SimpleMachine
+{
+    let textsec = tools.sections.get(".text").unwrap();
+    let textdata = tools.text_section_words();
+    let text_start = textsec.address;
+    let textdata = words_to_bytes_be(&textdata);
+
+    let datasec = tools.sections.get(".data").unwrap();
+    let datadata = tools.data_section_words();
+    let data_start = datasec.address;
+    let datadata = words_to_bytes_be(&datadata);
+
+    let minsize = textdata.len() + datadata.len();
+    let max_start = if text_start > data_start { text_start } else { data_start };
+    let memsize = if max_start > minsize {
+        max_start + minsize
+    } else {
+        max_start + (minsize - max_start)
+    } + 4usize;
+
+    let pc = 0;
+
+    // println!("{} {} {}", text_start, data_start, memsize);
+    // println!("{:?} {} {:?} {}", textdata, textdata.len(), datadata, datadata.len());
+    let mut m = SimpleMachine::from_bytes_size(memsize, DataEndianness::Be);
+    m.write_memory_bytes(text_start, &textdata);
+    m.write_memory_bytes(data_start, &datadata);
+    m.jump(pc);
+    m
+}
+
+pub fn new_machine_from_elf(
+    filename: &str,
+) -> SimpleMachine
+{
+    let data = std::fs::read(filename)
+        .expect("Failed reading elf file");
+
+    let reader = elfreader::ElfReader::new(
+        &data,
+        DataEndianness::Be
+    )
+        .expect("Failed instantiating elf file reader");
+
+    let textsec = reader.section(".text");
+    let datasec = reader.section(".data");
+    let textdata = &textsec.data;
+    let datadata = &datasec.data;
+    let text_start = textsec.address as usize;
+    let data_start = datasec.address as usize;
+    let pc = reader.pc();
+
+    let minsize = textdata.len() + datadata.len();
+    let max_start = if text_start > data_start { text_start } else { data_start };
+    let memsize = if max_start > minsize {
+        max_start + minsize
+    } else {
+        max_start + (minsize - max_start)
+    };
+    // print_bytes_hex(textdata);
+
+    let mut m = SimpleMachine::from_bytes_size(memsize, DataEndianness::Be);
+    m.write_memory_bytes(text_start, textdata);
+    m.write_memory_bytes(data_start, datadata);
+    m.jump(pc);
+    m
 }
 
 pub fn new_machine_from_bytes(text_bytes: &Vec<u8>) -> SimpleMachine {
@@ -273,79 +339,4 @@ pub fn print_bytes_hex(data: &[u8]) {
         print!("{:02X} ", byte);
     }
     println!();
-}
-
-
-
-
-
-
-
-// Other
-
-#[derive(Debug, PartialEq, Copy, Clone)]
-pub enum DataEndianness {
-    Le,
-    Be,
-}
-
-// TODO: coerce, induce, set
-impl DataEndianness {
-    pub fn from_bytes_to_word(&self, bytes: [u8; 4]) -> u32 {
-        match self {
-            DataEndianness::Le => u32::from_le_bytes(bytes),
-            DataEndianness::Be => u32::from_be_bytes(bytes),
-        }
-    }
-
-    pub fn from_word_to_bytes(&self, word: u32) -> [u8; 4] {
-        match self {
-            DataEndianness::Le => u32::to_le_bytes(word),
-            DataEndianness::Be => u32::to_be_bytes(word),
-        }
-    }
-
-    pub fn change_endian_word_to_word(&self, n: u32, target: DataEndianness) -> u32 {
-        match self {
-            DataEndianness::Le => {
-                if target == DataEndianness::Le {
-                    n
-                }
-                else {
-                    u32::to_le(n)
-                }
-            },
-            DataEndianness::Be => {
-                if target == DataEndianness::Be {
-                    n
-                }
-                else {
-                    u32::to_be(n)
-                }
-            },
-        }
-    }
-
-    pub fn change_endian_bytes_to_word(&self, bytes: [u8; 4], target: DataEndianness) -> u32 {
-        match self {
-            DataEndianness::Le => {
-                let val = u32::from_le_bytes(bytes);
-                if target == DataEndianness::Le {
-                    val
-                }
-                else {
-                    u32::to_be(val)
-                }
-            },
-            DataEndianness::Be => {
-                let val = u32::from_be_bytes(bytes);
-                if target == DataEndianness::Be {
-                    val
-                }
-                else {
-                    u32::to_le(val)
-                }
-            },
-        }
-    }
 }

@@ -36,6 +36,18 @@ pub trait StreamReader<T: PartialEq> {
         self.advance();
         token
     }
+    fn advance_if(&mut self, f: impl Fn(&T) -> bool) -> Option<T> {
+        let Some(next_token) = self.next_token() else {
+            return None;
+        };
+
+        if f(&next_token) {
+            self.advance_and_read()
+        }
+        else {
+            None
+        }
+    }
 
     fn current_token(&self) -> Option<T> ;
     fn current_token_ref(&self) -> &Option<T> ;

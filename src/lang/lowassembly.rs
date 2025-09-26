@@ -9,13 +9,94 @@ use crate::{
         ext::Extension,
         highassembly::SectionName,
     },
-    utils::print_words_hex,
 };
 
-use super::ext::{
-    ArgName,
-    ArgSyntax,
-};
+use super::ext::instruction_to_binary;
+
+
+
+
+#[derive(Debug, PartialEq, Copy, Clone)]
+pub enum DataEndianness {
+    Le,
+    Be,
+}
+
+impl DataEndianness {
+    pub fn induce_bytes_to_words(bytes: &[u8], target: DataEndianness) -> Vec<u32> {
+        let callback = match target {
+            DataEndianness::Le => u32::from_le_bytes,
+            DataEndianness::Be => u32::from_be_bytes,
+        };
+        bytes
+            .chunks(4)
+            .map(|chunk| {
+                let word_bytes: [u8; 4] = chunk
+                    .try_into()
+                    .expect("Error encoding data for directive");
+                callback(word_bytes)
+            })
+            .collect()
+    }
+
+    pub fn induce_bytes_to_word(bytes: [u8; 4], target: DataEndianness) -> u32 {
+        match target {
+            DataEndianness::Le => u32::from_le_bytes(bytes),
+            DataEndianness::Be => u32::from_be_bytes(bytes),
+        }
+    }
+
+    pub fn induce_word_to_bytes(word: u32, target: DataEndianness) -> [u8; 4] {
+        match target {
+            DataEndianness::Le => u32::to_le_bytes(word),
+            DataEndianness::Be => u32::to_be_bytes(word),
+        }
+    }
+
+    pub fn modify_word_to_word(n: u32, source: DataEndianness, target: DataEndianness) -> u32 {
+        match source {
+            DataEndianness::Le => {
+                if target == DataEndianness::Le {
+                    n
+                }
+                else {
+                    u32::to_le(n)
+                }
+            },
+            DataEndianness::Be => {
+                if target == DataEndianness::Be {
+                    n
+                }
+                else {
+                    u32::to_be(n)
+                }
+            },
+        }
+    }
+
+    pub fn modify_bytes_to_word(bytes: [u8; 4], source: DataEndianness, target: DataEndianness) -> u32 {
+        match source {
+            DataEndianness::Le => {
+                let val = u32::from_le_bytes(bytes);
+                if target == DataEndianness::Le {
+                    val
+                }
+                else {
+                    u32::to_be(val)
+                }
+            },
+            DataEndianness::Be => {
+                let val = u32::from_be_bytes(bytes);
+                if target == DataEndianness::Be {
+                    val
+                }
+                else {
+                    u32::to_le(val)
+                }
+            },
+        }
+    }
+}
 
 
 
@@ -29,7 +110,6 @@ pub struct EncodedData {
 
 
 
-// TODO: use this somehow
 
 #[derive(Debug)]
 pub enum EncodableKey {
@@ -72,15 +152,7 @@ impl EncodableLine {
                         .into_iter()
                         .map(|arg| arg as u8)
                         .collect();
-                    args
-                        .chunks(4)
-                        .map(|chunk| {
-                            let word_bytes: [u8; 4] = chunk
-                                .try_into()
-                                .expect("Error encoding data for directive");
-                            u32::from_le_bytes(word_bytes)
-                        })
-                        .collect()
+                    DataEndianness::induce_bytes_to_words(&args, DataEndianness::Le)
                 };
                 // print_words_hex(&data[..]);
                 EncodedData {
@@ -117,40 +189,4 @@ pub struct PositionedEncodedBlock {
     pub addr: usize,
     pub name: SectionName,
     pub instructions: Vec<EncodedData>
-}
-
-
-
-
-
-pub fn instruction_to_binary(inst: &Box<dyn Extension>, args: &Vec<i32>) -> u32 {
-    let fields = match inst.get_calling_syntax() {
-        ArgSyntax::N0 => vec![],
-        ArgSyntax::N1(f0) => vec![f0],
-        ArgSyntax::N2(f0, f1) => vec![f0, f1],
-        ArgSyntax::N3(f0, f1, f2) => vec![f0, f1, f2],
-        ArgSyntax::N4(f0, f1, f2, f3) => vec![f0, f1, f2, f3],
-    };
-    let (rs1, rs2, rd, imm) = get_args(fields, args);
-    inst.get_instruction_format(rs1, rs2, rd, imm).encode()
-}
-
-fn get_args(
-    fields: Vec<ArgName>,
-    args: &Vec<i32>
-) -> (u32, u32, u32, i32)
-{
-    let mut rs1: u32 = 0;
-    let mut rs2: u32 = 0;
-    let mut rd:  u32 = 0;
-    let mut imm: i32 = 0;
-    for (field, arg) in fields.iter().zip(args.iter()) {
-        match field {
-            ArgName::RS1 => rs1 = (*arg) as u32,
-            ArgName::RS2 => rs2 = (*arg) as u32,
-            ArgName::RD =>  rd  = (*arg) as u32,
-            ArgName::IMM | ArgName::OFF => imm = *arg,
-        }
-    }
-    (rs1, rs2, rd, imm)
 }

@@ -42,7 +42,7 @@ use gdbstub::stub::SingleThreadStopReason;
 
 
 use crate::emu::machine::Machine;
-use crate::utils::DataEndianness;
+use crate::lang::lowassembly::DataEndianness;
 
 
 
@@ -453,7 +453,7 @@ impl<T: Machine> run_blocking::BlockingEventLoop for SimpleGdbBlockingEventLoop<
 
             match target.state {
                 TargetState::Stepping => {
-                    let pc_before = target.machine.read_registers()[32];
+                    let _pc_before = target.machine.read_registers()[32];
                     target.machine.decode(); // execute one instruction
                     let pc_after = target.machine.read_registers()[32];
 

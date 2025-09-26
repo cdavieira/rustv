@@ -94,7 +94,16 @@ impl SectionName {
             SectionName::Custom(s) => s.to_string(),
         }
     }
-    
+
+    pub fn from_default_name(s: &str) -> SectionName {
+        match s {
+            ".meta" => SectionName::Metadata ,
+            ".text" => SectionName::Text     ,
+            ".data" => SectionName::Data     ,
+            ".bss"  => SectionName::Bss      ,
+            other   => SectionName::Custom(other.to_lowercase()),
+        }
+    }
 }
 
 
@@ -141,9 +150,9 @@ pub enum ArgValue {
     Register(Register),
     Offset(usize, i32),
     Literal(String),
-    Use(String),
-    UseHi(String),
-    UseLo(String),
+    Use(String, i32),
+    UseHi(String, i32),
+    UseLo(String, i32),
 }
 
 impl ArgValue {
@@ -152,7 +161,7 @@ impl ArgValue {
             ArgValue::Byte(b)            => Some((*b).try_into().unwrap()),
             ArgValue::Number(n)          => Some(*n),
             ArgValue::Register(register) => Some(register.id().into()),
-            ArgValue::Offset(abs_addr, rel_addr)       => {
+            ArgValue::Offset(_abs_addr, _rel_addr)       => {
                 todo!();
             },
             _ => None

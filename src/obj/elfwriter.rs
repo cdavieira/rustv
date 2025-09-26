@@ -1,11 +1,15 @@
 use object::elf::{
-    R_RISCV_HI20,
-    R_RISCV_LO12_I,
     R_RISCV_PCREL_HI20,
-    R_RISCV_PCREL_LO12_I, R_RISCV_RELAX
+    R_RISCV_PCREL_LO12_I,
 };
 use object::{
-    Architecture, BinaryFormat, Endianness, ObjectSection, RelocationTarget, SectionKind, SymbolSection
+    Architecture,
+    BinaryFormat,
+    Endianness,
+    ObjectSection,
+    SectionKind,
+    // RelocationTarget,
+    // SymbolSection
 };
 
 use object::write::{
@@ -13,7 +17,7 @@ use object::write::{
     SectionId,
     SymbolId,
     Relocation,
-    RelocationKind,
+    // RelocationKind,
 };
 
 use std::collections::hash_map::HashMap;
@@ -151,8 +155,10 @@ impl<'a> ElfWriter<'a> {
     }
 
     pub fn handle_symbol_relocation(
-        &mut self, symbname: &str,
+        &mut self,
+        symbol_name: &str,
         text_section_off: u64,
+        symbol_addend: i32,
     ) -> Result<()>
     {
         create_ext_symbol_relocatable_reference(
@@ -160,7 +166,9 @@ impl<'a> ElfWriter<'a> {
             self.text,
             text_section_off,
             &self.symbol_ids,
-            symbname)
+            symbol_name,
+            symbol_addend
+        )
     }
 
     pub fn save(&self, filename: &str) -> Result<()> {
@@ -177,6 +185,7 @@ fn create_ext_symbol_relocatable_reference<'a>(
     text_section_off: u64,
     symbol_ids: &HashMap<String, SymbolId>,
     symbol_name: &str,
+    symbol_addend: i32,
 ) -> Result<()>
 {
     let symbol_id = symbol_ids
@@ -206,14 +215,14 @@ fn create_ext_symbol_relocatable_reference<'a>(
     let symbol_hi_relocation = Relocation {
         offset: hi_off,
         symbol: *symbol_id,
-        addend: 0,
+        addend: symbol_addend as i64,
         flags: write::RelocationFlags::Elf { r_type: R_RISCV_PCREL_HI20 },
     };
 
     let symbol_lo_relocation = Relocation {
         offset: lo_off,
         symbol: tmp_label_id,
-        addend: 0,
+        addend: symbol_addend as i64,
         flags: write::RelocationFlags::Elf { r_type: R_RISCV_PCREL_LO12_I },
     };
 

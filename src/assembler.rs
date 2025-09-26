@@ -15,7 +15,7 @@ use std::collections::HashMap;
 
 pub trait Assembler {
     type Input;
-    fn to_words(&self, instructions: Self::Input) -> AssemblerTools ;
+    fn assemble(&self, instructions: Self::Input) -> AssemblerTools ;
 }
 
 
@@ -41,6 +41,7 @@ pub struct Section {
 #[derive(Debug)]
 pub struct RelocationEntry {
     pub(crate) address: usize,
+    pub(crate) addend: i32,
 }
 
 #[derive(Debug)]
@@ -51,6 +52,38 @@ pub struct AssemblerTools {
     pub(crate) strings:  Vec<String>,
     pub(crate) relocations:  HashMap<String, RelocationEntry>,
     pub(crate) blocks: Vec<PositionedEncodedBlock>,
+}
+
+impl AssemblerTools {
+    fn section_words(&self, name: SectionName) -> Vec<u32> {
+        let text_sections_data: Vec<Vec<u32>> = self.blocks
+            .iter()
+            .filter_map(|block| {
+                if block.name == name {
+                    let data: Vec<_> = block.instructions
+                        .iter()
+                        .map(|i| i.data.clone())
+                        .flatten()
+                        .collect();
+                    Some(data)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        text_sections_data
+            .into_iter()
+            .flatten()
+            .collect()
+    }
+
+    pub fn text_section_words(&self) -> Vec<u32> {
+        self.section_words(SectionName::Text)
+    }
+
+    pub fn data_section_words(&self) -> Vec<u32> {
+        self.section_words(SectionName::Data)
+    }
 }
 
 
@@ -212,8 +245,8 @@ fn gen_symbol_table(sections: &Vec<PositionedGenericBlock>) -> HashMap<String, S
 
 // 2.5 Generating string table
 
-fn gen_string_table(sections: &Vec<PositionedGenericBlock>) -> Vec<String> {
-    let mut v = Vec::new();
+fn gen_string_table(_sections: &Vec<PositionedGenericBlock>) -> Vec<String> {
+    let v = Vec::new();
     // for section in sections {
     //     for line in &section.lines {
     //         if let KeyValue::AssemblyDirective(_) = line.line.keyword {
@@ -238,18 +271,18 @@ fn gen_relocation_table(
         for line in &section.lines {
             for arg in &line.line.args {
                 match arg {
-                    ArgValue::UseHi(s) => {
+                    ArgValue::UseHi(s, addend) => {
                         let res = get_symb_addrs(&s, symbols, sections);
                         if let Ok((_, symb_sect)) = res {
                             if symb_sect.name != section.name {
                                 let relocation = RelocationEntry {
-                                    address: line.relative_address
+                                    address: line.relative_address,
+                                    addend: *addend,
                                 };
                                 relocation_table.insert(s.clone(), relocation);
                             }
                         };
                     },
-                    ArgValue::Use(_) => panic!(),
                     _ => {
                     },
                 }
@@ -304,30 +337,30 @@ fn resolve_symbols(
             let mut new_args = Vec::new();
             for arg in line.line.args {
                 match arg {
-                    ArgValue::Use(s) => {
+                    ArgValue::Use(s, addend) => {
                         let res = get_symb_addrs(&s, symbols, sections);
                         if let Ok((symb, symb_sect)) = res {
                             let offset = compute_offset(
                                 section.address, line.relative_address, symb, symb_sect);
-                            new_args.push(ArgValue::Number(offset));
+                            new_args.push(ArgValue::Number(offset + addend));
                         }
                     },
-                    ArgValue::UseHi(s) => {
+                    ArgValue::UseHi(s, addend) => {
                         let res = get_symb_addrs(&s, symbols, sections);
                         if let Ok((symb, symb_sect)) = res {
                             let offset = compute_offset(
                                 section.address, line.relative_address, symb, symb_sect);
                             let hi = (offset >> 12) & 0b11111_11111_11111_11111;
-                            new_args.push(ArgValue::Number(hi));
+                            new_args.push(ArgValue::Number(hi + addend));
                         }
                     },
-                    ArgValue::UseLo(s) => {
+                    ArgValue::UseLo(s, addend) => {
                         let res = get_symb_addrs(&s, symbols, sections);
                         if let Ok((symb, symb_sect)) = res {
                             let offset = compute_offset(
                                 section.address, line.relative_address, symb, symb_sect);
                             let lo = offset & 0b1111_1111_1111;
-                            new_args.push(ArgValue::Number(lo));
+                            new_args.push(ArgValue::Number(lo + addend));
                         }
                     },
                     _ => {

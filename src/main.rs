@@ -33,7 +33,15 @@ use crate::emu::machine::{
 };
 use crate::utils::{
     encode_to_words,
+};
+use crate::lang::lowassembly::{
     DataEndianness,
+};
+use crate::lang::ext::InstructionFormat;
+use crate::lang::highassembly::Register;
+use crate::utils::{
+    build_code_repr,
+    new_machine_from_tools,
 };
 
 fn main() {
@@ -89,6 +97,7 @@ fn main() {
             li a2, 9              // length
             li a7, 64             // syscall: write
             ecall
+            la t1,0x3(msg2)
        sub_op:
             sub a7,a2,t2
        xor_op:
@@ -101,39 +110,48 @@ fn main() {
             ecall
     ";
     let code = "
-        li a2, 4
-        jalr ra, a2, 8
+        .section .data
+        var1: .word 0x4
+        .section .text
+            la t1, var1
+            lw t2, t1
     ";
+    // let code = "
+    //     li a2, 4
+    //     jalr ra, a2, 8
+    // ";
 
-    // let mut tokenizer = syntax::gas::Tokenizer;
-    // let lexer = syntax::gas::Lexer;
-    // let parser = syntax::gas::Parser;
-    // let assembler = syntax::gas::Assembler;
-
-    // let tokens = tokenizer.get_tokens(code);
-    // println!("{:?}", &tokens);
-
-    // let lexemes = lexer.parse(tokens);
-    // println!("{:?}", &lexemes);
-
-    // let blocks = parser.parse(lexemes);
-    // println!("{:?}", &blocks);
-
-    // let output = assembler.to_words(blocks);
-    // dbg!(output);
+    // Build code representation
+    // let tools = build_code_repr(code);
 
     // Export to ELF
-    // let outputfile = "main.o";
+    let outputfile = "main.o";
     // let code = "
     //     li a7, 93
     //     li a0, 1000
     //     ecall
     // ";
-    // utils::encode_to_elf(code, outputfile).unwrap();
+    utils::encode_to_elf(code, outputfile).unwrap();
 
-    // Read ELF and execute the Machine
+    // Read ELF and execute the Machine (only text)
     // let inputfile = "main.o";
     // let mut m = utils::new_machine_from_elf_textsection(inputfile);
+    // m.decode();
+    // m.decode();
+    // assert!(m.assert_reg(17u32, 93));
+    // assert!(m.assert_reg(10u32, 1000));
+
+    // Read code and instantiate Machine from parser tools
+    // let tools = build_code_repr(code);
+    // let m = new_machine_from_tools(&tools);
+    // println!("{:?}", m.words());
+    // println!("{:?}", m.read_registers());
+
+    // Read ELF and execute the Machine (text + data)
+    // let inputfile = "main";
+    // let mut m = utils::new_machine_from_elf(inputfile);
+    // m.decode();
+    // assert!(m.assert_reg(Register::A0.id().into(), 1));
     // m.decode();
     // m.decode();
     // assert!(m.assert_reg(17u32, 93));
@@ -147,15 +165,15 @@ fn main() {
     // riscv32_dbg.default_gdb_event_loop_thread();
 
     // Run instructions in memory
-    let words = encode_to_words(code);
-    let mut m = SimpleMachine::from_words(&words, DataEndianness::Be);
-    for _word in words {
-        m.decode();
-    }
-    let r: Vec<_> = m
-        .read_registers()
-        .into_iter()
-        .map(|reg| reg as i32)
-        .collect();
-    println!("{:?}", r);
+    // let words = encode_to_words(code);
+    // let mut m = SimpleMachine::from_words(&words, DataEndianness::Be);
+    // for _word in words {
+    //     m.decode();
+    // }
+    // let r: Vec<_> = m
+    //     .read_registers()
+    //     .into_iter()
+    //     .map(|reg| reg as i32)
+    //     .collect();
+    // println!("{:?}", r);
 }

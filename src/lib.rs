@@ -35,8 +35,17 @@ mod tests {
         use crate::tokenizer::Tokenizer;
         use crate::lexer::Lexer;
         use crate::parser::Parser;
-        use crate::assembler::Assembler;
-        use crate::lang::highassembly::{Register, SectionName};
+        use crate::assembler::{
+            Assembler,
+            AssemblerTools,
+        };
+        use crate::lang::highassembly::{
+            Register,
+            SectionName,
+        };
+        use crate::lang::lowassembly::{
+            DataEndianness,
+        };
         use crate::emu::{
             memory::Memory,
             memory::SimpleMemory,
@@ -46,9 +55,10 @@ mod tests {
             machine::SimpleMachine,
         };
         use crate::utils::{
-            DataEndianness,
-            encode_to_words,
+            build_code_repr,
             encode_to_word,
+            encode_to_words,
+            new_machine_from_tools,
         };
         use crate::obj::{
             elfwriter::ElfWriter,
@@ -529,13 +539,24 @@ mod tests {
 
 
         // Test ISA
-        fn isa_rvi32(code: &str) -> SimpleMachine {
+        fn isa_rvi32_mach_only_text(code: &str) -> SimpleMachine {
             let words = encode_to_words(code);
             let mut m = SimpleMachine::from_words(&words, DataEndianness::Be);
             for _word in words {
                 m.decode();
             }
             m
+        }
+
+        fn isa_rvi32_mach(code: &str) -> (SimpleMachine, AssemblerTools) {
+            let tools = build_code_repr(code);
+            let mut m = new_machine_from_tools(&tools);
+            let text = tools.text_section_words();
+            let text_len = text.len();
+            for _ in 0..text_len {
+                m.decode();
+            }
+            (m, tools)
         }
 
         #[test]
@@ -545,7 +566,7 @@ mod tests {
                 li a3, 150
                 add a1, a2, a3
             ";
-            let m = isa_rvi32(code);
+            let m = isa_rvi32_mach_only_text(code);
             assert!(m.assert_reg(Register::A1.id().into(), 240));
         }
 
@@ -556,7 +577,7 @@ mod tests {
                 li a3, 150
                 sub a1, a2, a3
             ";
-            let m = isa_rvi32(code);
+            let m = isa_rvi32_mach_only_text(code);
             let n = -60;
             assert!(m.assert_reg(Register::A1.id().into(), n as u32));
         }
@@ -568,7 +589,7 @@ mod tests {
                 li a3, 2
                 and a1, a2, a3
             ";
-            let m = isa_rvi32(code);
+            let m = isa_rvi32_mach_only_text(code);
             assert!(m.assert_reg(Register::A1.id().into(), 2));
         }
 
@@ -579,7 +600,7 @@ mod tests {
                 li a3, 2
                 or a1, a2, a3
             ";
-            let m = isa_rvi32(code);
+            let m = isa_rvi32_mach_only_text(code);
             assert!(m.assert_reg(Register::A1.id().into(), 3));
         }
 
@@ -589,7 +610,7 @@ mod tests {
                 li a2, 90
                 xor a2, a2, a2
             ";
-            let m = isa_rvi32(code);
+            let m = isa_rvi32_mach_only_text(code);
             assert!(m.assert_reg(Register::A1.id().into(), 0));
         }
 
@@ -600,7 +621,7 @@ mod tests {
                 li a3, 2
                 sll a1, a2, a3
             ";
-            let m = isa_rvi32(code);
+            let m = isa_rvi32_mach_only_text(code);
             assert!(m.assert_reg(Register::A1.id().into(), 16));
         }
 
@@ -611,7 +632,7 @@ mod tests {
                 li a3, 2
                 srl a1, a2, a3
             ";
-            let m = isa_rvi32(code);
+            let m = isa_rvi32_mach_only_text(code);
             assert!(m.assert_reg(Register::A1.id().into(), 1));
         }
 
@@ -621,7 +642,7 @@ mod tests {
                 li a2, 4
                 jalr ra, a2, 8
             ";
-            let m = isa_rvi32(code);
+            let m = isa_rvi32_mach_only_text(code);
             assert!(m.assert_reg(Register::RA.id().into(), 8));
             assert!(m.assert_pc(16));
         }
@@ -631,11 +652,11 @@ mod tests {
             let code = "
                 li a2, 4
                 addi a1, a2, 8
-                addi a3, a2, 80000
+                addi a3, a2, 888
             ";
-            let m = isa_rvi32(code);
+            let m = isa_rvi32_mach_only_text(code);
             assert!(m.assert_reg(Register::A1.id().into(), 12));
-            assert!(m.assert_reg(Register::A3.id().into(), 80004));
+            assert!(m.assert_reg(Register::A3.id().into(), 892));
         }
 
         #[test]
@@ -644,8 +665,114 @@ mod tests {
                 li a2, 6
                 andi a1, a2, 4
             ";
-            let m = isa_rvi32(code);
+            let m = isa_rvi32_mach_only_text(code);
             assert!(m.assert_reg(Register::A1.id().into(), 4));
+        }
+
+        #[test]
+        fn isa_rvi32_xori() {
+            let code = "
+                li a2, 7
+                xori a1, a2, 4
+            ";
+            let m = isa_rvi32_mach_only_text(code);
+            assert!(m.assert_reg(Register::A1.id().into(), 3));
+        }
+
+        #[test]
+        fn isa_rvi32_sw() {
+            let code = "
+                .section .data
+                var1: .word 0x4
+                var2: .word 0xa
+
+                .section .text
+                    la t1, var1
+                    li t2, 100
+                    sw t2, 4(t1)
+            ";
+            let (m, tools) = isa_rvi32_mach(code);
+            let data_section = tools
+                .sections
+                .get(".data")
+                .expect("missing start address for data section");
+            let start_addr = data_section.address;
+            let expected = vec![100u32];
+            assert!(m.assert_memory_words(start_addr, expected.len(), &expected));
+        }
+
+        #[test]
+        fn isa_rvi32_sb() {
+            let code = "
+                .section .data
+                var1: .byte 0x4
+                var2: .byte 0xa
+
+                .section .text
+                    la t1, var1
+                    li t2, 100
+                    sw t2, 1(t1)
+            ";
+            let (m, tools) = isa_rvi32_mach(code);
+            let data_section = tools
+                .sections
+                .get(".data")
+                .expect("missing start address for data section");
+            let start_addr = data_section.address;
+            let expected = vec![100u8];
+            assert!(m.assert_memory_bytes(start_addr+3, expected.len(), &expected, 1));
+        }
+
+        // OBS: LW syntax is rd, off, rs
+        // so 'lw t2, t1' becomes
+        // rd = t2
+        // off = t1
+        // rs = 0 (default)
+        #[test]
+        fn isa_rvi32_lw() {
+            let code = "
+                .section .data
+                var1: .word 0x4
+                .section .text
+                    la t1, var1
+                    lw t2, 0(t1)
+            ";
+            let (m, _) = isa_rvi32_mach(code);
+            let reg = Register::T2.id() as usize;
+            let reg = m.read_registers()[reg];
+            assert_eq!(reg, 4);
+        }
+
+        #[test]
+        fn isa_rvi32_lb() {
+            let code = "
+                .section .data
+                var1: .byte -0x1
+                .section .text
+                    la t1, var1
+                    lb t2, 0(t1)
+            ";
+            let (m, _) = isa_rvi32_mach(code);
+            let reg = Register::T2.id() as usize;
+            let reg = m.read_registers()[reg];
+            let val = 0b1111_1111;
+            assert_eq!(reg, val);
+        }
+
+        #[test]
+        fn isa_rvi32_lbu() {
+            let code = "
+                .section .data
+                var1: .byte 0x4
+                .section .text
+                    la t1, var1
+                    lbu t2, 0(t1)
+            ";
+            let (m, _) = isa_rvi32_mach(code);
+            let reg = Register::T2.id() as usize;
+            let reg = m.read_registers()[reg];
+            let val: u32 = 0b1111_1111;
+            assert_eq!(reg, val);
         }
 
 
@@ -737,7 +864,7 @@ mod tests {
             if let Ok(data) = read_io_res {
                 let read_res = ElfReader::new(&data, DataEndianness::Le);
                 if let Ok(reader) = read_res {
-                    let bytes_read = reader.text_section();
+                    let bytes_read = &reader.section(".text").data;
                     assert_eq!(bytes_read, &bytes_written);
                 }
                 else {

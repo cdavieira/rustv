@@ -194,6 +194,7 @@ pub enum RV32I {
     BGE, BGEU, ECALL
 }
 
+// TODO: check if 'imm' is in the valid interval according to the instruction type (I, for example)
 impl Extension for RV32I {
     fn get_instruction_format(&self, rs1: u32, rs2: u32, rd: u32, imm: i32) -> InstructionFormat  {
         match self {
@@ -352,4 +353,47 @@ fn imm_to_j(imm: i32) -> u32 {
     let p3 = (imm >> 1)  & 0b11111_11111;
     let p4 = (imm >> 20) & 1;
     ( ((p4 << 18) | (p3 << 9) | (p2 << 8) | p1) << 1 ) as u32
+}
+
+
+
+
+
+
+
+
+pub fn instruction_to_binary(inst: &Box<dyn Extension>, args: &Vec<i32>) -> u32 {
+    let fields = match inst.get_calling_syntax() {
+        ArgSyntax::N0 => vec![],
+        ArgSyntax::N1(f0) => vec![f0],
+        ArgSyntax::N2(f0, f1) => vec![f0, f1],
+        ArgSyntax::N3(f0, f1, f2) => vec![f0, f1, f2],
+        ArgSyntax::N4(f0, f1, f2, f3) => vec![f0, f1, f2, f3],
+    };
+    let (rs1, rs2, rd, imm) = get_args(fields, args);
+    inst.get_instruction_format(rs1, rs2, rd, imm).encode()
+}
+
+fn get_args(
+    fields: Vec<ArgName>,
+    args: &Vec<i32>
+) -> (u32, u32, u32, i32)
+{
+    if fields.len() != args.len() {
+        panic!("Insuficient number of arguments");
+    }
+
+    let mut rs1: u32 = 0;
+    let mut rs2: u32 = 0;
+    let mut rd:  u32 = 0;
+    let mut imm: i32 = 0;
+    for (field, arg) in fields.iter().zip(args.iter()) {
+        match field {
+            ArgName::RS1 => rs1 = (*arg) as u32,
+            ArgName::RS2 => rs2 = (*arg) as u32,
+            ArgName::RD =>  rd  = (*arg) as u32,
+            ArgName::IMM | ArgName::OFF => imm = *arg,
+        }
+    }
+    (rs1, rs2, rd, imm)
 }

@@ -46,7 +46,12 @@ pub trait Memory {
 
 use std::fs;
 use object::ReadRef;
-use crate::utils::{DataEndianness, swap_chunk_endianness};
+use crate::utils::{
+    swap_chunk_endianness,
+};
+use crate::lang::lowassembly::{
+    DataEndianness,
+};
 
 pub struct SimpleMemory {
     data: Vec<u8>,
@@ -137,8 +142,8 @@ impl Memory for SimpleMemory {
                 .try_into()
                 .expect("failed when reading word: conversion to [u8]");
 
-            let word_in_memory = self.endianness.from_bytes_to_word(bytes);
-            self.endianness.change_endian_word_to_word(word_in_memory, res_endian)
+            let word_in_memory = DataEndianness::induce_bytes_to_word(bytes, self.endianness);
+            DataEndianness::modify_word_to_word(word_in_memory, self.endianness, res_endian)
         }
         else {
             0
@@ -148,7 +153,7 @@ impl Memory for SimpleMemory {
     // TODO: make this safe in terms of index access
     fn write_word(&mut self, idx: usize, val: u32) -> () {
         // println!("{:x} written in mem as {:?}", v, bytes);
-        let values = self.endianness.from_word_to_bytes(val);
+        let values = DataEndianness::induce_word_to_bytes(val, self.endianness);
         let bytes_buffer = self.data.get_mut(idx..idx+4).unwrap();
         bytes_buffer[0] = values[0];
         bytes_buffer[1] = values[1];
@@ -197,7 +202,7 @@ impl Memory for SimpleMemory {
                     let word: [u8; 4] = chunk
                         .try_into()
                         .expect("read_words failed when converting a chunk to a slice of 4 bytes");
-                    self.endianness.change_endian_bytes_to_word(word, res_endian)
+                    DataEndianness::modify_bytes_to_word(word, self.endianness, res_endian)
                 }
             )
             .collect()

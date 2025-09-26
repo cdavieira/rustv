@@ -5,6 +5,13 @@ Focus
 * Execute functions
 * Execute recursion
 
+* Create spec::ImmediateFormat ?
+* Fix lb and lbu test
+* Things like 'la t1, 100(var1)' are now possible, but there's currently no
+  check for if 100 % 4 == 0 (for example). This could mess with the text
+  section alignment 
+
+
 * Set starting code address
 * Parse riscv32 elf files, decode instructions and execute them in a Virtual Context
 * Fix the binary encoding of some instruction formats
@@ -20,7 +27,6 @@ Code
 * Assess the use of u32, i32, usize, ... throughout the project
 	* Watch out for places in the code using 'as' casts
 * Write simple field evaluator to handle constant expressions?
-* Create spec::ImmediateFormat ?
 * Rewrite parts of the code where 'eprintln' is (poorly) used or isn't adequate
 * Make sure the minimal instruction set is fully supported
 	* Fix binary encoding of some instructions

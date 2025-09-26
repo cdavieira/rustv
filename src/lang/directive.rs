@@ -37,6 +37,12 @@ pub enum DirectiveInstruction {
 impl Directive for DirectiveInstruction {
     fn translate(&self, args: &Vec<ArgValue>) -> Vec<u8>  {
         match self {
+            DirectiveInstruction::Byte => {
+                match &args[0] {
+                    ArgValue::Number(n) => n.to_le_bytes().to_vec(),
+                    _ => panic!("Byte directive got something other than a number"),
+                }
+            },
             DirectiveInstruction::Word => {
                 match &args[0] {
                     ArgValue::Number(n) => n.to_le_bytes().to_vec(),

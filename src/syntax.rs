@@ -106,7 +106,7 @@ pub mod gas {
         AssemblyDirective(Box<dyn Directive>),
         LinkerDirective(String),
         Reg(Register),
-        Name(String),
+        Name(String, i32),
         Str(String),
         Label(String),
         Number(i32),
@@ -174,6 +174,7 @@ pub mod gas {
     impl ToDirective for Lexer {
         fn to_directive(&self, token: &str) -> Option<Box<dyn Directive>>  {
             match token {
+                ".byte"  => Some(Box::new(DirectiveInstruction::Byte)),
                 ".word"  => Some(Box::new(DirectiveInstruction::Word)),
                 ".ascii" => Some(Box::new(DirectiveInstruction::Ascii)),
                 _ => None
@@ -267,7 +268,7 @@ pub mod gas {
             ToPseudo::is_pseudo(self, token) || token == ".globl"
         }
 
-        fn str_to_number(&self, it: &mut StringStreamReader) -> Option<Self::Token> {
+        fn handle_number(&self, it: &mut StringStreamReader) -> Option<Self::Token> {
             let Some(token) = it.current_token_ref() else {
                 return None;
             };
@@ -277,27 +278,39 @@ pub mod gas {
             }
             let prefix    = &token[..2];
             let no_prefix = &token[2..];
-            match prefix {
+            let decimal = match prefix {
                 "0x" => {
                     if let Ok(hex) = i32::from_str_radix(no_prefix, 16) {
-                        Some(Token::Number(hex))
+                        hex
                     }
                     else {
-                        None
+                        panic!("handle_number failed when converting hex to decimal")
                     }
                 },
-                _ => None
-            }
+                _ => panic!("handle_number failed when converting to decimal")
+            };
+
+            // Check for syntax: <offset> '(' <Identifier> ')'
+            let Some(_) = it.advance_if(|next_token| next_token == "(") else {
+                return Some(Token::Number(decimal));
+            };
+            let Some(identifier) = it.advance_if(|next_token| self.is_identifier(next_token)) else {
+                return Some(Token::Number(decimal));
+            };
+            let Some(_) = it.advance_if(|next_token| next_token == ")") else {
+                return Some(Token::Number(decimal));
+            };
+            Some(Token::Name(identifier, decimal))
         }
 
-        fn str_to_string(&self, it: &mut StringStreamReader) -> Option<Self::Token> {
+        fn handle_string(&self, it: &mut StringStreamReader) -> Option<Self::Token> {
             let Some(token) = it.current_token_ref() else {
                 return None;
             };
             Some(Token::Str(token.trim_matches('"').to_string()))
         }
 
-        fn str_to_symbol(&self, it: &mut StringStreamReader) -> Option<Self::Token> {
+        fn handle_symbol(&self, it: &mut StringStreamReader) -> Option<Self::Token> {
             let Some(token) = it.current_token_ref() else {
                 return None;
             };
@@ -311,7 +324,7 @@ pub mod gas {
             }
         }
 
-        fn str_to_opcode(&self, it: &mut StringStreamReader) -> Option<Self::Token> {
+        fn handle_opcode(&self, it: &mut StringStreamReader) -> Option<Self::Token> {
             let Some(token) = it.current_token_ref() else {
                 return None;
             };
@@ -323,21 +336,21 @@ pub mod gas {
             }
         }
 
-        fn str_to_identifier(&self, it: &mut StringStreamReader) -> Option<Self::Token> {
+        fn handle_identifier(&self, it: &mut StringStreamReader) -> Option<Self::Token> {
             let Some(token) = it.current_token_ref() else {
                 return None;
             };
-            Some(Token::Name(token.to_string()))
+            Some(Token::Name(token.to_string(), 0))
         }
 
-        fn str_to_section(&self, it: &mut StringStreamReader) -> Option<Self::Token> {
+        fn handle_section(&self, it: &mut StringStreamReader) -> Option<Self::Token> {
             let Some(token) = it.advance_and_read() else {
                 return None;
             };
             Some(Token::Section(token[1..].to_string()))
         }
 
-        fn str_to_directive(&self, it: &mut StringStreamReader) -> Option<Self::Token> {
+        fn handle_directive(&self, it: &mut StringStreamReader) -> Option<Self::Token> {
             let Some(token) = it.current_token_ref() else {
                 return None;
             };
@@ -349,7 +362,7 @@ pub mod gas {
             }
         }
 
-        fn str_to_register(&self, it: &mut StringStreamReader) -> Option<Self::Token> {
+        fn handle_register(&self, it: &mut StringStreamReader) -> Option<Self::Token> {
             let Some(token) = it.current_token_ref() else {
                 return None;
             };
@@ -359,7 +372,7 @@ pub mod gas {
             Some(Token::Reg(reg))
         }
 
-        fn str_to_custom(&self, it: &mut StringStreamReader) -> Option<Self::Token> {
+        fn handle_custom(&self, it: &mut StringStreamReader) -> Option<Self::Token> {
             let Some(token) = it.current_token_ref() else {
                 return None;
             };
@@ -374,7 +387,7 @@ pub mod gas {
             }
         }
 
-        fn str_to_label(&self, it: &mut StringStreamReader) -> Option<Self::Token> {
+        fn handle_label(&self, it: &mut StringStreamReader) -> Option<Self::Token> {
             let Some(token) = it.current_token_ref() else {
                 return None;
             };
@@ -396,7 +409,7 @@ pub mod gas {
                 Token::AssemblyDirective(directive) =>
                     Some(GenericToken::KeyToken(KeyValue::AssemblyDirective(directive))),
                 Token::Reg(register)        => Some(GenericToken::ArgToken(ArgValue::Register(register))),
-                Token::Name(name)           => Some(GenericToken::ArgToken(ArgValue::Use(name))),
+                Token::Name(name, off)           => Some(GenericToken::ArgToken(ArgValue::Use(name, off))),
                 Token::Str(literal)         => Some(GenericToken::ArgToken(ArgValue::Literal(literal))),
                 Token::Number(n)            => Some(GenericToken::ArgToken(ArgValue::Number(n))),
                 Token::Section(sec)         => {
@@ -441,7 +454,7 @@ pub mod gas {
     impl assembler::Assembler for Assembler {
         type Input = Vec<GenericBlock>;
 
-        fn to_words(&self, instruction: Self::Input) -> AssemblerTools {
+        fn assemble(&self, instruction: Self::Input) -> AssemblerTools {
             assembler::to_u32(instruction)
         }
     }
