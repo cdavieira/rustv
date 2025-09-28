@@ -39,6 +39,7 @@ fn group_tokens(tokens: Vec<GenericToken>) -> Vec<GenericLine> {
         match token {
             GenericToken::KeyToken(k) =>  {
                 let group = GenericLine {
+                    id: 0,
                     keyword: k,
                     args: args.drain(..).rev().collect()
                 };
@@ -49,7 +50,17 @@ fn group_tokens(tokens: Vec<GenericToken>) -> Vec<GenericLine> {
             },
         }
     }
-    token_groups.into_iter().rev().collect()
+    let lines: Vec<_> = token_groups.into_iter().rev().collect();
+    lines
+        .into_iter()
+        .enumerate()
+        .map(|(idx, line)| {
+            GenericLine {
+                id: idx,
+                ..line
+            }
+        })
+        .collect()
 }
 
 // 2.3 Expanding pseudo instructions into groups of real instructions
@@ -62,7 +73,13 @@ fn expand_pseudos(lines: Vec<GenericLine>) -> Vec<GenericLine> {
                 let extra_lines: Vec<GenericLine> = pseudo
                     .translate(line.args)
                     .into_iter()
-                    .map(|opcode_line| opcode_line.into())
+                    .map(|opcode_line| {
+                        GenericLine {
+                            id: line.id,
+                            keyword: KeyValue::Op(opcode_line.keyword),
+                            args: opcode_line.args,
+                        }
+                    })
                     .collect()
                 ;
                 expanded_lines.extend(extra_lines);
@@ -87,6 +104,7 @@ fn expand_assembly_directives(lines: Vec<GenericLine>) -> Vec<GenericLine> {
                     .map(|a| ArgValue::Byte(a))
                     .collect();
                 new_lines.push(GenericLine{
+                    id: line.id,
                     keyword: line.keyword,
                     args: new_args
                 });

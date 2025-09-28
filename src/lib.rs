@@ -309,6 +309,12 @@ mod tests {
 
 
 
+
+        // TODO: Lexer tests
+
+
+
+
         // Binary encoding of instructions
 
         #[test]
@@ -327,19 +333,22 @@ mod tests {
             assert_eq!(res, expected, "LeFT: {res:x}, RIGHT: {expected:x}");
         }
 
+        //OBS: when working with labels, it becomes trickier to think about the <offset>, since a
+        //instruction such as `bne t1,t2,label1` will become `bne t1,t2,rel_off`, where `rel_off`
+        //is the difference between the address of the `bne` line and the address associated with
+        //the label `label1`. Therefore, the semantics of this instruction with labels is slightly
+        //different from the semantics with numbers, as numbers are actual offsets, while labels
+        //are absolute addresses which then get converted to offsets by the compiler
         #[test]
-        #[ignore]
-        //OBS: the 'as' assembler uses two instructions to encode bne: 'beq' followed by a 'j'.
-        //For this reason, the offset given in the instruction isn't the exact same generated in
-        //the bytecode, because the encoded offset jumps PC to the position of the consecutive 'j'
-        //instruction. For that reason, in this test the offset 10 gets encoded as 8.
         fn encode_bne() {
-            let code = "bne t1,t2,10";
+            let code = "bne t1,t2,8";
             let expected: u32 = 0x00731463;
             let res = encode_to_word(code);
             assert_eq!(res, expected, "LeFT: {res:x}, RIGHT: {expected:x}");
         }
 
+        //OBS: the immediate used is going to be placed in the rd[31:12] bit range of the rd
+        //register
         #[test]
         fn encode_lui() {
             let code = "lui t3,25";
@@ -413,11 +422,18 @@ mod tests {
         }
 
         #[test]
-        #[ignore]
         fn encode_jal() {
-            // let code = "jal t4,0x900";
-            let code = "jal t4,18";
-            let expected: u32 = 0x00000eef;
+            let code = "
+                    .section .text
+                    .globl _start
+            _start:
+                    jal t2,_mylabel
+                    nop
+                    nop
+            _mylabel:
+                    nop
+            ";
+            let expected: u32 = 0x00c003ef;
             let res = encode_to_word(code);
             assert_eq!(res, expected, "LeFT: {res:x}, RIGHT: {expected:x}");
         }
@@ -539,6 +555,8 @@ mod tests {
 
 
         // Test ISA
+        // TODO: test more complex cases (negative offsets, sections in different orders than the
+        // usual, jumps to non-existing labels, ...)
         fn isa_rvi32_mach_only_text(code: &str) -> SimpleMachine {
             let words = encode_to_words(code);
             let mut m = SimpleMachine::from_words(&words, DataEndianness::Be);
@@ -696,7 +714,7 @@ mod tests {
                 .sections
                 .get(".data")
                 .expect("missing start address for data section");
-            let start_addr = data_section.address;
+            let start_addr = data_section.address + 4;
             let expected = vec![100u32];
             assert!(m.assert_memory_words(start_addr, expected.len(), &expected));
         }
@@ -711,16 +729,17 @@ mod tests {
                 .section .text
                     la t1, var1
                     li t2, 100
-                    sw t2, 1(t1)
+                    sb t2, 1(t1)
             ";
             let (m, tools) = isa_rvi32_mach(code);
             let data_section = tools
                 .sections
                 .get(".data")
                 .expect("missing start address for data section");
-            let start_addr = data_section.address;
+            let start_addr = data_section.address + 4;
             let expected = vec![100u8];
-            assert!(m.assert_memory_bytes(start_addr+3, expected.len(), &expected, 1));
+            println!("{:?}", m.bytes());
+            assert!(m.assert_memory_bytes(start_addr+1, expected.len(), &expected, 1));
         }
 
         // OBS: LW syntax is rd, off, rs
@@ -739,7 +758,8 @@ mod tests {
             ";
             let (m, _) = isa_rvi32_mach(code);
             let reg = Register::T2.id() as usize;
-            let reg = m.read_registers()[reg];
+            let regs = m.read_registers();
+            let reg = regs[reg];
             assert_eq!(reg, 4);
         }
 
@@ -754,25 +774,135 @@ mod tests {
             ";
             let (m, _) = isa_rvi32_mach(code);
             let reg = Register::T2.id() as usize;
-            let reg = m.read_registers()[reg];
+            let regs = m.read_registers();
+            let reg = regs[reg];
             let val = 0b1111_1111;
             assert_eq!(reg, val);
         }
 
         #[test]
-        fn isa_rvi32_lbu() {
+        fn isa_rvi32_beq() {
             let code = "
-                .section .data
-                var1: .byte 0x4
                 .section .text
-                    la t1, var1
-                    lbu t2, 0(t1)
+                _start:
+                    li t1, 2
+                    li t2, 2
+                    beq t2, t1, _continue
+                    li t3, 4
+                _continue:
+                    li t4, 5
             ";
             let (m, _) = isa_rvi32_mach(code);
-            let reg = Register::T2.id() as usize;
-            let reg = m.read_registers()[reg];
-            let val: u32 = 0b1111_1111;
+            let reg = Register::T3.id() as usize;
+            let regs = m.read_registers();
+            let reg = regs[reg];
+            assert_eq!(reg, 0);
+        }
+
+        #[test]
+        fn isa_rvi32_bne() {
+            let code = "
+                .section .text
+                _start:
+                    li t1, 4
+                    li t2, 2
+                    bne t2, t1, _continue
+                    li t3, 4
+                _continue:
+                    li t4, 5
+            ";
+            let (m, _) = isa_rvi32_mach(code);
+            let reg = Register::T3.id() as usize;
+            let regs = m.read_registers();
+            let reg = regs[reg];
+            assert_eq!(reg, 0);
+        }
+
+        #[test]
+        fn isa_rvi32_blt() {
+            let code = "
+                .section .text
+                _start:
+                    li t1, 4
+                    li t2, 2
+                    blt t2, t1, _continue
+                    li t3, 4
+                _continue:
+                    li t4, 5
+            ";
+            let (m, _) = isa_rvi32_mach(code);
+            let reg = Register::T3.id() as usize;
+            let regs = m.read_registers();
+            let reg = regs[reg];
+            assert_eq!(reg, 0);
+        }
+
+        #[test]
+        fn isa_rvi32_bge() {
+            let code = "
+                .section .text
+                _start:
+                    li t1, 2
+                    li t2, 4
+                    bge t2, t1, _continue
+                    li t3, 4
+                _continue:
+                    li t4, 5
+            ";
+            let (m, _) = isa_rvi32_mach(code);
+            let reg = Register::T3.id() as usize;
+            let regs = m.read_registers();
+            let reg = regs[reg];
+            assert_eq!(reg, 0);
+        }
+
+        #[test]
+        fn isa_rvi32_lui() {
+            let code = "
+                lui t1, 0x10000
+            ";
+            let m = isa_rvi32_mach_only_text(code);
+            let reg = Register::T1.id() as usize;
+            let regs = m.read_registers();
+            let reg = regs[reg];
+            let val = 0x10000 << 12;
             assert_eq!(reg, val);
+        }
+
+        #[test]
+        fn isa_rvi32_auipc() {
+            let code = "
+                .section .text
+                _start:
+                    addi x0, x0, 0
+                    addi x0, x0, 0
+                    auipc t1, 0x10000
+            ";
+            let (m, _) = isa_rvi32_mach(code);
+            let reg = Register::T1.id() as usize;
+            let regs = m.read_registers();
+            let reg = regs[reg];
+            let val = 8 + (0x10000 << 12);
+            assert_eq!(reg, val);
+        }
+
+        #[test]
+        fn isa_rvi32_jal() {
+            let code = "
+                .section .text
+                _start:
+                    nop
+                    jal t1, mylabel2
+                    li t2, 4
+                mylabel2:
+                    li t3, 4
+            ";
+            let (m, _) = isa_rvi32_mach(code);
+            let t1 = Register::T1.id() as usize;
+            let t2 = Register::T2.id() as usize;
+            let regs = m.read_registers();
+            assert_eq!(regs[t2], 0);
+            assert_eq!(regs[t1], 8);
         }
 
 

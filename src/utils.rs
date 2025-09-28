@@ -31,7 +31,7 @@ pub fn build_code_repr(code: &str) -> AssemblerTools {
     // println!("{:?}", &tokens);
 
     let lexemes = lexer.parse(tokens);
-    println!("{:?}", &lexemes);
+    // println!("{:?}", &lexemes);
 
     let blocks = parser.parse(lexemes);
     // println!("{:?}", &blocks);
@@ -254,6 +254,8 @@ const UWORD_MASK: [u32; 33] = [
 /// Performs a right shift of 'bit_idx', followed by applying a 1bit-mask to all remaining
 /// 'bit_amount' bits
 ///
+/// This operation corresponds to obtaining a number of 'n' bits starting at index 'bit_idx'
+///
 /// Index convention (with the number 1 as an example):
 ///   (1 in binary) ->    00000000     00000000     00000000   00000001
 ///   ( bit index ) ->   31      24   23      16   15      8   7      0
@@ -267,8 +269,33 @@ const UWORD_MASK: [u32; 33] = [
 /// which roughly translates to
 /// `(n >> 3) & 0b1111`
 ///
-pub fn rsh_mask_bits(n: &u32, bit_idx: u8, bit_amount: usize) -> u32 {
+pub fn get_n_bits_from(n: &u32, bit_idx: u8, bit_amount: usize) -> u32 {
     (n >> bit_idx) & UWORD_MASK[bit_amount]
+}
+
+/// Index convention (with the number 1 as an example):
+///   (1 in binary) ->    00000000     00000000     00000000   00000001
+///   ( bit index ) ->   31      24   23      16   15      8   7      0
+pub fn get_bits_from_to(n: u32, start: usize, end: usize) -> u32 {
+    let mask = UWORD_MASK[end+1] & (!UWORD_MASK[start]);
+    (n & mask) >> start
+}
+
+/// Index convention (with the number 1 as an example):
+///   (1 in binary) ->    00000000     00000000     00000000   00000001
+///   ( bit index ) ->   31      24   23      16   15      8   7      0
+pub fn get_single_bit_at(n: u32, idx: usize) -> u32 {
+    (n >> idx) & 0b1
+}
+
+pub fn set_remaining_bits(n: u32, start: usize, bit: usize) -> u32 {
+    let mask = UWORD_MASK[start];
+    if bit == 0 {
+        n & mask
+    }
+    else {
+        n | !mask
+    }
 }
 
 /// Converts a vector of u32 into a vector of u8, ensuring Big Endianness for the resulting bytes
@@ -339,4 +366,8 @@ pub fn print_bytes_hex(data: &[u8]) {
         print!("{:02X} ", byte);
     }
     println!();
+}
+
+pub fn print_binary_int(n: u32) {
+    println!("{:032b}", n);
 }

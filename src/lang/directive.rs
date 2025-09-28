@@ -34,12 +34,16 @@ pub enum DirectiveInstruction {
 // WARNING: when translating a directive into its sequence of bytes, the resulting endianness
 // should be little endian, as to standardize how this data gets handled later on. If this doesn't
 // happen, then things might not work
+// TODO: handle more than 1 byte/word/ascii?
 impl Directive for DirectiveInstruction {
     fn translate(&self, args: &Vec<ArgValue>) -> Vec<u8>  {
         match self {
             DirectiveInstruction::Byte => {
                 match &args[0] {
-                    ArgValue::Number(n) => n.to_le_bytes().to_vec(),
+                    ArgValue::Number(n) => {
+                        let b = *n as u8;
+                        vec![b]
+                    },
                     _ => panic!("Byte directive got something other than a number"),
                 }
             },

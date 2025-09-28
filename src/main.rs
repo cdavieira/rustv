@@ -23,6 +23,8 @@ pub mod obj {
     pub mod elfwriter;
 }
 
+use rustv::utils::{get_bits_from_to, print_binary_int, set_remaining_bits};
+
 use crate::tokenizer::Tokenizer;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
@@ -93,11 +95,11 @@ fn main() {
             // write(stdout=1, msg, len)
        write2:
             li a0, 1              // fd = 1 (stdout)
+            xor a1,a1,a1
             la a1, msg2           // buffer address
             li a2, 9              // length
             li a7, 64             // syscall: write
             ecall
-            la t1,0x3(msg2)
        sub_op:
             sub a7,a2,t2
        xor_op:
@@ -109,17 +111,22 @@ fn main() {
             li a7, 93             // syscall: exit
             ecall
     ";
-    let code = "
-        .section .data
-        var1: .word 0x4
-        .section .text
-            la t1, var1
-            lw t2, t1
-    ";
+    // let code = "
+    //     .section .data
+    //     var1: .word 0x4
+    //     .section .text
+    //         la t1, var1
+    //         lw t2, t1
+    // ";
     // let code = "
     //     li a2, 4
     //     jalr ra, a2, 8
     // ";
+
+    // See how instruction decoding evals
+    // let word = 0x00000eef;
+    // let iformat = InstructionFormat::decode(word);
+    // println!("{:?}", iformat);
 
     // Build code representation
     // let tools = build_code_repr(code);

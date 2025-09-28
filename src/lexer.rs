@@ -58,9 +58,9 @@ pub trait TokenClassifier {
     fn is_label(&self, token: &str) -> bool ;
     fn is_number(&self, token: &str) -> bool {
         let is_decimal = token.parse::<i32>().is_ok();
-        let is_hex = if token.len() > 2 {
-            let without_pref = &token[2..];
-            i32::from_str_radix(without_pref, 16).is_ok()
+        let is_hex = if token.contains('x') {
+            let without_pref = token.replace("0x", "");
+            i32::from_str_radix(&without_pref, 16).is_ok()
         }
         else {
             false

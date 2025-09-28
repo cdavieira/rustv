@@ -177,36 +177,12 @@ pub struct OpcodeLine {
     pub(crate) args: Vec<ArgValue>
 }
 
-impl Into<GenericLine> for OpcodeLine {
-    fn into(self) -> GenericLine {
-        GenericLine{
-            keyword: KeyValue::Op(self.keyword),
-            args: self.args
-        }
-    }
-}
-
-
-
-pub struct PseudoLine {
-    pub(crate) keyword: Box<dyn Pseudo>,
-    pub(crate) args: Vec<ArgValue>
-}
-
-impl Into<GenericLine> for PseudoLine {
-    fn into(self) -> GenericLine {
-        GenericLine{
-            keyword: KeyValue::Pseudo(self.keyword),
-            args: self.args
-        }
-    }
-}
-
 
 
 
 #[derive(Debug)]
 pub struct GenericLine {
+    pub(crate) id: usize,
     pub(crate) keyword: KeyValue,
     pub(crate) args: Vec<ArgValue>
 }

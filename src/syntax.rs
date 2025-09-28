@@ -48,14 +48,21 @@ pub mod gas {
             let Some(first_ch) = it.current_token() else {
                 return None;
             };
+
             let mut s = String::from(first_ch);
-            while let Some(lookahead) = it.advance_and_read() {
-                if !self.is_number(lookahead) {
-                    break;
+
+            let Some(second_ch) = it.advance_and_read() else {
+                return Some(s);
+            };
+
+            if self.is_number(second_ch) {
+                if let Some(n) = self.handle_number(it) {
+                    s.push_str(&n);
                 }
-                s.push(lookahead);
+                return Some(s);
             }
-            Some(s)
+
+            return Some(s);
         }
 
         fn is_unit(&self, ch: char) -> bool {
@@ -66,15 +73,11 @@ pub mod gas {
             ch == '/'
         }
         fn handle_comment(&self, it: &mut CharStreamReader) -> Option<String> {
-            // let mut s = String::new();
-            while let Some(ch) = it.current_token() {
-                let _ = it.advance_and_read();
-                // s.push(ch);
+            while let Some(ch) = it.read_and_advance() {
                 if ch == '\n' {
                     break;
                 }
             }
-            // Some(s)
             None
         }
 
@@ -166,6 +169,7 @@ pub mod gas {
                 "li"  => Some(Box::new(PseudoInstruction::LI)),
                 "mv"  => Some(Box::new(PseudoInstruction::MV)),
                 "la"  => Some(Box::new(PseudoInstruction::LA)),
+                "nop" => Some(Box::new(PseudoInstruction::NOP)),
                 _ => None
             }
         }
@@ -273,28 +277,25 @@ pub mod gas {
                 return None;
             };
 
-            if let Ok(n) = token.parse::<i32>() {
-                return Some(Token::Number(n));
+            let decimal = if token.contains('x') {
+                let hex = token.replace("0x", "");
+                i32::from_str_radix(&hex, 16)
             }
-            let prefix    = &token[..2];
-            let no_prefix = &token[2..];
-            let decimal = match prefix {
-                "0x" => {
-                    if let Ok(hex) = i32::from_str_radix(no_prefix, 16) {
-                        hex
-                    }
-                    else {
-                        panic!("handle_number failed when converting hex to decimal")
-                    }
-                },
-                _ => panic!("handle_number failed when converting to decimal")
+            else {
+                token.parse::<i32>()
+            };
+
+            let Ok(decimal) = decimal else {
+                panic!("Error converting number to decimal");
             };
 
             // Check for syntax: <offset> '(' <Identifier> ')'
             let Some(_) = it.advance_if(|next_token| next_token == "(") else {
                 return Some(Token::Number(decimal));
             };
-            let Some(identifier) = it.advance_if(|next_token| self.is_identifier(next_token)) else {
+            let Some(identifier) = it.advance_if(|next_token| {
+                !TokenClassifier::is_register(self, next_token) && self.is_identifier(next_token)
+            }) else {
                 return Some(Token::Number(decimal));
             };
             let Some(_) = it.advance_if(|next_token| next_token == ")") else {

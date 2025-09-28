@@ -1,5 +1,19 @@
+For now
+* do not override symbol/string/relocation table when the symbol appears multiple times in the code
+* fix bug where consecutive bytes arent side by side in the memory of the machine
+> fix assembler::args_to_numbers::435
+>> assembler::args_to_numbers converts the type ArgValue to i32. This is bad for
+>> variants that store values with size less than 4 bytes (such as the Byte
+>> variant). Those values get inflated by the 0-padding added after becoming a
+>> i32 value. After that, there's no way of knowing if a i32 value has pads or
+>> not. This affects the process of meshing those values in a single continuous
+>> vector of i32, since the internal padding will lead to fragmentation and
+>> will result in a waste of space.
+* after that, run `cargo test` and fix any remaining errors in `sw` and `lw` tests
+
 Focus
 * Prepare tests to test out all instructions from the RV32I (running in memory)
+> almost there
 * Improve debugger (maybe with dwarf info through gimli or addr2line)
 * Support arrays
 * Execute functions

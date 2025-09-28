@@ -120,6 +120,7 @@ fn gen_positions(
                     .into_iter()
                     .map(|line| {
                         PositionedGenericLine {
+                            root_relative_address: 0,
                             relative_address: 0,
                             line,
                         }
@@ -134,7 +135,8 @@ fn gen_positions(
 
 #[derive(Debug)]
 pub struct PositionedGenericLine {
-    relative_address: usize, /* relative address */
+    root_relative_address: usize,
+    relative_address: usize,
     line: GenericLine,
 }
 
@@ -181,7 +183,7 @@ fn gen_line_address(blocks: Vec<PositionedGenericBlock>) -> Vec<PositionedGeneri
                     relative_address,
                     ..line
                 };
-                relative_address += new_line.line.size_bytes_with_alignment(4);
+                relative_address += new_line.line.size_bytes_with_alignment(1);
                 new_line
             })
             .collect();
@@ -189,6 +191,31 @@ fn gen_line_address(blocks: Vec<PositionedGenericBlock>) -> Vec<PositionedGeneri
             lines: lines_with_address,
             ..block
         });
+    }
+    new_blocks
+}
+
+fn gen_root_line_address(blocks: Vec<PositionedGenericBlock>) -> Vec<PositionedGenericBlock> {
+    let mut new_blocks = Vec::new();
+    for block in blocks {
+        let mut line_map: HashMap<usize, usize> = HashMap::new();
+        for line in &block.lines {
+            if !line_map.contains_key(&line.line.id) {
+                line_map.insert(line.line.id, line.relative_address);
+            }
+        }
+        let new_lines = block.lines
+            .into_iter()
+            .map(|line| PositionedGenericLine {
+                    root_relative_address: *line_map.get(&line.line.id).unwrap(),
+                    ..line
+                }
+            )
+            .collect();
+        new_blocks.push(PositionedGenericBlock {
+            lines: new_lines,
+            ..block
+        })
     }
     new_blocks
 }
@@ -212,26 +239,26 @@ fn gen_section_table(sections: &Vec<PositionedGenericBlock>) -> HashMap<String, 
 fn gen_symbol_table(sections: &Vec<PositionedGenericBlock>) -> HashMap<String, Symbol> {
     let mut v = HashMap::new();
     for section in sections {
-        for line in &section.lines {
+        let mut it = section.lines.iter();
+        while let Some(line) = it.next() {
             match &line.line.keyword {
                 KeyValue::Label(s) => {
-                    let symbol_size = section
-                        .lines
-                        .iter()
-                        .find_map(|line| {
-                            match line.line.keyword {
-                                KeyValue::AssemblyDirective(_) => Some(line.line.size_bytes_with_alignment(1)),
-                                _ => None,
+                    let symbol_size = match it.next() {
+                        Some(next_line) => {
+                            match next_line.line.keyword {
+                                KeyValue::AssemblyDirective(_) => {
+                                    line.line.size_bytes_with_alignment(1)
+                                },
+                                _ => 0usize,
                             }
-                        });
+                        },
+                        None => 0usize
+                    };
                     let value = Symbol {
                         section: section.name.clone(),
                         relative_address: line.relative_address,
                         scope: String::from("File"),
-                        length: match symbol_size {
-                                Some(size) => size,
-                                None => 0,
-                            },
+                        length: symbol_size,
                     };
                     v.insert(s.clone(), value);
                 },
@@ -321,6 +348,7 @@ fn compute_offset(
     let symb_faddr: i32 = (symbol_section.address + symbol.relative_address)
         .try_into()
         .unwrap();
+
     symb_faddr - line_faddr
 }
 
@@ -341,7 +369,7 @@ fn resolve_symbols(
                         let res = get_symb_addrs(&s, symbols, sections);
                         if let Ok((symb, symb_sect)) = res {
                             let offset = compute_offset(
-                                section.address, line.relative_address, symb, symb_sect);
+                                section.address, line.root_relative_address, symb, symb_sect);
                             new_args.push(ArgValue::Number(offset + addend));
                         }
                     },
@@ -349,7 +377,7 @@ fn resolve_symbols(
                         let res = get_symb_addrs(&s, symbols, sections);
                         if let Ok((symb, symb_sect)) = res {
                             let offset = compute_offset(
-                                section.address, line.relative_address, symb, symb_sect);
+                                section.address, line.root_relative_address, symb, symb_sect);
                             let hi = (offset >> 12) & 0b11111_11111_11111_11111;
                             new_args.push(ArgValue::Number(hi + addend));
                         }
@@ -358,7 +386,7 @@ fn resolve_symbols(
                         let res = get_symb_addrs(&s, symbols, sections);
                         if let Ok((symb, symb_sect)) = res {
                             let offset = compute_offset(
-                                section.address, line.relative_address, symb, symb_sect);
+                                section.address, line.root_relative_address, symb, symb_sect);
                             let lo = offset & 0b1111_1111_1111;
                             new_args.push(ArgValue::Number(lo + addend));
                         }
@@ -370,8 +398,8 @@ fn resolve_symbols(
             }
             new_lines.push(PositionedGenericLine{
                 line: GenericLine {
-                    keyword: line.line.keyword,
-                    args: new_args
+                    args: new_args,
+                    ..line.line
                 },
                 ..line
             });
@@ -405,14 +433,22 @@ fn args_to_numbers(blocks: Vec<PositionedGenericBlock>) -> Vec<PositionedEncodab
                     });
                 },
                 KeyValue::AssemblyDirective(d) => {
-                    let args: Vec<i32> = line.line.args
-                        .into_iter()
-                        .filter_map(|arg| arg.to_number())
-                        .collect();
-                    instructions.push(EncodableLine {
-                        key: EncodableKey::Directive(d),
-                        args,
-                    });
+                    // TODO:
+                    panic!("do this!!!");
+                    match d.datatype() {
+                        crate::lang::highassembly::Datatype::Word  => {},
+                        crate::lang::highassembly::Datatype::Half  => {},
+                        crate::lang::highassembly::Datatype::Byte  => {},
+                        crate::lang::highassembly::Datatype::Ascii => {},
+                    }
+                    // let args: Vec<i32> = line.line.args
+                    //     .into_iter()
+                    //     .filter_map(|arg| arg.to_number())
+                    //     .collect();
+                    // instructions.push(EncodableLine {
+                    //     key: EncodableKey::Directive(d),
+                    //     args,
+                    // });
                 },
                 _ => {
                 },
@@ -447,12 +483,13 @@ pub fn to_u32(mut blocks: Vec<GenericBlock>) -> AssemblerTools {
     let metadata = extract_metadata(&mut blocks);
 
     let blocks = gen_positions(blocks);
-    // println!("{:?}", blocks);
 
     let blocks = gen_section_address(blocks, 0, 4);
     // println!("{:?}", blocks);
+    // dbg!(&blocks);
 
     let blocks = gen_line_address(blocks);
+    let blocks = gen_root_line_address(blocks);
     // println!("{:?}", blocks);
     // dbg!(&blocks);
 

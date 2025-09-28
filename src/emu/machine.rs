@@ -66,6 +66,7 @@ use crate::lang::ext::{
 };
 use crate::lang::highassembly::Register;
 use crate::lang::lowassembly::DataEndianness;
+use crate::utils::{get_bits_from_to, get_single_bit_at, set_remaining_bits};
 
 pub struct SimpleMachine {
     cpu: SimpleCPU,
@@ -232,7 +233,10 @@ impl Machine for SimpleMachine {
 }
 
 fn handle(m: &mut SimpleMachine, word: u32) -> () {
-    match InstructionFormat::decode(word) {
+    let Some(ifmt) = InstructionFormat::decode(word) else {
+        return;
+    };
+    match ifmt {
         InstructionFormat::R { funct7, rs2, rs1, funct3, rd, opcode: _ } => {
             let v1 = m.cpu.read(rs1 as usize);
             let v2 = m.cpu.read(rs2 as usize);
@@ -266,6 +270,8 @@ fn handle(m: &mut SimpleMachine, word: u32) -> () {
         },
         InstructionFormat::I { imm, rs1, funct3, rd, opcode } => {
             let rs1_val = m.cpu.read(rs1 as usize);
+            let sign_bit = get_single_bit_at(imm, 11);
+            let imm = set_remaining_bits(imm, 11, sign_bit as usize);
             match (funct3, opcode) {
                 (0b000, 0b1110011) => {
                     let a7: usize = m.cpu
@@ -320,7 +326,7 @@ fn handle(m: &mut SimpleMachine, word: u32) -> () {
                     m.cpu.write(rd as usize, v);
                 }, // LW
                 (0b000, 0b0000011) => {
-                    let addr = rs1_val + (imm << 20);
+                    let addr = (rs1_val as i32) + (imm as i32);
                     let v = m.mem.read_byte(addr as usize);
                     m.cpu.write(rd as usize, v as u32);
                 }, // LB
@@ -333,16 +339,17 @@ fn handle(m: &mut SimpleMachine, word: u32) -> () {
             }
         },
         InstructionFormat::S { imm1, rs2, rs1, funct3, imm2, opcode } => {
+            let imm = (imm1 << 5) | imm2;
+            let sign_bit = get_single_bit_at(imm, 11);
+            let imm = set_remaining_bits(imm, 11, sign_bit as usize);
             match (funct3, opcode) {
                 (0b010, 0b0100011 ) => { //SW
                     let v = m.cpu.read(rs2 as usize);
-                    let imm = (imm1 << 5) & imm2;
                     let addr = m.cpu.read(rs1 as usize) + imm;
                     m.mem.write_word(addr as usize, v);
                 },
                 (0b000, 0b0100011 ) => { //SB
                     let v = (m.cpu.read(rs2 as usize)) & 0b1111_1111;
-                    let imm = (imm1 << 5) & imm2;
                     let addr = m.cpu.read(rs1 as usize) + imm;
                     m.mem.write_byte(addr as usize, v as u8);
                 },
@@ -351,20 +358,36 @@ fn handle(m: &mut SimpleMachine, word: u32) -> () {
                 }
             }
         },
-        // TODO: shouldn't imm be an i32?
         InstructionFormat::B { imm1, rs2, rs1, funct3, imm2, opcode } => {
-            match (funct3, opcode) {
-                (0b0, 0b1100011) => { //BEQ
-                    if m.cpu.read(rs1 as usize) == m.cpu.read(rs2 as usize) {
-                        let imm = (imm1 << 5) & imm2;
-                        let pc = m.cpu.read_pc() as u32;
-                        let addr = pc + imm;
-                        m.cpu.write_pc(addr as usize);
-                    }
+            let cond = match (funct3, opcode) {
+                (0b000, 0b1100011) => { //BEQ
+                    m.cpu.read(rs1 as usize) == m.cpu.read(rs2 as usize)
+                },
+                (0b001, 0b1100011) => { //BNE
+                    m.cpu.read(rs1 as usize) != m.cpu.read(rs2 as usize)
+                },
+                (0b100, 0b1100011) => { //BLT
+                    m.cpu.read(rs1 as usize) < m.cpu.read(rs2 as usize)
+                },
+                (0b101, 0b1100011) => { //BGE
+                    m.cpu.read(rs1 as usize) >= m.cpu.read(rs2 as usize)
                 },
                 _ => {
                     panic!("Unhandled B: (f3, op) = ({}, {})", funct3, opcode);
                 }
+            };
+            if cond {
+                let bit0     = get_single_bit_at(imm2, 0);
+                let bit_1_4  = get_bits_from_to(imm2, 1, 4);
+                let bit_5_10 = get_bits_from_to(imm1, 0, 5);
+                let bit11    = get_single_bit_at(imm1, 6);
+                let imm = ((bit_5_10 << 5) | (bit_1_4 << 1) | bit0) << 1;
+                let imm = set_remaining_bits(imm, 12, bit11 as usize);
+                // At this point, pc was already advanced by 4 bytes (as the effect of 1
+                // fetch-decode procedure).
+                let beq_addr = (m.cpu.read_pc() - 4usize) as u32;
+                let rel_addr = beq_addr.saturating_add_signed(imm as i32);
+                m.cpu.write_pc(rel_addr as usize);
             }
         },
         InstructionFormat::U { imm, rd, opcode } => {
@@ -375,7 +398,9 @@ fn handle(m: &mut SimpleMachine, word: u32) -> () {
                 },
                 0b0010111 => { //AUIPC
                     let offset = (imm << 12) as i32;
-                    let pc: u32 = m.cpu.read_pc().try_into().unwrap();
+                    // At this point, pc was already advanced by 4 bytes (as the effect of 1
+                    // fetch-decode procedure).
+                    let pc   = (m.cpu.read_pc() - 4usize) as u32;
                     let addr = (pc as i32) + offset;
                     m.cpu.write(rd as usize, addr as u32);
                 },
@@ -385,10 +410,26 @@ fn handle(m: &mut SimpleMachine, word: u32) -> () {
             }
 
         },
-        InstructionFormat::J { imm: _, rd: _, opcode } => {
+        InstructionFormat::J { imm, rd, opcode } => {
             match opcode {
                 0b1101111  => { //JAL
-                    todo!();
+                    let pc = m.cpu.read_pc();
+                    // At this point, pc was already advanced by 4 bytes (as the effect of 1
+                    // fetch-decode procedure). For that reason, we don't have to add 4 to
+                    // ret_addr
+                    let ret_addr = pc;
+                    // The following subtraction is totally safe and won't make pc wrap around,
+                    // since pc is <always> at least 4 by this point
+                    let pc_inst_addr = pc - 4;
+                    let bit_1_10   = get_bits_from_to(imm, 9, 18);
+                    let bit11     = get_single_bit_at(imm, 8);
+                    let bit_12_19 = get_bits_from_to(imm, 0, 7);
+                    let bit20     = get_single_bit_at(imm, 19);
+                    let imm = ((bit_12_19 << 11) | (bit11 << 10) | bit_1_10) << 1;
+                    let imm = set_remaining_bits(imm, 20, bit20 as usize);
+                    let pc_next_addr = pc_inst_addr.saturating_add_signed(imm as isize);
+                    m.cpu.write_pc(pc_next_addr);
+                    m.cpu.write(rd as usize, ret_addr as u32);
                 },
                 _ => {
                     panic!("Unhandled J: op = {}", opcode);
