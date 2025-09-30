@@ -34,7 +34,7 @@ pub fn build_code_repr(code: &str) -> AssemblerTools {
     // println!("{:?}", &lexemes);
 
     let blocks = parser.parse(lexemes);
-    // println!("{:?}", &blocks);
+    // dbg!(&blocks);
 
     let tools = assembler.assemble(blocks);
     // dbg!(&tools);
@@ -61,7 +61,6 @@ pub fn encode_to_elf(code: &str, output_file: &str) -> elfwriter::Result<()> {
     let blocks = &output.blocks;
     // let section_table = &output.sections;
 
-    // TODO: how is this working if _start is in 'metadata'?
     if symbol_table.contains_key("_start") {
         let symb = symbol_table.get("_start").expect("No _start found");
         writer.set_start_address(symb.relative_address.try_into().unwrap());
@@ -72,7 +71,6 @@ pub fn encode_to_elf(code: &str, output_file: &str) -> elfwriter::Result<()> {
     }
 
     for (name, symb) in symbol_table {
-        // TODO:
         let symbol_section = symb.section.clone();
         let symbol_addr = symb.relative_address.try_into().unwrap();
         let length = symb.length;
@@ -91,12 +89,13 @@ pub fn encode_to_elf(code: &str, output_file: &str) -> elfwriter::Result<()> {
         }
     }
 
-    // writer.handle_symbol_relocation("tmp", 4u64).unwrap();
-    for (symbname, relocation) in relocation_table {
-        let offset = relocation.address.try_into().unwrap();
-        let addend = relocation.addend;
-        // println!("Handling relocation for symb {} at text+{}", symbname, offset);
-        writer.handle_symbol_relocation(symbname, offset, addend).unwrap();
+    for (symbname, relocations) in relocation_table {
+        for relocation in relocations {
+            let offset = relocation.address.try_into().unwrap();
+            let addend = relocation.addend;
+            let relidx = relocation.id;
+            writer.handle_symbol_relocation(symbname, offset, addend, relidx).unwrap();
+        }
     }
 
     writer.save(output_file)
@@ -144,6 +143,7 @@ pub fn new_machine_from_tools(
 
     // println!("{} {} {}", text_start, data_start, memsize);
     // println!("{:?} {} {:?} {}", textdata, textdata.len(), datadata, datadata.len());
+    // print_bytes_hex(&datadata);
     let mut m = SimpleMachine::from_bytes_size(memsize, DataEndianness::Be);
     m.write_memory_bytes(text_start, &textdata);
     m.write_memory_bytes(data_start, &datadata);

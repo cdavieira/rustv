@@ -320,7 +320,6 @@ fn handle(m: &mut SimpleMachine, word: u32) -> () {
                     m.cpu.write(rd as usize, v);
                 }, // XORI  
                 (0b010, 0b0000011) => {
-                    // TODO: use sign extension
                     let addr = (rs1_val as i32) + (imm as i32);
                     let v = m.mem.read_word(addr as usize, m.endian);
                     m.cpu.write(rd as usize, v);

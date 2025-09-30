@@ -1,34 +1,9 @@
-For now
-* do not override symbol/string/relocation table when the symbol appears multiple times in the code
-* fix bug where consecutive bytes arent side by side in the memory of the machine
-> fix assembler::args_to_numbers::435
->> assembler::args_to_numbers converts the type ArgValue to i32. This is bad for
->> variants that store values with size less than 4 bytes (such as the Byte
->> variant). Those values get inflated by the 0-padding added after becoming a
->> i32 value. After that, there's no way of knowing if a i32 value has pads or
->> not. This affects the process of meshing those values in a single continuous
->> vector of i32, since the internal padding will lead to fragmentation and
->> will result in a waste of space.
-* after that, run `cargo test` and fix any remaining errors in `sw` and `lw` tests
-
 Focus
-* Prepare tests to test out all instructions from the RV32I (running in memory)
-> almost there
 * Improve debugger (maybe with dwarf info through gimli or addr2line)
-* Support arrays
 * Execute functions
 * Execute recursion
 
-* Create spec::ImmediateFormat ?
-* Fix lb and lbu test
-* Things like 'la t1, 100(var1)' are now possible, but there's currently no
-  check for if 100 % 4 == 0 (for example). This could mess with the text
-  section alignment 
-
-
 * Set starting code address
-* Parse riscv32 elf files, decode instructions and execute them in a Virtual Context
-* Fix the binary encoding of some instruction formats
 * Create tests to check memory alignment after Parser runs
 * Create Loader entity
 * Create Executor entity
@@ -42,20 +17,21 @@ Code
 	* Watch out for places in the code using 'as' casts
 * Write simple field evaluator to handle constant expressions?
 * Rewrite parts of the code where 'eprintln' is (poorly) used or isn't adequate
-* Make sure the minimal instruction set is fully supported
-	* Fix binary encoding of some instructions
 * Support running real code in a virtual machine
-	* (cpu.rs) Prepare set of 32 registers to be R/W
-	* (memory.rs) R/W of in-memory addresses
 	* (stack.rs)
 * Write logger
-* (isa.rs) ?
-* (execcontext.rs) ?
-* (machine.rs) ?
-* Move DataEndianness to ???
 * pub(crate), pub(self), pub(in path) instead of raw pub
-* The 'imm_*' family of functions cant use utils::rsh_mask_bits because they
-  operate i32 instead of u32...
+* fix bug where consecutive bytes arent side by side in the memory of the machine
+> side by side byte instructions (`.byte 0x1 \n .byte 0x2`) don't get merged
+> into the same word, but in different words. That's fine for now. If this
+> behavior has to change later on, then these functions will have to be
+> editted: assembler::generic_to_encodable_lines,
+> assembler::gen_section_address, assembler::gen_line_address,
+> assembler::gen_symbol_table. The address generation process will be subject
+> to change, because fixing this bug would affect the address of the two
+> consecutive bytes in code
+* Create spec::ImmediateFormat ?
+* 
 
 
 
@@ -66,7 +42,6 @@ Design/Improvements
 * Review how args (for instructions) are being handled
 	* This is a vector of 0-3 elements
 	* The instruction requires a syntax and args, which are then parsed by the function 'get_args'
-* Improve how 'parser::group_tokens' is implemented
 * Review using 'Rc' in order to reduce the number of duplicates for instances of 'dyn Extension'
 
 
@@ -78,15 +53,27 @@ Test
 
 
 Docs
+* Document how parsing '1(r1)' is different than '1(varname)'
+	* 1(r1) = Offset + Reg
+	* 1(varname) = Name(addr, addend)
+* Document known issues
+	* `.byte 0x1 \n .byte 0x2`, 
+	* Things like 'la t1, 100(var1)' are now possible, but there's currently no
+	  check for if 100 % 4 == 0 (for example). This could mess with the text
+	  section alignment 
+* Document how relocation works
+* Document how addresses get generated
+
 
 
 
 Misc
-
-
-
-
-Minimal instruction set:
+* [X] Prepare tests to test out all instructions from the RV32I (running in memory)
+* [X] Support arrays (addresses + offset)
+* [X] do not override symbol/string/relocation table when the symbol appears
+  multiple times in the code
+> For each symbol reference,a new relocation gets created
+* [X] support minimal instruction set
 	* add
 	* and
 	* or (R)
@@ -99,3 +86,5 @@ Minimal instruction set:
 	* sw (S)
 	* beq
 	* blt (B)
+* [X] Parse riscv32 elf files, decode instructions and execute them in a Virtual Context
+* [X] Fix the binary encoding of some instruction formats

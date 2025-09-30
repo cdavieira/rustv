@@ -23,7 +23,7 @@ pub mod obj {
     pub mod elfwriter;
 }
 
-use rustv::utils::{get_bits_from_to, print_binary_int, set_remaining_bits};
+use rustv::utils::{get_bits_from_to, print_binary_int, print_words_hex, set_remaining_bits, words_to_bytes_be};
 
 use crate::tokenizer::Tokenizer;
 use crate::lexer::Lexer;
@@ -34,7 +34,7 @@ use crate::emu::machine::{
     SimpleMachine,
 };
 use crate::utils::{
-    encode_to_words,
+    encode_to_words, print_bytes_hex,
 };
 use crate::lang::lowassembly::{
     DataEndianness,
@@ -91,25 +91,27 @@ fn main() {
             li a2, 13             // length
             li a7, 64             // syscall: write
             ecall
+            la a1, msg            // buffer address
+            la a1, msg            // buffer address
 
             // write(stdout=1, msg, len)
-       write2:
-            li a0, 1              // fd = 1 (stdout)
-            xor a1,a1,a1
-            la a1, msg2           // buffer address
-            li a2, 9              // length
-            li a7, 64             // syscall: write
-            ecall
-       sub_op:
-            sub a7,a2,t2
-       xor_op:
-            xor a1,a1,a1
+       // write2:
+       //      li a0, 1              // fd = 1 (stdout)
+       //      xor a1,a1,a1
+       //      la a1, msg2           // buffer address
+       //      li a2, 9              // length
+       //      li a7, 64             // syscall: write
+       //      ecall
+       // sub_op:
+       //      sub a7,a2,t2
+       // xor_op:
+       //      xor a1,a1,a1
 
-       exit:
-            // exit(0)
-            li a0, 0              // status
-            li a7, 93             // syscall: exit
-            ecall
+       // exit:
+       //      // exit(0)
+       //      li a0, 0              // status
+       //      li a7, 93             // syscall: exit
+       //      ecall
     ";
     // let code = "
     //     .section .data
@@ -130,6 +132,9 @@ fn main() {
 
     // Build code representation
     // let tools = build_code_repr(code);
+    // let data = tools.data_section_words();
+    // let data = words_to_bytes_be(&data);
+    // print_bytes_hex(&data);
 
     // Export to ELF
     let outputfile = "main.o";

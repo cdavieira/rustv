@@ -39,19 +39,25 @@ impl Directive for DirectiveInstruction {
     fn translate(&self, args: &Vec<ArgValue>) -> Vec<u8>  {
         match self {
             DirectiveInstruction::Byte => {
-                match &args[0] {
-                    ArgValue::Number(n) => {
-                        let b = *n as u8;
-                        vec![b]
-                    },
-                    _ => panic!("Byte directive got something other than a number"),
-                }
+                args.iter()
+                    .map(|arg| {
+                        match arg {
+                            ArgValue::Number(n) => *n as u8,
+                            _ => panic!("Byte directive got something other than a number"),
+                        }
+                    })
+                    .collect()
             },
             DirectiveInstruction::Word => {
-                match &args[0] {
-                    ArgValue::Number(n) => n.to_le_bytes().to_vec(),
-                    _ => panic!("WORD directive got something other than a number"),
-                }
+                args.iter()
+                    .map(|arg| {
+                        match arg {
+                            ArgValue::Number(n) => n.to_le_bytes().to_vec(),
+                            _ => panic!("WORD directive got something other than a number"),
+                        }
+                    })
+                    .flatten()
+                    .collect()
             },
             DirectiveInstruction::Ascii => {
                 match &args[0] {

@@ -135,26 +135,13 @@ impl EncodableLine {
             },
             EncodableKey::Directive(d) => {
                 let alignment = d.datatype().alignment();
-                // println!("{:?}", &self.args);
                 let data: Vec<u32> = {
-                    let len_args = self.args.len();
-                    let exceeding_bytes = len_args % 4; //for word boundary
-                    let pad = if exceeding_bytes > 0 {
-                        4 - exceeding_bytes
-                    } else {
-                        0
-                    };
-                    let mut args = self.args.clone();
-                    for _ in 0..pad {
-                        args.push(0);
-                    }
-                    let args: Vec<u8> = args
+                    let args: Vec<u32> = self.args
                         .into_iter()
-                        .map(|arg| arg as u8)
+                        .map(|arg| arg as u32)
                         .collect();
-                    DataEndianness::induce_bytes_to_words(&args, DataEndianness::Le)
+                    args
                 };
-                // print_words_hex(&data[..]);
                 EncodedData {
                     data,
                     alignment,

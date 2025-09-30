@@ -125,6 +125,15 @@ impl Datatype {
             Datatype::Ascii => 1usize,
         }
     }
+
+    pub fn size_bytes(&self) -> usize {
+        match self {
+            Datatype::Word  => 4usize,
+            Datatype::Half  => 2usize,
+            Datatype::Byte  => 1usize,
+            Datatype::Ascii => 1usize,
+        }
+    }
 }
 
 
@@ -188,18 +197,28 @@ pub struct GenericLine {
 }
 
 impl GenericLine {
-    pub fn size_bytes_with_alignment(&self, alignment: usize) -> usize {
+    fn size_bytes_with_alignment(&self, alignment: usize) -> usize {
         match &self.keyword {
             KeyValue::Op(_) => 4usize,
-            KeyValue::AssemblyDirective(_) => {
+            KeyValue::AssemblyDirective(d) => {
+                let datatype_size = d.datatype().size_bytes();
                 let len = self.args.len();
-                let exceeding = len % alignment;
+                let size = datatype_size  * len;
+                let exceeding = size % alignment;
                 //ensure word alignment for sections
                 let pad = if exceeding > 0 { alignment - exceeding } else { 0 };
-                len + pad
+                size + pad
             },
             _ => 0usize
         }
+    }
+
+    pub fn size_bytes_at_word_boundary(&self) -> usize {
+        self.size_bytes_with_alignment(4)
+    }
+
+    pub fn size_bytes_unaligned(&self) -> usize {
+        self.size_bytes_with_alignment(1)
     }
 }
 

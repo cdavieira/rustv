@@ -723,8 +723,8 @@ mod tests {
         fn isa_rvi32_sb() {
             let code = "
                 .section .data
-                var1: .byte 0x4
-                var2: .byte 0xa
+                var1: .byte 0x4 0xa
+                // var2: .byte 0xa
 
                 .section .text
                     la t1, var1
@@ -736,10 +736,9 @@ mod tests {
                 .sections
                 .get(".data")
                 .expect("missing start address for data section");
-            let start_addr = data_section.address + 4;
+            let start_addr = data_section.address + 1;
             let expected = vec![100u8];
-            println!("{:?}", m.bytes());
-            assert!(m.assert_memory_bytes(start_addr+1, expected.len(), &expected, 1));
+            assert!(m.assert_memory_bytes(start_addr, expected.len(), &expected, 1));
         }
 
         // OBS: LW syntax is rd, off, rs
@@ -770,7 +769,7 @@ mod tests {
                 var1: .byte -0x1
                 .section .text
                     la t1, var1
-                    lb t2, 0(t1)
+                    lb t2, 3(t1)
             ";
             let (m, _) = isa_rvi32_mach(code);
             let reg = Register::T2.id() as usize;

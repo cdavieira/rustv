@@ -159,6 +159,7 @@ impl<'a> ElfWriter<'a> {
         symbol_name: &str,
         text_section_off: u64,
         symbol_addend: i32,
+        idx: usize,
     ) -> Result<()>
     {
         create_ext_symbol_relocatable_reference(
@@ -167,7 +168,8 @@ impl<'a> ElfWriter<'a> {
             text_section_off,
             &self.symbol_ids,
             symbol_name,
-            symbol_addend
+            symbol_addend,
+            idx
         )
     }
 
@@ -186,6 +188,7 @@ fn create_ext_symbol_relocatable_reference<'a>(
     symbol_ids: &HashMap<String, SymbolId>,
     symbol_name: &str,
     symbol_addend: i32,
+    tmpidx: usize,
 ) -> Result<()>
 {
     let symbol_id = symbol_ids
@@ -194,7 +197,7 @@ fn create_ext_symbol_relocatable_reference<'a>(
     let hi_off = text_section_off;
     let lo_off = text_section_off + 4;
 
-    let tmp_label_name = String::from(".L") + symbol_name;
+    let tmp_label_name = String::from(".L") + symbol_name + &tmpidx.to_string();
 
     let tmp_label = write::Symbol {
         name: tmp_label_name.bytes().collect(),

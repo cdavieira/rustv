@@ -410,7 +410,7 @@ pub mod gas {
                 Token::AssemblyDirective(directive) =>
                     Some(GenericToken::KeyToken(KeyValue::AssemblyDirective(directive))),
                 Token::Reg(register)        => Some(GenericToken::ArgToken(ArgValue::Register(register))),
-                Token::Name(name, off)           => Some(GenericToken::ArgToken(ArgValue::Use(name, off))),
+                Token::Name(name, off)      => Some(GenericToken::ArgToken(ArgValue::Use(name, off))),
                 Token::Str(literal)         => Some(GenericToken::ArgToken(ArgValue::Literal(literal))),
                 Token::Number(n)            => Some(GenericToken::ArgToken(ArgValue::Number(n))),
                 Token::Section(sec)         => {

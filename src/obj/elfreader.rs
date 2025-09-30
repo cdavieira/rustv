@@ -58,6 +58,7 @@ pub struct ElfSymbol {
 }
 
 pub struct ElfRelocation {
+    pub(crate) id: usize,
     pub(crate) name: String,
     pub(crate) offset: u64,
     pub(crate) addend: i32,
@@ -131,16 +132,29 @@ impl<'a> ElfReader<'a> {
                 (pair.0.to_string(), s)
             })
             .collect();
-        let relocations: HashMap<String, assembler::RelocationEntry> = self.relocation_table
+        let mut relocations = HashMap::new();
+        self.relocation_table
             .iter()
-            .map(|pair| {
+            .enumerate()
+            .for_each(|(idx, pair)| {
                 let rel = assembler::RelocationEntry {
+                    id: idx,
                     address: pair.1.offset as usize,
                     addend: pair.1.addend
                 };
-                (pair.0.clone(), rel)
-            })
-            .collect();
+                let relname = pair.0.clone();
+                relocations
+                    .entry(relname)
+                    .or_insert(Vec::new())
+                    .push(rel);
+                // if relocations.contains_key(&relname) {
+                //     relocations.insert(relname, vec![rel]);
+                // }
+                // else {
+                //     let buffer = relocations.get_mut(&relname).unwrap();
+                //     buffer.push(rel);
+                // }
+            });
         let blocks: Vec<_> = self.elf.sections()
             .map(|section| {
                 let name = section.name().unwrap();
@@ -253,9 +267,11 @@ fn build_relocation_table<'a>(elf: &ElfFile32<'a>) -> HashMap<String, ElfRelocat
             let addend = rel.1.addend();
             match rel.1.target() {
                 read::RelocationTarget::Symbol(symbol_index) => {
+                    let symbidx = symbol_index.0;
                     let symbol = elf.symbol_by_index(symbol_index).unwrap();
                     let name = symbol.name().unwrap().to_string();
                     let r = ElfRelocation {
+                        id: symbidx,
                         name,
                         offset,
                         addend: addend as i32,

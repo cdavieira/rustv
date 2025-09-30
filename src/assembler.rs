@@ -4,6 +4,7 @@ use crate::lang::highassembly::{
     KeyValue,
     GenericBlock,
     GenericLine,
+    Datatype,
 };
 use crate::lang::lowassembly::{
     EncodableKey,
@@ -40,6 +41,7 @@ pub struct Section {
 
 #[derive(Debug)]
 pub struct RelocationEntry {
+    pub(crate) id: usize,
     pub(crate) address: usize,
     pub(crate) addend: i32,
 }
@@ -50,7 +52,7 @@ pub struct AssemblerTools {
     pub(crate) sections: HashMap<String, Section>,
     pub(crate) symbols:  HashMap<String, Symbol>,
     pub(crate) strings:  Vec<String>,
-    pub(crate) relocations:  HashMap<String, RelocationEntry>,
+    pub(crate) relocations:  HashMap<String, Vec<RelocationEntry>>,
     pub(crate) blocks: Vec<PositionedEncodedBlock>,
 }
 
@@ -159,7 +161,7 @@ fn gen_section_address(
     for block in blocks {
         let block_size: usize = block.lines
             .iter()
-            .map(|line| line.line.size_bytes_with_alignment(4usize))
+            .map(|line| line.line.size_bytes_at_word_boundary())
             .sum();
         new_blocks.push(PositionedGenericBlock{
             address: next_block_address,
@@ -183,7 +185,8 @@ fn gen_line_address(blocks: Vec<PositionedGenericBlock>) -> Vec<PositionedGeneri
                     relative_address,
                     ..line
                 };
-                relative_address += new_line.line.size_bytes_with_alignment(1);
+                // relative_address += new_line.line.size_bytes_unaligned();
+                relative_address += new_line.line.size_bytes_at_word_boundary();
                 new_line
             })
             .collect();
@@ -243,24 +246,26 @@ fn gen_symbol_table(sections: &Vec<PositionedGenericBlock>) -> HashMap<String, S
         while let Some(line) = it.next() {
             match &line.line.keyword {
                 KeyValue::Label(s) => {
-                    let symbol_size = match it.next() {
-                        Some(next_line) => {
-                            match next_line.line.keyword {
-                                KeyValue::AssemblyDirective(_) => {
-                                    line.line.size_bytes_with_alignment(1)
-                                },
-                                _ => 0usize,
-                            }
-                        },
-                        None => 0usize
-                    };
-                    let value = Symbol {
-                        section: section.name.clone(),
-                        relative_address: line.relative_address,
-                        scope: String::from("File"),
-                        length: symbol_size,
-                    };
-                    v.insert(s.clone(), value);
+                    if !v.contains_key(s) {
+                        let symbol_size = match it.next() {
+                            Some(next_line) => {
+                                match next_line.line.keyword {
+                                    KeyValue::AssemblyDirective(_) => {
+                                        line.line.size_bytes_unaligned()
+                                    },
+                                    _ => 0usize,
+                                }
+                            },
+                            None => 0usize
+                        };
+                        let value = Symbol {
+                            section: section.name.clone(),
+                            relative_address: line.relative_address,
+                            scope: String::from("File"),
+                            length: symbol_size,
+                        };
+                        v.insert(s.clone(), value);
+                    }
                 },
                 _ => {
                 }
@@ -289,8 +294,9 @@ fn gen_relocation_table(
     blocks: &Vec<PositionedGenericBlock>,
     symbols: &HashMap<String, Symbol>,
     sections: &HashMap<String, Section>,
-) -> HashMap<String, RelocationEntry> {
+) -> HashMap<String, Vec<RelocationEntry>> {
     let mut relocation_table = HashMap::new();
+    let mut rel_count = 0;
     for section in blocks {
         if section.name != SectionName::Text {
             continue;
@@ -299,14 +305,20 @@ fn gen_relocation_table(
             for arg in &line.line.args {
                 match arg {
                     ArgValue::UseHi(s, addend) => {
-                        let res = get_symb_addrs(&s, symbols, sections);
-                        if let Ok((_, symb_sect)) = res {
-                            if symb_sect.name != section.name {
+                        if let Ok((_, symb_sect)) = get_symb_addrs(&s, symbols, sections) {
+                            let refers_external_symbol = symb_sect.name != section.name;
+                            if refers_external_symbol {
+                                let relname = s.clone();
                                 let relocation = RelocationEntry {
+                                    id: rel_count,
                                     address: line.relative_address,
                                     addend: *addend,
                                 };
-                                relocation_table.insert(s.clone(), relocation);
+                                rel_count += 1;
+                                relocation_table
+                                    .entry(relname)
+                                    .or_insert(Vec::new())
+                                    .push(relocation);
                             }
                         };
                     },
@@ -414,50 +426,63 @@ fn resolve_symbols(
 
 // 2.7 Converting all arguments to numbers
 
+fn generic_to_encodable_lines(lines: Vec<PositionedGenericLine>) -> Vec<EncodableLine> {
+    let mut new_lines = Vec::new();
+    for line in lines {
+        let kw = line.line.keyword;
+        let args = line.line.args;
+        match kw {
+            KeyValue::Op(op) => {
+                let args: Vec<i32> = args
+                    .iter()
+                    .filter_map(|arg| arg.to_number())
+                    .collect();
+                new_lines.push(EncodableLine {
+                    key: EncodableKey::Op(op),
+                    args
+                });
+            },
+            KeyValue::AssemblyDirective(d) => {
+                let handle_endian = match d.datatype().size_bytes() {
+                    1 => i32::from_le_bytes,
+                    _ => i32::from_le_bytes,
+                };
+                let args: Vec<u8> = args
+                    .iter()
+                    .filter_map(|arg| arg.to_number())
+                    .map(|n| n as u8)
+                    .collect();
+                let args: Vec<i32> = args
+                    .chunks(4)
+                    .map(|chunk| {
+                        let b = [
+                            chunk.get(0).map_or(0u8, |v| *v),
+                            chunk.get(1).map_or(0u8, |v| *v),
+                            chunk.get(2).map_or(0u8, |v| *v),
+                            chunk.get(3).map_or(0u8, |v| *v)
+                        ];
+                        handle_endian(b)
+                    })
+                    .collect();
+                new_lines.push(EncodableLine {
+                    key: EncodableKey::Directive(d),
+                    args
+                });
+            },
+            _ => {}
+        }
+    }
+    new_lines
+}
+
 fn args_to_numbers(blocks: Vec<PositionedGenericBlock>) -> Vec<PositionedEncodableBlock> {
     let mut sections = Vec::new();
-    let mut instructions = Vec::new();
     for block in blocks {
-        for line in block.lines {
-            match line.line.keyword {
-                KeyValue::Op(op) => {
-                    let args: Vec<i32> = line
-                        .line
-                        .args
-                        .iter()
-                        .filter_map(|arg| arg.to_number())
-                        .collect();
-                    instructions.push(EncodableLine {
-                        key: EncodableKey::Op(op),
-                        args
-                    });
-                },
-                KeyValue::AssemblyDirective(d) => {
-                    // TODO:
-                    panic!("do this!!!");
-                    match d.datatype() {
-                        crate::lang::highassembly::Datatype::Word  => {},
-                        crate::lang::highassembly::Datatype::Half  => {},
-                        crate::lang::highassembly::Datatype::Byte  => {},
-                        crate::lang::highassembly::Datatype::Ascii => {},
-                    }
-                    // let args: Vec<i32> = line.line.args
-                    //     .into_iter()
-                    //     .filter_map(|arg| arg.to_number())
-                    //     .collect();
-                    // instructions.push(EncodableLine {
-                    //     key: EncodableKey::Directive(d),
-                    //     args,
-                    // });
-                },
-                _ => {
-                },
-            };
-        }
+        let instructions = generic_to_encodable_lines(block.lines);
         sections.push(PositionedEncodableBlock {
             addr: block.address,
             name: block.name,
-            instructions: instructions.drain(..).collect(),
+            instructions,
         });
     }
     sections
