@@ -4,7 +4,6 @@ use crate::lang::highassembly::{
     KeyValue,
     GenericBlock,
     GenericLine,
-    Datatype,
 };
 use crate::lang::lowassembly::{
     EncodableKey,
@@ -108,7 +107,7 @@ fn extract_metadata(
     }
 }
 
-fn gen_positions(
+fn cast_generic_to_positioned_blocks(
     blocks: Vec<GenericBlock>
 ) -> Vec<PositionedGenericBlock>
 {
@@ -507,7 +506,7 @@ fn encode_blocks(blocks: Vec<PositionedEncodableBlock>) -> Vec<PositionedEncoded
 pub fn to_u32(mut blocks: Vec<GenericBlock>) -> AssemblerTools {
     let metadata = extract_metadata(&mut blocks);
 
-    let blocks = gen_positions(blocks);
+    let blocks = cast_generic_to_positioned_blocks(blocks);
 
     let blocks = gen_section_address(blocks, 0, 4);
     // println!("{:?}", blocks);

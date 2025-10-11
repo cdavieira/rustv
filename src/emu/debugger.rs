@@ -51,7 +51,7 @@ use crate::lang::lowassembly::DataEndianness;
 /// TCP based Stub
 pub struct SimpleGdbStub<'a, T: Machine> {
     // Connection
-    addr: SocketAddr,
+    // addr: SocketAddr,
 
     // Target
     target: SimpleTarget<T>,
@@ -71,11 +71,10 @@ impl<'a, T: Machine> SimpleGdbStub<'a, T> {
             mem.push(0);
         }
         let target = SimpleTarget::from_words(mem);
-        let (stream, addr) = wait_for_gdb_connection(port)?;
+        let (stream, _addr) = wait_for_gdb_connection(port)?;
         let stub = GdbStub::new(stream);
         Ok(
             SimpleGdbStub {
-                addr,
                 target,
                 stub,
             }
@@ -159,9 +158,9 @@ fn wait_for_gdb_connection(port: u16) -> io::Result<(TcpStream, SocketAddr)> {
 enum TargetState {
     Idle,
     Running,
-    Continuing,
+    // Continuing,
     Stepping,
-    Trapped,
+    // Trapped,
 }
 
 struct SimpleTarget<T: Machine> {
@@ -188,14 +187,14 @@ impl<T: Machine> Target for SimpleTarget<T> {
     type Arch = gdbstub_arch::riscv::Riscv32;
 
     #[inline(always)]
-    fn base_ops(&mut self) -> BaseOps<Self::Arch, Self::Error>
+    fn base_ops(&mut self) -> BaseOps<'_, Self::Arch, Self::Error>
     {
         BaseOps::SingleThread(self)
     }
 
     // opt-in to support for setting/removing breakpoints
     #[inline(always)]
-    fn support_breakpoints(&mut self) -> Option<BreakpointsOps<Self>>
+    fn support_breakpoints(&mut self) -> Option<BreakpointsOps<'_, Self>>
     {
         Some(self)
     }
@@ -266,7 +265,7 @@ impl<T: Machine> SingleThreadBase for SimpleTarget<T> {
 
     // most targets will want to support at resumption as well...
     #[inline(always)]
-    fn support_resume(&mut self) -> Option<SingleThreadResumeOps<Self>> {
+    fn support_resume(&mut self) -> Option<SingleThreadResumeOps<'_, Self>> {
         Some(self)
     }
 }
@@ -305,7 +304,7 @@ impl<T: Machine> SingleThreadSingleStep for SimpleTarget<T> {
 impl<T: Machine> Breakpoints for SimpleTarget<T> {
     // there are several kinds of breakpoints - this target uses software breakpoints
     #[inline(always)]
-    fn support_sw_breakpoint(&mut self) -> Option<SwBreakpointOps<Self>>
+    fn support_sw_breakpoint(&mut self) -> Option<SwBreakpointOps<'_, Self>>
     {
         Some(self)
     }
@@ -483,9 +482,6 @@ impl<T: Machine> run_blocking::BlockingEventLoop for SimpleGdbBlockingEventLoop<
                     std::thread::sleep(std::time::Duration::from_millis(1));
                 }
 
-                _ => {
-
-                }
             }
         }
     }
@@ -534,13 +530,13 @@ fn custom_handle_machine_state<'a, T: Machine>(
                             // println!("Stub Ok");
                             Ok(stub_ok)
                         },
-                        Err(stub_err) => {
+                        Err(_stub_err) => {
                             // println!("Stub Err: {:?}", stub_err);
                             Err(())
                         }
                     }
                 },
-                Err(err) => {
+                Err(_err) => {
                     // println!("Error in idle {:?}", err);
                     Err(())
                 }

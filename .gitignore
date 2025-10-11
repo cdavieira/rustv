@@ -3,4 +3,5 @@ Cargo.lock
 tmp/
 *.txt
 *.o
-main*
+main
+main.o

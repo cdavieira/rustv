@@ -119,7 +119,7 @@ fn expand_assembly_directives(lines: Vec<GenericLine>) -> Vec<GenericLine> {
 
 // 2.5 Grouping instructions into sections
 
-fn group_blocks(lines: Vec<GenericLine>) -> Vec<GenericBlock> {
+fn group_lines(lines: Vec<GenericLine>) -> Vec<GenericBlock> {
     let mut blocks = vec![];
     let mut block_lines = vec![];
     let mut metadata = GenericBlock{
@@ -182,7 +182,7 @@ pub fn tokens_to_lines<T: ToGenericToken>(tokens: Vec<T>) -> Vec<GenericLine> {
 }
 
 fn lines_to_blocks(lines: Vec<GenericLine>) -> Vec<GenericBlock> {
-    let blocks = group_blocks(lines);
+    let blocks = group_lines(lines);
     let blocks = merge_blocks(blocks);
     blocks
 }

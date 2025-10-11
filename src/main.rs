@@ -23,28 +23,6 @@ pub mod obj {
     pub mod elfwriter;
 }
 
-use rustv::utils::{get_bits_from_to, print_binary_int, print_words_hex, set_remaining_bits, words_to_bytes_be};
-
-use crate::tokenizer::Tokenizer;
-use crate::lexer::Lexer;
-use crate::parser::Parser;
-use crate::assembler::Assembler;
-use crate::emu::machine::{
-    Machine,
-    SimpleMachine,
-};
-use crate::utils::{
-    encode_to_words, print_bytes_hex,
-};
-use crate::lang::lowassembly::{
-    DataEndianness,
-};
-use crate::lang::ext::InstructionFormat;
-use crate::lang::highassembly::Register;
-use crate::utils::{
-    build_code_repr,
-    new_machine_from_tools,
-};
 
 fn main() {
     // let code = "
@@ -52,6 +30,7 @@ fn main() {
     //     li a0, 1000
     //     ecall
     // ";
+
     // let code = "
     //             .globl _start
     //             .section .text
@@ -72,6 +51,7 @@ fn main() {
     //             li a7, 93       // Linux syscall: exit
     //             ecall
     // ";
+
     let code = "
             .globl _start
 
@@ -95,24 +75,42 @@ fn main() {
             la a1, msg            // buffer address
 
             // write(stdout=1, msg, len)
-       // write2:
-       //      li a0, 1              // fd = 1 (stdout)
-       //      xor a1,a1,a1
-       //      la a1, msg2           // buffer address
-       //      li a2, 9              // length
-       //      li a7, 64             // syscall: write
-       //      ecall
-       // sub_op:
-       //      sub a7,a2,t2
-       // xor_op:
-       //      xor a1,a1,a1
+       write2:
+            li a0, 1              // fd = 1 (stdout)
+            xor a1,a1,a1
+            la a1, msg2           // buffer address
+            li a2, 9              // length
+            li a7, 64             // syscall: write
+            ecall
+       sub_op:
+            sub a7,a2,t2
+       xor_op:
+            xor a1,a1,a1
 
-       // exit:
-       //      // exit(0)
-       //      li a0, 0              // status
-       //      li a7, 93             // syscall: exit
-       //      ecall
+       exit:
+            // exit(0)
+            li a0, 0              // status
+            li a7, 93             // syscall: exit
+            ecall
     ";
+
+    // let code = "
+    //         .globl _start
+    //         .section .text
+    // _start:
+    //         li t1, 3
+    //         jal ra, myfunc
+    //         li a7, 93
+    //         li a0, 1000
+    //         ecall
+    // myfunc:
+    //         add a0, a0, a1
+    //         ret
+    //         .section .data
+    //         .skip 20
+    //         .word 32
+    // ";
+
     // let code = "
     //     .section .data
     //     var1: .word 0x4
@@ -125,12 +123,18 @@ fn main() {
     //     jalr ra, a2, 8
     // ";
 
+
+
     // See how instruction decoding evals
+    // use crate::lang::ext::InstructionFormat;
     // let word = 0x00000eef;
     // let iformat = InstructionFormat::decode(word);
     // println!("{:?}", iformat);
 
     // Build code representation
+    // use crate::utils::build_code_repr;
+    // use crate::utils::print_bytes_hex;
+    // use crate::utils::words_to_bytes_be;
     // let tools = build_code_repr(code);
     // let data = tools.data_section_words();
     // let data = words_to_bytes_be(&data);
@@ -138,14 +142,10 @@ fn main() {
 
     // Export to ELF
     let outputfile = "main.o";
-    // let code = "
-    //     li a7, 93
-    //     li a0, 1000
-    //     ecall
-    // ";
     utils::encode_to_elf(code, outputfile).unwrap();
 
     // Read ELF and execute the Machine (only text)
+    // use crate::emu::machine::Machine as _;
     // let inputfile = "main.o";
     // let mut m = utils::new_machine_from_elf_textsection(inputfile);
     // m.decode();
@@ -154,12 +154,17 @@ fn main() {
     // assert!(m.assert_reg(10u32, 1000));
 
     // Read code and instantiate Machine from parser tools
+    // use crate::utils::build_code_repr;
+    // use crate::utils::new_machine_from_tools;
+    // use crate::emu::machine::Machine as _;
     // let tools = build_code_repr(code);
     // let m = new_machine_from_tools(&tools);
     // println!("{:?}", m.words());
     // println!("{:?}", m.read_registers());
 
     // Read ELF and execute the Machine (text + data)
+    // use crate::lang::highassembly::Register;
+    // use crate::emu::machine::Machine as _;
     // let inputfile = "main";
     // let mut m = utils::new_machine_from_elf(inputfile);
     // m.decode();
@@ -177,6 +182,10 @@ fn main() {
     // riscv32_dbg.default_gdb_event_loop_thread();
 
     // Run instructions in memory
+    // use crate::lang::lowassembly::DataEndianness;
+    // use crate::emu::machine::SimpleMachine;
+    // use crate::utils::encode_to_words;
+    // use crate::emu::machine::Machine as _;
     // let words = encode_to_words(code);
     // let mut m = SimpleMachine::from_words(&words, DataEndianness::Be);
     // for _word in words {

@@ -907,6 +907,63 @@ mod tests {
 
 
 
+        // Test programs
+        #[test]
+        fn program_funccall() {
+            let code = "
+                        .globl _start
+                        .section .text
+                _start:
+                        li t1, 3
+                        li a0, 1
+                        li a1, -2
+                        jal ra, myfunc
+                        li a7, 93
+                        li a0, 1000
+                        ecall
+                myfunc:
+                        add a0, a0, a1
+                        ret
+            ";
+            let (m, _) = isa_rvi32_mach(code);
+            let reg = Register::A0.id() as usize;
+            let regs = m.read_registers();
+            let reg = regs[reg] as i32;
+            let val = -1;
+            assert_eq!(reg, val);
+        }
+
+        #[test]
+        #[ignore]
+        fn program_recfcall() {
+            let code = "
+                        .globl _start
+                        .section .text
+                _start:
+                        addi sp, sp, 0x80000000
+                        li a2, 5
+                        jal ra, myrecfunc
+                        li a7, 93
+                        li a0, 1000
+                        ecall
+                myrecfunc:
+                        beq a2, 0, end
+                        addi a2, a2, -1
+                        jal ra, myrecfunc
+                end:
+                        ret
+            ";
+            let (m, _) = isa_rvi32_mach(code);
+            let reg = Register::A0.id() as usize;
+            let regs = m.read_registers();
+            let reg = regs[reg] as i32;
+            let val = -1;
+            assert_eq!(reg, val);
+        }
+
+
+
+
 
         // Test elf R/W
         #[test]

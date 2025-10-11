@@ -9,13 +9,13 @@ pub trait Tokenizer {
 use crate::streamreader::{CharStreamReader, Position, StreamReader};
 
 pub enum CommonClass {
-    COMMENT,
-    NUMBER,
-    STRING,
-    IDENTIFIER,
-    UNIT,
-    IGNORE,
-    AMBIGUOUS,
+    Comment,
+    Number,
+    String,
+    Identifier,
+    Unit,
+    Ignore,
+    Ambiguous,
 }
 
 /**
@@ -110,25 +110,25 @@ pub trait CommonClassifier {
 
     fn is_token(&self, ch: char) -> Option<CommonClass> {
         if self.is_ambiguous(ch) {
-            return Some(CommonClass::AMBIGUOUS);
+            return Some(CommonClass::Ambiguous);
         }
         if self.is_unit(ch) {
-            return Some(CommonClass::UNIT);
+            return Some(CommonClass::Unit);
         }
         if self.is_comment(ch) {
-            return Some(CommonClass::COMMENT);
+            return Some(CommonClass::Comment);
         }
         if self.is_string(ch) {
-            return Some(CommonClass::STRING);
+            return Some(CommonClass::String);
         }
         if self.is_ignore(ch) {
-            return Some(CommonClass::IGNORE);
+            return Some(CommonClass::Ignore);
         }
         if self.is_number(ch) {
-            return Some(CommonClass::NUMBER);
+            return Some(CommonClass::Number);
         }
         if self.is_identifier(ch){
-            return Some(CommonClass::IDENTIFIER);
+            return Some(CommonClass::Identifier);
         }
         None
     }
@@ -141,15 +141,15 @@ pub trait CommonClassifier {
             return Ok(None);
         };
         match self.is_token(ch) {
-            Some(CommonClass::AMBIGUOUS)  => Ok(self.handle_ambiguous(it)),
-            Some(CommonClass::UNIT)       => Ok(self.handle_unit(it)),
-            Some(CommonClass::COMMENT)    => Ok(self.handle_comment(it)),
-            Some(CommonClass::STRING)     => Ok(self.handle_string(it)),
-            Some(CommonClass::IGNORE)     => Ok(self.handle_ignore(it)),
-            Some(CommonClass::NUMBER)     => Ok(self.handle_number(it)),
-            Some(CommonClass::IDENTIFIER) => Ok(self.handle_identifier(it)),
+            Some(CommonClass::Ambiguous)  => Ok(self.handle_ambiguous(it)),
+            Some(CommonClass::Unit)       => Ok(self.handle_unit(it)),
+            Some(CommonClass::Comment)    => Ok(self.handle_comment(it)),
+            Some(CommonClass::String)     => Ok(self.handle_string(it)),
+            Some(CommonClass::Ignore)     => Ok(self.handle_ignore(it)),
+            Some(CommonClass::Number)     => Ok(self.handle_number(it)),
+            Some(CommonClass::Identifier) => Ok(self.handle_identifier(it)),
             None => {
-                let pos = it.current_position().expect("Error creating TokenizerError (EOF)");
+                let pos = it.current_position().unwrap_or(Position::new(0, 0, 0));
                 Err(TokenizerError::AutomataException(pos))
             }
         }

@@ -181,6 +181,7 @@ pub mod gas {
                 ".byte"  => Some(Box::new(DirectiveInstruction::Byte)),
                 ".word"  => Some(Box::new(DirectiveInstruction::Word)),
                 ".ascii" => Some(Box::new(DirectiveInstruction::Ascii)),
+                ".skip"  => Some(Box::new(DirectiveInstruction::Skip)),
                 _ => None
             }
         }

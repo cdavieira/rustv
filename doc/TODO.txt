@@ -1,7 +1,25 @@
+Deadlines
+reuniao presencial (prox ou semana que vem que vem)
+
+* supondo defesa dia 15/12:
+	* entrega da monografia: 8/12
+	* ter toda implementação pronta: 17/11
+> Na prática, a defesa poderá ser feita até fevereiro do ano que vem
+
+A defesa de TCC pode ser adiantada (so que a nota so vai sair em março)
+
+
 Focus
-* Improve debugger (maybe with dwarf info through gimli or addr2line)
 * Execute functions
+> only sp management missing?
+* Space/Skip directives
+> write tests
+* Improve debugger (maybe with dwarf info through gimli or addr2line)
 * Execute recursion
+* Prepare a test to sort a vector (bubble sort)
+* Prepare a test to multiply elements of a vector (bubble sort)
+* Prepare a gdb tutorial (generating code through my program+ debugging it through gdb)
+* Improve code tracing during debug/runtime (r/w of registers/memory)
 
 * Set starting code address
 * Create tests to check memory alignment after Parser runs

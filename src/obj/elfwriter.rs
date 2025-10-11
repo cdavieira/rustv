@@ -6,8 +6,8 @@ use object::{
     Architecture,
     BinaryFormat,
     Endianness,
-    ObjectSection,
     SectionKind,
+    // ObjectSection as _,
     // RelocationTarget,
     // SymbolSection
 };

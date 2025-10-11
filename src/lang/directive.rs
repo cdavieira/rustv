@@ -71,6 +71,9 @@ impl Directive for DirectiveInstruction {
                         let capacity: usize = (*n).try_into().unwrap();
                         let mut v = Vec::new();
                         v.reserve(capacity + capacity % 4);
+                        for _ in 0..*n {
+                            v.push(0);
+                        }
                         v
                     },
                     _ => panic!("SKIP directive got something other than a number"),
