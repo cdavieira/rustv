@@ -19,6 +19,7 @@ pub trait Machine {
     // CPU
     fn read_registers(&self) -> Vec<u32> ;
     fn write_registers(&mut self, gprs: Vec<u32>, pc: usize) -> () ;
+    fn read_pc(&self) -> u32;
 
 
     // Memory
@@ -153,6 +154,10 @@ impl Machine for SimpleMachine {
 
     fn write_registers(&mut self, gprs: Vec<u32>, pc: usize) -> () {
         self.cpu.write_all(gprs, pc);
+    }
+
+    fn read_pc(&self) -> u32 {
+        self.cpu.read_pc() as u32
     }
 
     fn bytes_count(&self) -> usize {
@@ -411,7 +416,7 @@ fn handle(m: &mut SimpleMachine, word: u32) -> () {
         },
         InstructionFormat::J { imm, rd, opcode } => {
             match opcode {
-                0b1101111  => { //JAL
+                0b1101111  => {
                     let pc = m.cpu.read_pc();
                     // At this point, pc was already advanced by 4 bytes (as the effect of 1
                     // fetch-decode procedure). For that reason, we don't have to add 4 to
@@ -420,7 +425,7 @@ fn handle(m: &mut SimpleMachine, word: u32) -> () {
                     // The following subtraction is totally safe and won't make pc wrap around,
                     // since pc is <always> at least 4 by this point
                     let pc_inst_addr = pc - 4;
-                    let bit_1_10   = get_bits_from_to(imm, 9, 18);
+                    let bit_1_10  = get_bits_from_to(imm, 9, 18);
                     let bit11     = get_single_bit_at(imm, 8);
                     let bit_12_19 = get_bits_from_to(imm, 0, 7);
                     let bit20     = get_single_bit_at(imm, 19);
@@ -429,7 +434,7 @@ fn handle(m: &mut SimpleMachine, word: u32) -> () {
                     let pc_next_addr = pc_inst_addr.saturating_add_signed(imm as isize);
                     m.cpu.write_pc(pc_next_addr);
                     m.cpu.write(rd as usize, ret_addr as u32);
-                },
+                }, //JAL
                 _ => {
                     panic!("Unhandled J: op = {}", opcode);
                 }

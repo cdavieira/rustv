@@ -275,6 +275,7 @@ impl<T: Machine> SingleThreadResume for SimpleTarget<T> {
         &mut self,
         _signal: Option<Signal>,
     ) -> Result<(), Self::Error> {
+        println!("Calling 'resume' (Now Running)");
         self.state = TargetState::Running;
         Ok(())
     }
@@ -296,6 +297,7 @@ impl<T: Machine> SingleThreadSingleStep for SimpleTarget<T> {
         _signal: Option<Signal>,
     ) -> Result<(), Self::Error>
     {
+        println!("Calling 'resume' (Now Stepping)");
         self.state = TargetState::Stepping;
         Ok(())
     }
@@ -319,7 +321,7 @@ impl<T: Machine> SwBreakpoint for SimpleTarget<T> {
     {
         // According to the docs found in 'gdbstub_arch::riscv::Riscv32', kind is the 'size' to be
         // used by this breakpoint (whatever that means)
-        println!("\nTrying to add a sw breakpoint at {} {}", addr, kind);
+        println!("Trying to add a sw breakpoint at {} {}", addr, kind);
         self.breakpoints.push((addr, kind));
         Ok(true)
     }
@@ -330,7 +332,7 @@ impl<T: Machine> SwBreakpoint for SimpleTarget<T> {
         kind: usize,
     ) -> TargetResult<bool, Self>
     {
-        println!("\nTrying to rm a sw breakpoint at {} {}", addr, kind);
+        println!("Trying to rm a sw breakpoint at {} {}", addr, kind);
         if let Some(pair) = self.breakpoints
             .iter()
             .enumerate()
@@ -402,27 +404,6 @@ impl<T: Machine> run_blocking::BlockingEventLoop for SimpleGdbBlockingEventLoop<
         //
         // Ok(event)
 
-        // println!("\nBreakpoints:");
-        // for bkp in &target.breakpoints {
-        //     println!("{:x}: {}", bkp.0, bkp.1);
-        // }
-        //
-        // let pc_before = target.machine.read_registers()[32];
-        // let pc_at_bkp = target.breakpoints
-        //     .iter()
-        //     .find(|bkp| {
-        //         bkp.0 == pc_before
-        //     });
-        // if pc_at_bkp.is_some() {
-        //     println!("PC frozen because of breakpoint");
-        //     return Ok(run_blocking::Event::TargetStopped(SingleThreadStopReason::SwBreak(())));
-        // }
-        //
-        // target.machine.decode();
-        // let pc_after = target.machine.read_registers()[32];
-        // println!("PC updated: {:x} -> {:x}", pc_before, pc_after);
-        // Ok(run_blocking::Event::TargetStopped(SingleThreadStopReason::DoneStep))
-
         loop {
             // Try a non-blocking read for incoming data (so GDB can interrupt).
             // Connection here is TcpStream; set nonblocking briefly.
@@ -452,9 +433,9 @@ impl<T: Machine> run_blocking::BlockingEventLoop for SimpleGdbBlockingEventLoop<
 
             match target.state {
                 TargetState::Stepping => {
-                    let _pc_before = target.machine.read_registers()[32];
+                    let _pc_before = target.machine.read_pc();
                     target.machine.decode(); // execute one instruction
-                    let pc_after = target.machine.read_registers()[32];
+                    let pc_after = target.machine.read_pc();
 
                     // if we hit a breakpoint, report SwBreak; else DoneStep
                     if target.breakpoints.iter().any(|b| b.0 == pc_after) {
@@ -469,7 +450,7 @@ impl<T: Machine> run_blocking::BlockingEventLoop for SimpleGdbBlockingEventLoop<
                 TargetState::Running => {
                     // Execute a single instruction per loop to remain responsive.
                     target.machine.decode();
-                    let pc = target.machine.read_registers()[32];
+                    let pc = target.machine.read_pc();
                     if target.breakpoints.iter().any(|b| b.0 == pc) {
                         target.state = TargetState::Idle;
                         return Ok(run_blocking::Event::TargetStopped(SingleThreadStopReason::SwBreak(())));
@@ -513,17 +494,9 @@ fn custom_handle_machine_state<'a, T: Machine>(
 
     match stub_sm {
         gdbstub::stub::state_machine::GdbStubStateMachine::Idle(mut gdb_stub_state_machine_inner) => {
-            // println!("Idle");
             let read_result = ConnectionExt::read(gdb_stub_state_machine_inner.borrow_conn());
             match read_result {
                 Ok(byte) => {
-                    if byte.is_ascii_graphic() {
-                        let ch: char = byte.try_into().unwrap();
-                        print!("{}", ch);
-                    }
-                    else {
-                        print!("{}", byte);
-                    }
                     let stub_result = gdb_stub_state_machine_inner.incoming_data(target, byte);
                     match stub_result {
                         Ok(stub_ok) => {
@@ -546,15 +519,12 @@ fn custom_handle_machine_state<'a, T: Machine>(
             use run_blocking::Event as BlockingEventLoopEvent;
             use run_blocking::WaitForStopReasonError;
 
-            println!("\nRunning");
-
             // block waiting for the target to return a stop reason
             let event = <SimpleGdbBlockingEventLoop<T> as run_blocking::BlockingEventLoop>::
                 wait_for_stop_reason(target, gdb_stub_state_machine_inner.borrow_conn());
 
             match event {
                 Ok(BlockingEventLoopEvent::TargetStopped(stop_reason)) => {
-                    println!("\nRunning - Got target stopped");
                     let gdb_res = gdb_stub_state_machine_inner.report_stop(target, stop_reason);
                     if let Ok(gdb_ok) = gdb_res {
                         Ok(gdb_ok)
@@ -565,13 +535,6 @@ fn custom_handle_machine_state<'a, T: Machine>(
                 }
 
                 Ok(BlockingEventLoopEvent::IncomingData(byte)) => {
-                    if byte.is_ascii_graphic() {
-                        let ch: char = byte.try_into().unwrap();
-                        print!("{}", ch);
-                    }
-                    else {
-                        print!("{}", byte);
-                    }
                     let gdb_res = gdb_stub_state_machine_inner.incoming_data(target, byte);
                     if let Ok(gdb_ok) = gdb_res {
                         Ok(gdb_ok)
@@ -582,23 +545,19 @@ fn custom_handle_machine_state<'a, T: Machine>(
                 }
 
                 Err(WaitForStopReasonError::Target(_e)) => {
-                    println!("\nRunning - Got target");
                     // break Err(InternalError::TargetError(e).into());
                     Err(())
                 }
                 Err(WaitForStopReasonError::Connection(_e)) => {
-                    println!("\nRunning - Got connection");
                     // break Err(InternalError::conn_read(e).into());
                     Err(())
                 }
             }
         },
         gdbstub::stub::state_machine::GdbStubStateMachine::CtrlCInterrupt(_gdb_stub_state_machine_inner) => {
-            println!("\nCtrlc");
             Err(())
         },
         gdbstub::stub::state_machine::GdbStubStateMachine::Disconnected(_gdb_stub_state_machine_inner) => {
-            println!("\nDisconnected");
             Err(())
         }
     }

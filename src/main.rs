@@ -23,8 +23,12 @@ pub mod obj {
     pub mod elfwriter;
 }
 
+use env_logger::Env;
+
 
 fn main() {
+    env_logger::Builder::from_env(Env::default().default_filter_or("trace")).init();
+
     // let code = "
     //     li a7, 93
     //     li a0, 1000
@@ -52,47 +56,47 @@ fn main() {
     //             ecall
     // ";
 
-    let code = "
-            .globl _start
-
-            .section .data
-        msg:
-            .ascii \"Hello world!\n\"   // 13 bytes including newline
-        msg2:
-            .ascii \"Burrito!\n\"   // 9 bytes including newline
-        myvar:
-            .word 32
-
-            .section .text
-        _start:
-            // write(stdout=1, msg, len)
-            li a0, 1              // fd = 1 (stdout)
-            la a1, msg            // buffer address
-            li a2, 13             // length
-            li a7, 64             // syscall: write
-            ecall
-            la a1, msg            // buffer address
-            la a1, msg            // buffer address
-
-            // write(stdout=1, msg, len)
-       write2:
-            li a0, 1              // fd = 1 (stdout)
-            xor a1,a1,a1
-            la a1, msg2           // buffer address
-            li a2, 9              // length
-            li a7, 64             // syscall: write
-            ecall
-       sub_op:
-            sub a7,a2,t2
-       xor_op:
-            xor a1,a1,a1
-
-       exit:
-            // exit(0)
-            li a0, 0              // status
-            li a7, 93             // syscall: exit
-            ecall
-    ";
+    // let code = "
+    //         .globl _start
+    //
+    //         .section .data
+    //     msg:
+    //         .ascii \"Hello world!\n\"   // 13 bytes including newline
+    //     msg2:
+    //         .ascii \"Burrito!\n\"   // 9 bytes including newline
+    //     myvar:
+    //         .word 32
+    //
+    //         .section .text
+    //     _start:
+    //         // write(stdout=1, msg, len)
+    //         li a0, 1              // fd = 1 (stdout)
+    //         la a1, msg            // buffer address
+    //         li a2, 13             // length
+    //         li a7, 64             // syscall: write
+    //         ecall
+    //         la a1, msg            // buffer address
+    //         la a1, msg            // buffer address
+    //
+    //         // write(stdout=1, msg, len)
+    //    write2:
+    //         li a0, 1              // fd = 1 (stdout)
+    //         xor a1,a1,a1
+    //         la a1, msg2           // buffer address
+    //         li a2, 9              // length
+    //         li a7, 64             // syscall: write
+    //         ecall
+    //    sub_op:
+    //         sub a7,a2,t2
+    //    xor_op:
+    //         xor a1,a1,a1
+    //
+    //    exit:
+    //         // exit(0)
+    //         li a0, 0              // status
+    //         li a7, 93             // syscall: exit
+    //         ecall
+    // ";
 
     // let code = "
     //         .globl _start
@@ -118,11 +122,27 @@ fn main() {
     //         la t1, var1
     //         lw t2, t1
     // ";
+
     // let code = "
     //     li a2, 4
     //     jalr ra, a2, 8
     // ";
 
+    let code = "
+            .globl _start
+            .section .text
+    _start:
+            li t1, 3
+            li a0, 0
+            li a1, 1
+            jal ra, myfunc
+            li a7, 93
+            li a0, 1000
+            ecall
+    myfunc:
+            add a0, a0, a1
+            ret
+    ";
 
 
     // See how instruction decoding evals
@@ -141,8 +161,8 @@ fn main() {
     // print_bytes_hex(&data);
 
     // Export to ELF
-    let outputfile = "main.o";
-    utils::encode_to_elf(code, outputfile).unwrap();
+    // let outputfile = "main.o";
+    // utils::encode_to_elf(code, outputfile).unwrap();
 
     // Read ELF and execute the Machine (only text)
     // use crate::emu::machine::Machine as _;
@@ -175,10 +195,10 @@ fn main() {
     // assert!(m.assert_reg(10u32, 1000));
 
     // Run with GDB support
-    // let memsize = 1024*1024;
-    // let port = 9999u16;
-    // let riscv32_dbg = utils::wait_for_new_debugger_at_port(memsize, port);
-    // riscv32_dbg.custom_gdb_event_loop_thread();
+    let memsize = 1024*1024;
+    let port = 9999u16;
+    let riscv32_dbg = utils::wait_for_new_debugger_at_port(memsize, port);
+    riscv32_dbg.custom_gdb_event_loop_thread();
     // riscv32_dbg.default_gdb_event_loop_thread();
 
     // Run instructions in memory

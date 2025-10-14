@@ -12,9 +12,19 @@ A defesa de TCC pode ser adiantada (so que a nota so vai sair em março)
 Focus
 * Execute functions
 > only sp management missing?
+
 * Space/Skip directives
 > write tests
+
 * Improve debugger (maybe with dwarf info through gimli or addr2line)
+> This is harder than it looks. This would require inferring
+> functions/variables and more by either analysing the IR of the code or by
+> annotating those things explicitly through macros such as the ones
+> supported by gnu/gcc (.define .function, .endfunction, ...).
+>> Maybe that's too much considering the gains (a richer gdb debugging session)
+>>> Enriching debug sessions isn't required in order to run code. Generating
+>>> debug info isn't mandatory aswell for that matter.
+
 * Execute recursion
 * Prepare a test to sort a vector (bubble sort)
 * Prepare a test to multiply elements of a vector (bubble sort)

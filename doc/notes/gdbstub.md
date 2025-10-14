@@ -176,3 +176,78 @@ setting its state to Running
 
 * this process keeps happening until the machine informs there's nothing else
 to be done
+
+---
+
+GDBSTUB SUMMARY
+When the Gdb client is active and the Target is idle -> Gdbstub::State = Idle
+When the Gdb client is waiting and the Target is running -> Gdbstub::State = Running
+If the Gdb client disconnects -> Gdbstub::State = Disconnected
+If the Target stops because of a ctrlc -> Gdbstub::State = CtrlCInterrupt
+
+While the target is running, different things might happen to it:
+* It might run normally
+* It might stop for some reason
+* It might return control to the gdbstub when it detects new data sent by the Gdbclient
+* It might lose the connection to the Gdbclient
+* It might break for some reason (an Error might occurr)
+
+When Gdbstub::State = Idle, the stub listens to what the Gdbclient is sending
+over the (Socket) connection.
+1. Each byte sent over the connection is handled (one at a time)
+2. If the byte was read correctly, then it is passed down to the
+   'incoming_data' method, otherwise a custom gdbstub error is generated
+
+The 'incoming_data' is called whenever a new byte arrives on the transmission
+channel and it manages the internal state of the Gdbstub. That means it might
+transition the Gsbstub::State to either Idle, Running, Disconnected or CtrlCInterrupt.
+
+To do that, it calls the 'pump' method, which basically builds a packet out of
+each individual byte transmitted. According to the Gdb protocol documentation,
+the transmission of packets begin with '$' and end with '#' followed by two
+checksum digits. 'pump' is a small state machine, which takes care of making
+the stub keep on reading the transmission channel, while a message/packet is
+still being transmitted.
+
+When a packet is ready to be parsed, 'pump' returns a 'packet_buffer',
+otherwise it returns None (indicating more bytes are under way and that the
+Stub should not transition states).
+> Additionally, 'pump' also traces packets that are ready to be handled through
+> the 'trace!' macro!
+
+The packet is handled through the 'handle_packet' method, which might require
+the stub to:
+* Keep on 'pump'ing for other packets ( this depends on the stub
+implementation, but likely Gdbstub::State = Idle )
+* Become disconnected ( Which means Gdbstub::State = Disconnected )
+* Set the target to Run ( Which means Gdbstub::State = Running )
+* Become CtrlCInterrupted ( Which means Gdbstub::State = CtrlCInterrupt )
+* Issue an Error
+
+'handle_packet' is what actually executes commands sent over the transmission
+channel, and there you'll find in which conditions the Stub sets the Target to
+'Run'. Basically, if the effect of the packet handling returns
+HandlerStatus::DeferredStopReason, then Gdbstub::State = Running (indicating
+that the Target is now running and that the control of the execution should be
+shifted to it)
+
+For example, the 'handle_core' method invoked inside of 'handle_packet' takes
+care of all the handshake communication that takes place when the Gdbclient
+first connects to the stub. Additionally, it takes care of handling the
+basic/core operations required by the Gdb protocol specification (read
+registers, read memory and ??? (i forgor))
+
+Once the target is running, it might transfer the control back to the stub for
+different reasons, such as:
+* For the stub to manage reading incoming bytes in the transmission channel
+* Because of a normal stop reason (step executed)
+* Because of an internal error
+* Because of a connection error
+
+In case the Target stopped for a normal stop reason, then the Stub proceeds by
+calling the 'report_stop' method, which in turn:
+* Writes back to the Gdbclient through the communication/transmission channel,
+informing that the Target has stopped 
+* Sets Gdbstub::State to either Idle or Disconnected (which effectively means
+that the control is returned to the Stub, so that it can keep on mediating the
+communication between both parts (or not in case it gets disconnected))

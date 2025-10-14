@@ -76,6 +76,7 @@ pub fn encode_to_elf(code: &str, output_file: &str) -> elfwriter::Result<()> {
         let length = symb.length;
         writer.add_symbol(symbol_section, symbol_addr, &name, length as u64);
     }
+
     for block in blocks {
         if block.instructions.len() > 0 {
             let name = &block.name;

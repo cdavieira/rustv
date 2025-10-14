@@ -4,7 +4,8 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-gdbstub = "0.7.7"
+env_logger = "0.11.8"
+gdbstub = {version = "0.7.7", features = ["trace-pkt"]}
 gdbstub_arch = "0.3.2"
 object = {version = "0.37.3", features = ["write"]}
 syscalls = {version = "0.6.18", features = ["riscv32"]}
