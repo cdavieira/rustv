@@ -217,7 +217,7 @@ pub fn wait_for_new_debugger_at_port<'a>(memsize: usize, port: u16) -> SimpleGdb
 ///   `first_3_bits = n & 0b111`
 ///   `first_3_bits == 0b00101`
 const UWORD_MASK: [u32; 33] = [
-    0b0, //Not used
+    0b0,
     0b1,
     0b11,
     0b111,
@@ -274,6 +274,8 @@ pub fn get_n_bits_from(n: &u32, bit_idx: u8, bit_amount: usize) -> u32 {
     (n >> bit_idx) & UWORD_MASK[bit_amount]
 }
 
+/// Example: get_bits_from_to(0b1111, 1, 2) -> 0b0110
+/// 
 /// Index convention (with the number 1 as an example):
 ///   (1 in binary) ->    00000000     00000000     00000000   00000001
 ///   ( bit index ) ->   31      24   23      16   15      8   7      0
@@ -289,6 +291,13 @@ pub fn get_single_bit_at(n: u32, idx: usize) -> u32 {
     (n >> idx) & 0b1
 }
 
+/// Sets all bits to the left of 'start' to be the same value as 'bit'
+///
+/// Example: set_remaining_bits(0b0011, 3, 1) -> 0b1...011
+///
+/// Index convention (with the number 1 as an example):
+///   (1 in binary) ->    00000000     00000000     00000000   00000001
+///   ( bit index ) ->   31      24   23      16   15      8   7      0
 pub fn set_remaining_bits(n: u32, start: usize, bit: usize) -> u32 {
     let mask = UWORD_MASK[start];
     if bit == 0 {

@@ -29,7 +29,7 @@ handled
 
 NOTES AFTER READING THE GDB OFICIAL DOCS 
 
-Chapter 20 talks about the gdb remote server and gdbstubs
+Chapter 20 (P. 315) talks about the gdb remote server and gdbstubs
 
 the host -> the program running gdb (my x86-64 computer in this case), which
 controls the execution state of the program running remotely through the
@@ -251,3 +251,399 @@ informing that the Target has stopped
 * Sets Gdbstub::State to either Idle or Disconnected (which effectively means
 that the control is returned to the Stub, so that it can keep on mediating the
 communication between both parts (or not in case it gets disconnected))
+
+For example, in case the user enters `si`, here's the flow of functions/methods called:
+0. At some point, the gdb client sends to the stub the command associated with
+   `si` (which likely is `$vCont;s:{ThreadId}#{checksum}` or `$vCont;c:{ThreadId}#{checksum}`)
+1. The stub parses which byte sent over the connection through the
+   `incoming_data()` method until the packet is complete
+2. Once completed, `Packet::from_buf()` gets called, which translates that
+   sequence of bytes into a type known to its type implementation of the
+Gdbstub crate. That type is then handled by `handle_packet` -> `handle_command`
+-> `handle_stop_resume` -> `do_vcont` -> `do_vcont_single_thread` -> `step` or
+`resume`.
+Depending on the result of the packet handling, the state of the Gdbstub
+becomes 'Running' through a call to `transition()` and is followed by
+`report_stop()`
+3. Before handing the control over to the Target, the call to `report_stop()`
+   makes the stub communicate to the gdb client the reason for why it has
+stopped
+4. Once in the Running state, the target takes over the control. Later on, it
+   decides to stop and returns the reason for that to the stub.
+
+---
+
+How the communication between the gdbclient and stub works under the hood
+
+Logs marked with 'recv_packet' correspond to fully-formed packets coming from
+the gdb client and sent to the stub
+
+Logs marked with 'response_writer' correspond to the response of the stub to
+the gdbclient for the previously packet sent
+
+Logs after running `gdb> target remote :9999` (Handshake)
+```
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- +
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $qSupported:multiprocess+;swbreak+;hwbreak+;qRelocInsn+;fork-events+;vfork-events+;exec-events+;vContSupported+;QThreadEvents+;QThreadOptions+;no-resumed+;memory-tagging+;error-message+#89
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $PacketSize=1000;vContSupported+;multiprocess+;QStartNoAckMode+;swbreak+;qXfer:features:read+#fd
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- +
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $vCont?#49
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $vCont;c;C;s;S#62
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- +
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $vMustReplyEmpty#3a
+[2025-10-15T13:21:14Z INFO  gdbstub::stub::core_impl] Unknown command: Ok("vMustReplyEmpty")
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $#00
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- +
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $QStartNoAckMode#b0
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $OK#9a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- +
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $Hgp0.0#ad
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $OK#9a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $qXfer:features:read:target.xml:0,ffb#79
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $m<?xml version="1.0"?>
+    <!-- Copyright (C) 2018-2024 Free Software Foundation, Inc.
+    
+         Copying and distribution of this file, with or without modification,
+         are permitted in any medium without royalty provided the copyright
+         notice and this notice are preserved.  -->
+    
+    <!-- Register numbers are hard-coded in order to maintain backward
+         compatibility with older versions of tools that didn't use xml
+         register descriptions.  -->
+    
+    <!DOCTYPE feature SYSTEM "gdb-target.dtd">
+    <feature name="org.gnu.gdb.riscv.cpu">
+      <reg name="zero" bitsize="32" type="int" regnum="0"/>
+      <reg name="ra" bitsize="32" type="code_ptr"/>
+      <reg name="sp" bitsize="32" type="data_ptr"/>
+      <reg name="gp" bitsize="32" type="data_ptr"/>
+      <reg name="tp" bitsize="32" type="data_ptr"/>
+      <reg name="t0" bitsize="32" type="int"/>
+      <reg name="t1" bitsize="32" type="int"/>
+      <reg name="t2" bitsize="32" type="int"/>
+      <reg name="fp" bitsize="32" type="data_ptr"/>
+      <reg name="s1" bitsize="32" type="int"/>
+      <reg name="a0" bitsize="32" type="int"/>
+      <reg name="a1" bitsize="32" type="int"/>
+      <reg name="a2" bitsize="32" type="int"/>
+      <reg name="a3" bitsize="32" type="int"/>
+      <reg name="a4" bitsize="32" type="int"/>
+      <reg name="a5" bitsize="32" type="int"/>
+      <reg name="a6" bitsize="32" type="int"/>
+      <reg name="a7" bitsize="32" type="int"/>
+      <reg name="s2" bitsize="32" type="int"/>
+      <reg name="s3" bitsize="32" type="int"/>
+      <reg name="s4" bitsize="32" type="int"/>
+      <reg name="s5" bitsize="32" type="int"/>
+      <reg name="s6" bitsize="32" type="int"/>
+      <reg name="s7" bitsize="32" type="int"/>
+      <reg name="s8" bitsize="32" type="int"/>
+      <reg name="s9" bitsize="32" type="int"/>
+      <reg name="s10" bitsize="32" type="int"/>
+      <reg name="s11" bitsize="32" type="int"/>
+      <reg name="t3" bitsize="32" type="int"/>
+      <reg name="t4" bitsize="32" type="int"/>
+      <reg name="t5" bitsize="32" type="int"/>
+      <reg name="t6" bitsize="32" type="int"/>
+      <reg name="pc" bitsize="32" type="code_ptr"/>
+    </feature>#82
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $qXfer:features:read:target.xml:7d3,ffb#17
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $l#6c
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $qTStatus#49
+[2025-10-15T13:21:14Z INFO  gdbstub::stub::core_impl] Unknown command: Ok("qTStatus")
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $#00
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $?#3f
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $T05thread:p01.01;#06
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $qfThreadInfo#bb
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $mp01.01#cd
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $qsThreadInfo#c8
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $l#6c
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $qAttached:1#fa
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $1#31
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $Hc-1#09
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $OK#9a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $qOffsets#4b
+[2025-10-15T13:21:14Z INFO  gdbstub::stub::core_impl] Unknown command: Ok("qOffsets")
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $#00
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $g#67
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000#6a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m10054,2#c5
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m10056,2#c7
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m10058,2#c9
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m1005a,2#f2
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m1005c,2#f4
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m1005e,2#f6
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m10060,2#c2
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m10062,2#c4
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m10064,2#c6
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m10066,2#c8
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m10068,2#ca
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m1006a,2#f3
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m1006c,2#f5
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m1006e,2#f7
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m10070,2#c3
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m10072,2#c5
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m10074,2#c7
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m10076,2#c9
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m10078,2#cb
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m1007a,2#f4
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m1007c,2#f6
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m1007e,2#f8
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m10080,2#c4
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m10082,2#c6
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m10084,2#c8
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m10086,2#ca
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m10088,2#cc
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m1008a,2#f5
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m1008c,2#f7
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m1008e,2#f9
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m10090,2#c5
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m10092,2#c7
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m10094,2#c9
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m10096,2#cb
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m10098,2#cd
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m1009a,2#f6
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m1009c,2#f8
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m1009e,2#fa
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m100a0,2#ed
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m100a2,2#ef
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m100a4,2#f1
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m100a6,2#f3
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m100a8,2#f5
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m100aa,2#1e
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m100ac,2#20
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m100ae,2#22
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m100b0,2#ee
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m100b2,2#f0
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m100b4,2#f2
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m100b6,2#f4
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m10080,40#f6
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000#6c
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m100b8,2#f6
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $qfThreadInfo#bb
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $mp01.01#cd
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $qsThreadInfo#c8
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $l#6c
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $m0,4#fd
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $00000000#7e
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $mfffffffc,4#fa
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $#00
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::recv_packet] <-- $qSymbol::#5b
+[2025-10-15T13:21:14Z INFO  gdbstub::stub::core_impl] Unknown command: Ok("qSymbol::")
+[2025-10-15T13:21:14Z TRACE gdbstub::protocol::response_writer] --> $#00
+```
+
+Logs after running `gdb> load`
+
+* `$P20=54000100#79` (page 783):
+Write register 20 with value 54000100
+
+* `$X10054,0:#e8` (page 787):
+Write data (between : and #) to 0 bytes from memory starting
+at address 10054
+
+* `$G00...#d1` (page 782):
+Write data (0, 0, ...) to general registers
+
+* `$m10054,2#c5` (page 782):
+Read 2 bytes from memory starting at address 10054
+
+```
+[2025-10-15T13:22:45Z TRACE gdbstub::protocol::recv_packet] <-- $X10054,0:#e8
+[2025-10-15T13:22:45Z TRACE gdbstub::protocol::response_writer] --> $OK#9a
+[2025-10-15T13:22:45Z TRACE gdbstub::protocol::recv_packet] <-- $X10054,24:0����>s3�g�#a1
+[2025-10-15T13:22:45Z TRACE gdbstub::protocol::response_writer] --> $OK#9a
+[2025-10-15T13:22:45Z TRACE gdbstub::protocol::recv_packet] <-- $P20=54000100#79
+[2025-10-15T13:22:45Z INFO  gdbstub::stub::core_impl] Unknown command: Ok("P20=54000100")
+[2025-10-15T13:22:45Z TRACE gdbstub::protocol::response_writer] --> $#00
+[2025-10-15T13:22:45Z TRACE gdbstub::protocol::recv_packet] <-- $G000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000054000100#d1
+[2025-10-15T13:22:45Z TRACE gdbstub::protocol::response_writer] --> $OK#9a
+[2025-10-15T13:22:45Z TRACE gdbstub::protocol::recv_packet] <-- $m10054,2#c5
+[2025-10-15T13:22:45Z TRACE gdbstub::protocol::response_writer] --> $1303#c7
+[2025-10-15T13:22:45Z TRACE gdbstub::protocol::recv_packet] <-- $m10056,2#c7
+[2025-10-15T13:22:45Z TRACE gdbstub::protocol::response_writer] --> $3000#c3
+[2025-10-15T13:22:45Z TRACE gdbstub::protocol::recv_packet] <-- $m10058,2#c9
+[2025-10-15T13:22:45Z TRACE gdbstub::protocol::response_writer] --> $1305#c9
+[2025-10-15T13:22:45Z TRACE gdbstub::protocol::recv_packet] <-- $m1005a,2#f2
+[2025-10-15T13:22:45Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:22:45Z TRACE gdbstub::protocol::recv_packet] <-- $m1005c,2#f4
+[2025-10-15T13:22:45Z TRACE gdbstub::protocol::response_writer] --> $9305#d1
+[2025-10-15T13:22:45Z TRACE gdbstub::protocol::recv_packet] <-- $m1005e,2#f6
+[2025-10-15T13:22:45Z TRACE gdbstub::protocol::response_writer] --> $1000#c1
+[2025-10-15T13:22:45Z TRACE gdbstub::protocol::recv_packet] <-- $m10060,2#c2
+[2025-10-15T13:22:45Z TRACE gdbstub::protocol::response_writer] --> $ef00#2b
+[2025-10-15T13:22:45Z TRACE gdbstub::protocol::recv_packet] <-- $m10062,2#c4
+[2025-10-15T13:22:45Z TRACE gdbstub::protocol::response_writer] --> $0001#c1
+[2025-10-15T13:22:45Z TRACE gdbstub::protocol::recv_packet] <-- $m10040,40#f2
+[2025-10-15T13:22:45Z TRACE gdbstub::protocol::response_writer] --> $0000000000000000000000000000000000000000130330001305000093051000ef0000019308d0051305803e730000003305b500678000000000000000000000#11
+[2025-10-15T13:22:45Z TRACE gdbstub::protocol::recv_packet] <-- $m10060,4#c4
+[2025-10-15T13:22:45Z TRACE gdbstub::protocol::response_writer] --> $ef000001#77
+```
+
+Logs after running `gdb> b _start`
+```
+[2025-10-15T13:23:15Z TRACE gdbstub::protocol::recv_packet] <-- $m10054,2#c5
+[2025-10-15T13:23:15Z TRACE gdbstub::protocol::response_writer] --> $1303#c7
+[2025-10-15T13:23:15Z TRACE gdbstub::protocol::recv_packet] <-- $m10056,2#c7
+[2025-10-15T13:23:15Z TRACE gdbstub::protocol::response_writer] --> $3000#c3
+[2025-10-15T13:23:15Z TRACE gdbstub::protocol::recv_packet] <-- $m10058,2#c9
+[2025-10-15T13:23:15Z TRACE gdbstub::protocol::response_writer] --> $1305#c9
+[2025-10-15T13:23:15Z TRACE gdbstub::protocol::recv_packet] <-- $m1005a,2#f2
+[2025-10-15T13:23:15Z TRACE gdbstub::protocol::response_writer] --> $0000#7a
+[2025-10-15T13:23:15Z TRACE gdbstub::protocol::recv_packet] <-- $m1005c,2#f4
+[2025-10-15T13:23:15Z TRACE gdbstub::protocol::response_writer] --> $9305#d1
+[2025-10-15T13:23:15Z TRACE gdbstub::protocol::recv_packet] <-- $m1005e,2#f6
+[2025-10-15T13:23:15Z TRACE gdbstub::protocol::response_writer] --> $1000#c1
+[2025-10-15T13:23:15Z TRACE gdbstub::protocol::recv_packet] <-- $m10060,2#c2
+[2025-10-15T13:23:15Z TRACE gdbstub::protocol::response_writer] --> $ef00#2b
+[2025-10-15T13:23:15Z TRACE gdbstub::protocol::recv_packet] <-- $m10062,2#c4
+[2025-10-15T13:23:15Z TRACE gdbstub::protocol::response_writer] --> $0001#c1
+[2025-10-15T13:23:15Z TRACE gdbstub::protocol::recv_packet] <-- $m10060,4#c4
+[2025-10-15T13:23:15Z TRACE gdbstub::protocol::response_writer] --> $ef000001#77
+```
+
+Logs after running `gdb> si`
+* `$vCont;c:p1.-1#0f` (page 784)
+request thread 'p1.-1' to continue (c)
+
+* `$Z0,100060,4#0d` (page 788)
+insert a software breakpoint starting at 100060, with 4 bytes length
+> A software breakpoint is implemented by replacing the instruction at addr with
+> a software breakpoint or trap instruction. The kind is target-specific and typi-
+> cally indicates the size of the breakpoint in bytes that should be inserted. E.g.,
+> the arm and mips can insert either a 2 or 4 byte breakpoint
+
+* `$T05thread:p01.01;swbreak:;#6a` (page 790)
+The program received signal 05 and thread 'p01.01' is the stopped thread.
+'swbreak' is the reason why the target stopped, which in this case means a
+software breakpoint instruction.
+> The program received signal number AA (a two-digit hexadecimal number).
+This is equivalent to an ‘S’ response, except that the ‘n:r’ pairs can carry values
+of important registers and other information directly in the stop reply packet,
+reducing round-trip latency. Single-step and breakpoint traps are reported this
+way. Each ‘n:r’ pair is interpreted as follows:
+
+* `$g#..` (page 781)
+read general registers
+
+* `$s..#` (page 783)
+single step, resuming at that address
+
+```
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::recv_packet] <-- $m10054,4#c7
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::response_writer] --> $13033000#8a
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::recv_packet] <-- $m10050,4#c3
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::response_writer] --> $00000000#7e
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::recv_packet] <-- $Z0,10060,4#0d
+Trying to add a sw breakpoint at 65632 4
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::response_writer] --> $OK#9a
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::recv_packet] <-- $m10054,2#c5
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::response_writer] --> $1303#c7
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::recv_packet] <-- $m10056,2#c7
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::response_writer] --> $3000#c3
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::recv_packet] <-- $m10054,2#c5
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::response_writer] --> $1303#c7
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::recv_packet] <-- $m10056,2#c7
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::response_writer] --> $3000#c3
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::recv_packet] <-- $m10058,4#cb
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::response_writer] --> $13050000#43
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::recv_packet] <-- $Z0,10058,4#14
+Trying to add a sw breakpoint at 65624 4
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::response_writer] --> $OK#9a
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::recv_packet] <-- $vCont;c:p1.-1#0f
+Calling 'resume' (Now Running)
+[2025-10-15T13:23:29Z TRACE gdbstub::stub::state_machine] transition: "Idle<rustv::emu::debugger::SimpleTarget<rustv::emu::machine::SimpleMachine>>" --> "Running"
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::response_writer] --> $T05thread:p01.01;swbreak:;#6a
+[2025-10-15T13:23:29Z TRACE gdbstub::stub::state_machine] transition: "Running" --> "Idle<rustv::emu::debugger::SimpleTarget<rustv::emu::machine::SimpleMachine>>"
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::recv_packet] <-- $g#67
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::response_writer] --> $000000000000000000000000000000000000000000000000030000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000058000100#98
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::recv_packet] <-- $z0,10058,4#34
+Trying to rm a sw breakpoint at 65624 4
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::response_writer] --> $OK#9a
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::recv_packet] <-- $m10040,40#f2
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::response_writer] --> $0000000000000000000000000000000000000000130330001305000093051000ef0000019308d0051305803e730000003305b500678000000000000000000000#11
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::recv_packet] <-- $m10058,4#cb
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::response_writer] --> $13050000#43
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::recv_packet] <-- $m10058,4#cb
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::response_writer] --> $13050000#43
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::recv_packet] <-- $m10054,4#c7
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::response_writer] --> $13033000#8a
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::recv_packet] <-- $m10054,2#c5
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::response_writer] --> $1303#c7
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::recv_packet] <-- $m10056,2#c7
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::response_writer] --> $3000#c3
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::recv_packet] <-- $qfThreadInfo#bb
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::response_writer] --> $mp01.01#cd
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::recv_packet] <-- $qsThreadInfo#c8
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::response_writer] --> $l#6c
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::recv_packet] <-- $z0,10060,4#2d
+Trying to rm a sw breakpoint at 65632 4
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::response_writer] --> $OK#9a
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::recv_packet] <-- $m10058,4#cb
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::response_writer] --> $13050000#43
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::recv_packet] <-- $m10054,4#c7
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::response_writer] --> $13033000#8a
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::recv_packet] <-- $m10054,2#c5
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::response_writer] --> $1303#c7
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::recv_packet] <-- $m10056,2#c7
+[2025-10-15T13:23:29Z TRACE gdbstub::protocol::response_writer] --> $3000#c3
+```
+
+
+Logs after disconnecting:
+```
+[2025-10-15T13:58:17Z TRACE gdbstub::protocol::recv_packet] <-- $D;1#b0
+[2025-10-15T13:58:17Z TRACE gdbstub::protocol::response_writer] --> $OK#9a
+[2025-10-15T13:58:17Z TRACE gdbstub::stub::state_machine] transition: "Idle<rustv::emu::debugger::SimpleTarget<rustv::emu::machine::SimpleMachine>>" --> "Disconnected"
+```

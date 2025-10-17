@@ -10,6 +10,9 @@ A defesa de TCC pode ser adiantada (so que a nota so vai sair em março)
 
 
 Focus
+Handle exit syscall in debugger by returning the Exited StopReason event
+> This will likely require adding a return type to the 'handle' method of the debugger
+
 * Execute functions
 > only sp management missing?
 
@@ -38,6 +41,9 @@ Focus
 	* assembly into &[u32]
 	* debugger
 	* elf parser
+
+* The strategy used to create software breaks isnt ideal for the debugger...
+> We would have to use the predicted value for the pc!
 
 
 Code

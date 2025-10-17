@@ -297,7 +297,7 @@ impl<T: Machine> SingleThreadSingleStep for SimpleTarget<T> {
         _signal: Option<Signal>,
     ) -> Result<(), Self::Error>
     {
-        println!("Calling 'resume' (Now Stepping)");
+        println!("Calling 'step' (Now Stepping)");
         self.state = TargetState::Stepping;
         Ok(())
     }
@@ -321,7 +321,8 @@ impl<T: Machine> SwBreakpoint for SimpleTarget<T> {
     {
         // According to the docs found in 'gdbstub_arch::riscv::Riscv32', kind is the 'size' to be
         // used by this breakpoint (whatever that means)
-        println!("Trying to add a sw breakpoint at {} {}", addr, kind);
+        // println!("Trying to add a sw breakpoint at {} {}", addr, kind);
+        // println!("But next pc is probably going to be {}", self.machine.predict_next_pc());
         self.breakpoints.push((addr, kind));
         Ok(true)
     }
@@ -332,7 +333,7 @@ impl<T: Machine> SwBreakpoint for SimpleTarget<T> {
         kind: usize,
     ) -> TargetResult<bool, Self>
     {
-        println!("Trying to rm a sw breakpoint at {} {}", addr, kind);
+        // println!("Trying to rm a sw breakpoint at {} {}", addr, kind);
         if let Some(pair) = self.breakpoints
             .iter()
             .enumerate()

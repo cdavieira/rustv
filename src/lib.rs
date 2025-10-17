@@ -662,7 +662,7 @@ mod tests {
             ";
             let m = isa_rvi32_mach_only_text(code);
             assert!(m.assert_reg(Register::RA.id().into(), 8));
-            assert!(m.assert_pc(16));
+            assert!(m.assert_pc(12));
         }
 
         #[test]
@@ -922,11 +922,11 @@ mod tests {
                         li a0, 1000
                         ecall
                 myfunc:
-                        add a0, a0, a1
+                        add t1, a0, a1
                         ret
             ";
             let (m, _) = isa_rvi32_mach(code);
-            let reg = Register::A0.id() as usize;
+            let reg = Register::T1.id() as usize;
             let regs = m.read_registers();
             let reg = regs[reg] as i32;
             let val = -1;

@@ -1,4 +1,120 @@
-use crate::utils::{get_bits_from_to, get_n_bits_from, get_single_bit_at};
+use crate::utils::{
+    get_bits_from_to,
+    get_n_bits_from,
+    get_single_bit_at,
+    set_remaining_bits,
+};
+
+
+
+// Available Instruction Immediate Formats (as in the ISA)
+
+/*
+Functions to convert an immediate as read from the parser into the number to be stored in an
+Instruction.
+
+The Instruction is going to use this result as-is later to assemble a 32-bit instruction.
+*/
+
+pub trait Immediate {
+    fn encode(imm: u32) -> Self ;
+    fn decode(&self) -> u32 ;
+}
+
+#[derive(Debug, Copy, Clone)]
+pub struct ImmediateI(u32);
+
+#[derive(Debug, Copy, Clone)]
+pub struct ImmediateS(u32, u32);
+
+#[derive(Debug, Copy, Clone)]
+pub struct ImmediateB(u32, u32);
+
+#[derive(Debug, Copy, Clone)]
+pub struct ImmediateU(u32);
+
+#[derive(Debug, Copy, Clone)]
+pub struct ImmediateJ(u32);
+
+impl Immediate for ImmediateI {
+    fn encode(imm: u32) -> Self {
+        ImmediateI (
+            get_n_bits_from(&imm, 0, 12)
+        )
+    }
+
+    fn decode(&self) -> u32 {
+        let sign_bit = get_single_bit_at(self.0, 11) as usize;
+        set_remaining_bits(self.0, 11, sign_bit)
+    }
+}
+
+impl Immediate for ImmediateS {
+    fn encode(imm: u32) -> Self {
+        let imm1 = get_n_bits_from(&imm, 5, 7);
+        let imm2 = get_n_bits_from(&imm, 0, 5);
+        ImmediateS(imm1, imm2)
+    }
+
+    fn decode(&self) -> u32 {
+        let imm = (self.0 << 5) | self.1;
+        let sign_bit = get_single_bit_at(imm, 11) as usize;
+        set_remaining_bits(imm, 11, sign_bit)
+    }
+}
+
+impl Immediate for ImmediateB {
+    fn encode(imm: u32) -> Self {
+        let bit11 = get_single_bit_at(imm, 11);
+        let bit12 = get_single_bit_at(imm, 12);
+        let bits_5_10 = get_bits_from_to(imm, 5, 10);
+        let bits_1_4  = get_bits_from_to(imm, 1, 4);
+        let imm1  = (bit12     << 6) | bits_5_10;
+        let imm2  = (bits_1_4  << 1) | bit11;
+        ImmediateB(imm1, imm2)
+    }
+
+    fn decode(&self) -> u32 {
+        let bit0     = get_single_bit_at(self.1, 0);
+        let bit_1_4  = get_bits_from_to(self.1, 1, 4);
+        let bit_5_10 = get_bits_from_to(self.0, 0, 5);
+        let bit11    = get_single_bit_at(self.0, 6);
+        let imm = ((bit_5_10 << 5) | (bit_1_4 << 1) | bit0) << 1;
+        set_remaining_bits(imm, 12, bit11 as usize)
+    }
+}
+
+impl Immediate for ImmediateU {
+    fn encode(imm: u32) -> Self {
+        let imm = get_n_bits_from(&imm, 0, 20);
+        ImmediateU(imm)
+    }
+
+    fn decode(&self) -> u32  {
+        self.0 << 12
+    }
+}
+
+impl Immediate for ImmediateJ {
+    fn encode(imm: u32) -> Self {
+        let p1 = get_bits_from_to(imm, 12, 19);
+        let p2 = get_single_bit_at(imm, 11);
+        let p3 = get_bits_from_to(imm, 1, 10);
+        let p4 = get_single_bit_at(imm, 20);
+        let imm = (p4 << 19) | (p3 << 9) | (p2 << 8) | p1;
+        ImmediateJ(imm)
+    }
+
+    fn decode(&self) -> u32 {
+        let bit_1_10  = get_bits_from_to(self.0, 9, 18);
+        let bit11     = get_single_bit_at(self.0, 8);
+        let bit_12_19 = get_bits_from_to(self.0, 0, 7);
+        let bit20     = get_single_bit_at(self.0, 19);
+        let imm = ((bit_12_19 << 11) | (bit11 << 10) | bit_1_10) << 1;
+        set_remaining_bits(imm, 20, bit20 as usize)
+    }
+}
+
 
 
 
@@ -8,11 +124,11 @@ use crate::utils::{get_bits_from_to, get_n_bits_from, get_single_bit_at};
 #[derive(Debug, Copy, Clone)]
 pub enum InstructionFormat {
     R{funct7: u32, rs2: u32, rs1: u32, funct3: u32, rd: u32, opcode: u32},
-    I{imm: u32, rs1: u32, funct3: u32, rd: u32, opcode: u32},
-    S{imm1: u32, rs2: u32, rs1: u32, funct3: u32, imm2: u32, opcode: u32},
-    B{imm1: u32, rs2: u32, rs1: u32, funct3: u32, imm2: u32, opcode: u32},
-    U{imm: u32, rd: u32, opcode: u32},
-    J{imm: u32, rd: u32, opcode: u32},
+    I{imm: ImmediateI, rs1: u32, funct3: u32, rd: u32, opcode: u32},
+    S{imm: ImmediateS, rs2: u32, rs1: u32, funct3: u32, opcode: u32},
+    B{imm: ImmediateB, rs2: u32, rs1: u32, funct3: u32, opcode: u32},
+    U{imm: ImmediateU, rd: u32, opcode: u32},
+    J{imm: ImmediateJ, rd: u32, opcode: u32},
 }
 
 impl InstructionFormat {
@@ -30,19 +146,19 @@ impl InstructionFormat {
             0b0110111 | 0b0010111 => { //U
                 let rd   = get_n_bits_from(&word, 7, 5);
                 let imm  = get_n_bits_from(&word, 12, 20);
-                Some(InstructionFormat::U { imm, rd, opcode })
+                Some(InstructionFormat::U { imm: ImmediateU(imm), rd, opcode })
             },
             0b1101111 => { //J
                 let rd   = get_n_bits_from(&word, 7, 5);
                 let imm  = get_n_bits_from(&word, 12, 20);
-                Some(InstructionFormat::J { imm, rd, opcode })
+                Some(InstructionFormat::J { imm: ImmediateJ(imm), rd, opcode })
             },
             0b1100111 | 0b1110011 | 0b0010011 | 0b0000011 => { //I
                 let rd      = get_n_bits_from(&word, 7, 5);
                 let funct3  = get_n_bits_from(&word, 12, 3);
                 let rs1     = get_n_bits_from(&word, 15, 5);
                 let imm     = get_n_bits_from(&word, 20, 12);
-                Some(InstructionFormat::I { imm, rs1, funct3, rd, opcode })
+                Some(InstructionFormat::I { imm: ImmediateI(imm), rs1, funct3, rd, opcode })
             },
             0b0100011  => { //S
                 let imm2    = get_n_bits_from(&word, 7, 5);
@@ -50,7 +166,7 @@ impl InstructionFormat {
                 let rs1     = get_n_bits_from(&word, 15, 5);
                 let rs2     = get_n_bits_from(&word, 20, 5);
                 let imm1    = get_n_bits_from(&word, 25, 5);
-                Some(InstructionFormat::S { imm1, rs2, rs1, funct3, imm2, opcode })
+                Some(InstructionFormat::S { imm: ImmediateS(imm1, imm2), rs2, rs1, funct3, opcode })
             },
             0b1100011 => { //B
                 let imm2    = get_n_bits_from(&word, 7, 5);
@@ -58,7 +174,7 @@ impl InstructionFormat {
                 let rs1     = get_n_bits_from(&word, 15, 5);
                 let rs2     = get_n_bits_from(&word, 20, 5);
                 let imm1    = get_n_bits_from(&word, 25, 7);
-                Some(InstructionFormat::B { imm1, rs2, rs1, funct3, imm2, opcode })
+                Some(InstructionFormat::B { imm: ImmediateB(imm1, imm2), rs2, rs1, funct3, opcode })
             }
             _ => {
                 None
@@ -82,40 +198,64 @@ impl InstructionFormat {
                 let rd     = get_n_bits_from(rd, 0, 5);
                 let rs1    = get_n_bits_from(rs1, 0, 5);
                 let funct3 = get_n_bits_from(funct3, 0, 3);
-                let imm    = get_n_bits_from(imm, 0, 12);
+                let imm    = get_n_bits_from(&imm.0, 0, 12);
                 (imm << 20) | (rs1 << 15) | (funct3 << 12) | (rd << 7) | opcode
             },
-            InstructionFormat::S { imm1, rs2, rs1, funct3, imm2, opcode } => {
+            InstructionFormat::S { imm, rs2, rs1, funct3, opcode } => {
                 let opcode = get_n_bits_from(opcode, 0, 7);
                 let rs1    = get_n_bits_from(rs1, 0, 5);
                 let rs2    = get_n_bits_from(rs2, 0, 5);
                 let funct3 = get_n_bits_from(funct3, 0, 3);
-                let imm2   = get_n_bits_from(imm2, 0, 5);
-                let imm1   = get_n_bits_from(imm1, 0, 7);
+                let imm2   = get_n_bits_from(&imm.1, 0, 5);
+                let imm1   = get_n_bits_from(&imm.0, 0, 7);
                 (imm1 << 25) | (rs2 << 20) | (rs1 << 15) | (funct3 << 12) | (imm2 << 7) | opcode
             },
-            InstructionFormat::B { imm1, rs2, rs1, funct3, imm2, opcode } => {
+            InstructionFormat::B { imm, rs2, rs1, funct3, opcode } => {
                 let opcode = get_n_bits_from(opcode, 0, 7);
                 let rs1    = get_n_bits_from(rs1, 0, 5);
                 let rs2    = get_n_bits_from(rs2, 0, 5);
                 let funct3 = get_n_bits_from(funct3, 0, 3);
-                let imm2   = get_n_bits_from(imm2, 0, 5);
-                let imm1   = get_n_bits_from(imm1, 0, 7);
+                let imm2   = get_n_bits_from(&imm.1, 0, 5);
+                let imm1   = get_n_bits_from(&imm.0, 0, 7);
                 (imm1 << 25) | (rs2 << 20) | (rs1 << 15) | (funct3 << 12) | (imm2 << 7) | opcode
             },
             InstructionFormat::U { imm, rd, opcode } => {
                 let opcode = get_n_bits_from(opcode, 0, 7);
                 let rd     = get_n_bits_from(rd, 0, 5);
-                let imm    = get_n_bits_from(imm, 0, 20);
+                let imm    = get_n_bits_from(&imm.0, 0, 20);
                 (imm << 12) | (rd << 7) | opcode
             },
             InstructionFormat::J { imm, rd, opcode } => {
                 let opcode = get_n_bits_from(opcode, 0, 7);
                 let rd     = get_n_bits_from(rd, 0, 5);
-                let imm    = get_n_bits_from(imm, 0, 20);
+                let imm    = get_n_bits_from(&imm.0, 0, 20);
                 (imm << 12) | (rd << 7) | opcode
             },
         }
+    }
+
+    pub fn r(funct7: u32, rs2: u32, rs1: u32, funct3: u32, rd: u32, opcode: u32) -> Self {
+        InstructionFormat::R { funct7, rs2, rs1, funct3, rd, opcode }
+    }
+
+    pub fn i(imm: i32, rs1: u32, funct3: u32, rd: u32, opcode: u32) -> Self {
+        InstructionFormat::I { imm: ImmediateI::encode(imm as u32), rs1, funct3, rd, opcode }
+    }
+
+    pub fn s(imm: i32, rs2: u32, rs1: u32, funct3: u32, opcode: u32) -> Self {
+        InstructionFormat::S { imm: ImmediateS::encode(imm as u32), rs2, rs1, funct3, opcode }
+    }
+
+    pub fn b(imm: i32, rs2: u32, rs1: u32, funct3: u32, opcode: u32) -> Self {
+        InstructionFormat::B { imm: ImmediateB::encode(imm as u32), rs2, rs1, funct3, opcode }
+    }
+
+    pub fn u(imm: i32, rd: u32, opcode: u32) -> Self {
+        InstructionFormat::U { imm: ImmediateU::encode(imm as u32), rd, opcode }
+    }
+
+    pub fn j(imm: i32, rd: u32, opcode: u32) -> Self {
+        InstructionFormat::J { imm: ImmediateJ::encode(imm as u32), rd, opcode }
     }
 }
 
@@ -198,71 +338,44 @@ pub enum RV32I {
 impl Extension for RV32I {
     fn get_instruction_format(&self, rs1: u32, rs2: u32, rd: u32, imm: i32) -> InstructionFormat  {
         match self {
-            RV32I::ADD   => InstructionFormat::R { funct7: 0b0000000, rs2, rs1, funct3: 0b000, rd, opcode: 0b0110011 },
-            RV32I::SUB   => InstructionFormat::R { funct7: 0b0100000, rs2, rs1, funct3: 0b000, rd, opcode: 0b0110011 },
-            RV32I::AND   => InstructionFormat::R { funct7: 0b0000000, rs2, rs1, funct3: 0b111, rd, opcode: 0b0110011 },
-            RV32I::OR    => InstructionFormat::R { funct7: 0b0000000, rs2, rs1, funct3: 0b110, rd, opcode: 0b0110011 },
-            RV32I::XOR   => InstructionFormat::R { funct7: 0b0000000, rs2, rs1, funct3: 0b100, rd, opcode: 0b0110011 },
-            RV32I::SLL   => InstructionFormat::R { funct7: 0b0000000, rs2, rs1, funct3: 0b001, rd, opcode: 0b0110011 },
-            RV32I::SRL   => InstructionFormat::R { funct7: 0b0000000, rs2, rs1, funct3: 0b101, rd, opcode: 0b0110011 },
-            RV32I::SRA   => InstructionFormat::R { funct7: 0b0100000, rs2, rs1, funct3: 0b101, rd, opcode: 0b0110011 },
-            RV32I::SLT   => InstructionFormat::R { funct7: 0b0000000, rs2, rs1, funct3: 0b010, rd, opcode: 0b0110011 },
-            RV32I::SLTU  => InstructionFormat::R { funct7: 0b0000000, rs2, rs1, funct3: 0b011, rd, opcode: 0b0110011 },
-            RV32I::LUI   => InstructionFormat::U { imm: imm_to_u(imm), rd, opcode: 0b0110111 },
-            RV32I::AUIPC => InstructionFormat::U { imm: imm_to_u(imm), rd, opcode: 0b0010111 },
-            RV32I::JAL   => InstructionFormat::J { imm: imm_to_j(imm), rd, opcode: 0b1101111 },
-            RV32I::JALR  => InstructionFormat::I { imm: imm_to_i(imm), rs1, funct3: 0b000, rd, opcode: 0b1100111 },
-            RV32I::ECALL => InstructionFormat::I { imm: imm_to_i(imm), rs1, funct3: 0b000, rd, opcode: 0b1110011 },
-            RV32I::ADDI  => InstructionFormat::I { imm: imm_to_i(imm), rs1, funct3: 0b000, rd, opcode: 0b0010011 },
-            RV32I::ANDI  => InstructionFormat::I { imm: imm_to_i(imm), rs1, funct3: 0b111, rd, opcode: 0b0010011 },
-            RV32I::ORI   => InstructionFormat::I { imm: imm_to_i(imm), rs1, funct3: 0b110, rd, opcode: 0b0010011 },
-            RV32I::XORI  => InstructionFormat::I { imm: imm_to_i(imm), rs1, funct3: 0b100, rd, opcode: 0b0010011 },
-            RV32I::SLTI  => InstructionFormat::I { imm: imm_to_i(imm), rs1, funct3: 0b010, rd, opcode: 0b0010011 },
-            RV32I::SLTIU => InstructionFormat::I { imm: imm_to_i(imm), rs1, funct3: 0b011, rd, opcode: 0b0010011 },
-            RV32I::SLLI  => InstructionFormat::I { imm: imm_to_i(0b00_00000_11111 & imm), rs1, funct3: 0b001, rd, opcode: 0b0010011 },
-            RV32I::SRLI  => InstructionFormat::I { imm: imm_to_i(0b00_00000_11111 & imm), rs1, funct3: 0b101, rd, opcode: 0b0010011 },
-            RV32I::SRAI  => InstructionFormat::I { imm: imm_to_i(0b01_00000_11111 & imm), rs1, funct3: 0b101, rd, opcode: 0b0010011 },
-            RV32I::LW    => InstructionFormat::I { imm: imm_to_i(imm), rs1, funct3: 0b010, rd, opcode: 0b0000011 },
-            RV32I::LH    => InstructionFormat::I { imm: imm_to_i(imm), rs1, funct3: 0b001, rd, opcode: 0b0000011 },
-            RV32I::LB    => InstructionFormat::I { imm: imm_to_i(imm), rs1, funct3: 0b000, rd, opcode: 0b0000011 },
-            RV32I::LHU   => InstructionFormat::I { imm: imm_to_i(imm), rs1, funct3: 0b101, rd, opcode: 0b0000011 },
-            RV32I::LBU   => InstructionFormat::I { imm: imm_to_i(imm), rs1, funct3: 0b100, rd, opcode: 0b0000011 },
-            RV32I::SW    => {
-                let (imm1, imm2) = imm_to_s(imm);
-                InstructionFormat::S { imm1, rs2, rs1, funct3: 0b010, imm2, opcode: 0b0100011 }
-            },
-            RV32I::SH    => {
-                let (imm1, imm2) = imm_to_s(imm);
-                InstructionFormat::S { imm1, rs2, rs1, funct3: 0b001, imm2, opcode: 0b0100011 }
-            },
-            RV32I::SB    => {
-                let (imm1, imm2) = imm_to_s(imm);
-                InstructionFormat::S { imm1, rs2, rs1, funct3: 0b000, imm2, opcode: 0b0100011 }
-            },
-            RV32I::BEQ   => {
-                let (imm1, imm2) = imm_to_b(imm);
-                InstructionFormat::B { imm1, rs2, rs1, funct3: 0b000, imm2, opcode: 0b1100011 }
-            },
-            RV32I::BNE   => {
-                let (imm1, imm2) = imm_to_b(imm);
-                InstructionFormat::B { imm1, rs2, rs1, funct3: 0b001, imm2, opcode: 0b1100011 }
-            },
-            RV32I::BLT   => {
-                let (imm1, imm2) = imm_to_b(imm);
-                InstructionFormat::B { imm1, rs2, rs1, funct3: 0b100, imm2, opcode: 0b1100011 }
-            },
-            RV32I::BLTU  => {
-                let (imm1, imm2) = imm_to_b(imm);
-                InstructionFormat::B { imm1, rs2, rs1, funct3: 0b110, imm2, opcode: 0b1100011 }
-            },
-            RV32I::BGE   => {
-                let (imm1, imm2) = imm_to_b(imm);
-                InstructionFormat::B { imm1, rs2, rs1, funct3: 0b101, imm2, opcode: 0b1100011 }
-            },
-            RV32I::BGEU  => {
-                let (imm1, imm2) = imm_to_b(imm);
-                InstructionFormat::B { imm1, rs2, rs1, funct3: 0b111, imm2, opcode: 0b1100011 }
-            },
+            RV32I::ADD   => InstructionFormat::r(0b0000000, rs2, rs1, 0b000, rd, 0b0110011),
+            RV32I::SUB   => InstructionFormat::r(0b0100000, rs2, rs1, 0b000, rd, 0b0110011),
+            RV32I::AND   => InstructionFormat::r(0b0000000, rs2, rs1, 0b111, rd, 0b0110011),
+            RV32I::OR    => InstructionFormat::r(0b0000000, rs2, rs1, 0b110, rd, 0b0110011),
+            RV32I::XOR   => InstructionFormat::r(0b0000000, rs2, rs1, 0b100, rd, 0b0110011),
+            RV32I::SLL   => InstructionFormat::r(0b0000000, rs2, rs1, 0b001, rd, 0b0110011),
+            RV32I::SRL   => InstructionFormat::r(0b0000000, rs2, rs1, 0b101, rd, 0b0110011),
+            RV32I::SRA   => InstructionFormat::r(0b0100000, rs2, rs1, 0b101, rd, 0b0110011),
+            RV32I::SLT   => InstructionFormat::r(0b0000000, rs2, rs1, 0b010, rd, 0b0110011),
+            RV32I::SLTU  => InstructionFormat::r(0b0000000, rs2, rs1, 0b011, rd, 0b0110011),
+            RV32I::LUI   => InstructionFormat::u(imm, rd, 0b0110111),
+            RV32I::AUIPC => InstructionFormat::u(imm, rd, 0b0010111),
+            RV32I::JAL   => InstructionFormat::j(imm, rd, 0b1101111),
+            RV32I::JALR  => InstructionFormat::i(imm, rs1, 0b000, rd, 0b1100111),
+            RV32I::ECALL => InstructionFormat::i(imm, rs1, 0b000, rd, 0b1110011),
+            RV32I::ADDI  => InstructionFormat::i(imm, rs1, 0b000, rd, 0b0010011),
+            RV32I::ANDI  => InstructionFormat::i(imm, rs1, 0b111, rd, 0b0010011),
+            RV32I::ORI   => InstructionFormat::i(imm, rs1, 0b110, rd, 0b0010011),
+            RV32I::XORI  => InstructionFormat::i(imm, rs1, 0b100, rd, 0b0010011),
+            RV32I::SLTI  => InstructionFormat::i(imm, rs1, 0b010, rd, 0b0010011),
+            RV32I::SLTIU => InstructionFormat::i(imm, rs1, 0b011, rd, 0b0010011),
+            RV32I::SLLI  => InstructionFormat::i(0b00_00000_11111 & imm, rs1, 0b001, rd, 0b0010011),
+            RV32I::SRLI  => InstructionFormat::i(0b00_00000_11111 & imm, rs1, 0b101, rd, 0b0010011),
+            RV32I::SRAI  => InstructionFormat::i(0b01_00000_11111 & imm, rs1, 0b101, rd, 0b0010011),
+            RV32I::LW    => InstructionFormat::i(imm, rs1, 0b010, rd,  0b0000011),
+            RV32I::LH    => InstructionFormat::i(imm, rs1, 0b001, rd,  0b0000011),
+            RV32I::LB    => InstructionFormat::i(imm, rs1, 0b000, rd,  0b0000011),
+            RV32I::LHU   => InstructionFormat::i(imm, rs1, 0b101, rd,  0b0000011),
+            RV32I::LBU   => InstructionFormat::i(imm, rs1, 0b100, rd,  0b0000011),
+            RV32I::SW    => InstructionFormat::s(imm, rs2, rs1, 0b010, 0b0100011),
+            RV32I::SH    => InstructionFormat::s(imm, rs2, rs1, 0b001, 0b0100011),
+            RV32I::SB    => InstructionFormat::s(imm, rs2, rs1, 0b000, 0b0100011),
+            RV32I::BEQ   => InstructionFormat::b(imm, rs2, rs1, 0b000, 0b1100011),
+            RV32I::BNE   => InstructionFormat::b(imm, rs2, rs1, 0b001, 0b1100011),
+            RV32I::BLT   => InstructionFormat::b(imm, rs2, rs1, 0b100, 0b1100011),
+            RV32I::BLTU  => InstructionFormat::b(imm, rs2, rs1, 0b110, 0b1100011),
+            RV32I::BGE   => InstructionFormat::b(imm, rs2, rs1, 0b101, 0b1100011),
+            RV32I::BGEU  => InstructionFormat::b(imm, rs2, rs1, 0b111, 0b1100011),
             RV32I::FENCE => todo!(),
         }
     }
@@ -310,64 +423,6 @@ impl Extension for RV32I {
             RV32I::FENCE => todo!(),
         }
     }
-}
-
-/*
-Functions to convert an immediate as read from the parser into the number to be stored in an
-Instruction.
-
-The Instruction is going to use this result as-is later to assemble a 32-bit instruction.
-
-Yet to be done:
-    1. handle sign extension
-    2. turn this into a struct/enum named 'InstructionImmediate'/'Immediate' ?
-    3. use 'rsh_mask_bits' instead of raw bit manipulation?
-*/
-
-// pub enum ImmediateFormat {
-//     I,
-//     S,
-//     B,
-//     U,
-//     J
-// }
-
-fn imm_to_i(imm: i32) -> u32 {
-    let imm = imm as u32;
-    get_n_bits_from(&imm, 0, 12)
-}
-
-fn imm_to_s(imm: i32) -> (u32, u32) {
-    let imm = imm as u32;
-    let imm1 = get_n_bits_from(&imm, 5, 7);
-    let imm2 = get_n_bits_from(&imm, 0, 5);
-    (imm1 as u32, imm2 as u32)
-}
-
-fn imm_to_b(imm: i32) -> (u32, u32) {
-    let imm = imm as u32;
-    let bit11 = get_single_bit_at(imm, 11);
-    let bit12 = get_single_bit_at(imm, 12);
-    let bits_5_10 = get_bits_from_to(imm, 5, 10);
-    let bits_1_4  = get_bits_from_to(imm, 1, 4);
-    let imm1  = (bit12     << 6) | bits_5_10;
-    let imm2  = (bits_1_4  << 1) | bit11;
-    (imm1 as u32, imm2 as u32)
-}
-
-fn imm_to_u(imm: i32) -> u32 {
-    let imm = imm as u32;
-    get_n_bits_from(&imm, 0, 20)
-}
-
-fn imm_to_j(imm: i32) -> u32 {
-    let imm = imm as u32;
-    let p1 = get_bits_from_to(imm, 12, 19);
-    let p2 = get_single_bit_at(imm, 11);
-    let p3 = get_bits_from_to(imm, 1, 10);
-    let p4 = get_single_bit_at(imm, 20);
-    let imm = (p4 << 19) | (p3 << 9) | (p2 << 8) | p1;
-    imm as u32
 }
 
 
