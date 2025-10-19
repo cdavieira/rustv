@@ -161,7 +161,7 @@ impl<'a> ElfReader<'a> {
                 let name = highassembly::SectionName::from_default_name(name);
                 let addr = section.address() as usize;
                 let data = section.data().unwrap();
-                let data = DataEndianness::induce_bytes_to_words(&data, DataEndianness::Le);
+                let data = DataEndianness::build_words_from_bytes(&data, DataEndianness::Le);
                 let alignment = section.align() as usize;
                 let instructions = data.into_iter().map(|word|
                     lowassembly::EncodedData {

@@ -24,145 +24,112 @@ pub mod obj {
 }
 
 use env_logger::Env;
+use rustv::utils::encode_to_word;
 
 
 fn main() {
-    env_logger::Builder::from_env(Env::default().default_filter_or("trace")).init();
+    let args: Vec<String> = std::env::args().collect();
 
-    // let code = "
-    //     li a7, 93
-    //     li a0, 1000
-    //     ecall
-    // ";
+    if args.len() == 1 {
+        println!("Usage");
+        println!("  cargo run -- [ --build    | -b ] file.s");
+        println!("  cargo run -- [ --debugger | -d ]");
+        println!("  cargo run -- [ --decode-bin    ] 0x00001117");
+        println!("  cargo run -- [ --decode-text   ] \"addi a2,a1,3\"");
+        println!("  cargo run -- [ --elf      | -e ] file.s");
+        return ;
+    }
 
-    // let code = "
-    //             .globl _start
-    //             .section .text
-    //     _start:
-    //     //        li t0, 100
-    //     //        li t1, 200
-    //     //        blt t0, t1, mylabel
-    //
-    //             .section .data
-    //     myvar1:
-    //             .word 0x10
-    //     myvar2:
-    //             .word 25
-    //
-    //             .section .text
-    //     mylabel:
-    //             li a0, 0        // return code 0
-    //             li a7, 93       // Linux syscall: exit
-    //             ecall
-    // ";
+    if args.len() > 2 && matches!(args[1].as_str(), "--build" | "-b") {
+        let srcfile = args[2].clone();
+        let code = std::fs::read_to_string(srcfile).unwrap();
 
-    // let code = "
-    //         .globl _start
-    //
-    //         .section .data
-    //     msg:
-    //         .ascii \"Hello world!\n\"   // 13 bytes including newline
-    //     msg2:
-    //         .ascii \"Burrito!\n\"   // 9 bytes including newline
-    //     myvar:
-    //         .word 32
-    //
-    //         .section .text
-    //     _start:
-    //         // write(stdout=1, msg, len)
-    //         li a0, 1              // fd = 1 (stdout)
-    //         la a1, msg            // buffer address
-    //         li a2, 13             // length
-    //         li a7, 64             // syscall: write
-    //         ecall
-    //         la a1, msg            // buffer address
-    //         la a1, msg            // buffer address
-    //
-    //         // write(stdout=1, msg, len)
-    //    write2:
-    //         li a0, 1              // fd = 1 (stdout)
-    //         xor a1,a1,a1
-    //         la a1, msg2           // buffer address
-    //         li a2, 9              // length
-    //         li a7, 64             // syscall: write
-    //         ecall
-    //    sub_op:
-    //         sub a7,a2,t2
-    //    xor_op:
-    //         xor a1,a1,a1
-    //
-    //    exit:
-    //         // exit(0)
-    //         li a0, 0              // status
-    //         li a7, 93             // syscall: exit
-    //         ecall
-    // ";
+        eprintln!("Code representation builder");
 
-    // let code = "
-    //         .globl _start
-    //         .section .text
-    // _start:
-    //         li t1, 3
-    //         jal ra, myfunc
-    //         li a7, 93
-    //         li a0, 1000
-    //         ecall
-    // myfunc:
-    //         add a0, a0, a1
-    //         ret
-    //         .section .data
-    //         .skip 20
-    //         .word 32
-    // ";
+        use crate::utils::build_code_repr;
+        let _tools = build_code_repr(&code);
+        // let data = tools.data_section_words();
 
-    // let code = "
-    //     .section .data
-    //     var1: .word 0x4
-    //     .section .text
-    //         la t1, var1
-    //         lw t2, t1
-    // ";
+        // use crate::utils::words_to_bytes_be;
+        // let data = words_to_bytes_be(&data);
 
-    // let code = "
-    //     li a2, 4
-    //     jalr ra, a2, 8
-    // ";
+        // use crate::utils::print_bytes_hex;
+        // print_bytes_hex(&data);
 
-    let code = "
-            .globl _start
-            .section .text
-    _start:
-            li t1, 3
-            li a0, 0
-            li a1, 1
-            jal ra, myfunc
-            li a7, 93
-            li a0, 1000
-            ecall
-    myfunc:
-            add a0, a0, a1
-            ret
-    ";
+        return ;
+    }
 
+    if matches!(args[1].as_str(), "--debugger" | "-d") {
+        let memsize = 1024*1024;
+        let port    = 9999u16;
 
-    // See how instruction decoding evals
-    // use crate::lang::ext::InstructionFormat;
-    // let word = 0x00000eef;
-    // let iformat = InstructionFormat::decode(word);
-    // println!("{:?}", iformat);
+        eprintln!("Debugger mode");
 
-    // Build code representation
-    // use crate::utils::build_code_repr;
-    // use crate::utils::print_bytes_hex;
-    // use crate::utils::words_to_bytes_be;
-    // let tools = build_code_repr(code);
-    // let data = tools.data_section_words();
-    // let data = words_to_bytes_be(&data);
-    // print_bytes_hex(&data);
+        env_logger::Builder::from_env(Env::default().default_filter_or("trace")).init();
 
-    // Export to ELF
-    // let outputfile = "main.o";
-    // utils::encode_to_elf(code, outputfile).unwrap();
+        let riscv32_dbg = utils::wait_for_new_debugger_at_port(memsize, port);
+
+        riscv32_dbg.custom_gdb_event_loop_thread();
+        // riscv32_dbg.default_gdb_event_loop_thread();
+
+        return ;
+    }
+
+    if args.len() > 2 && matches!(args[1].as_str(), "--elf" | "-e") {
+        let linker = "riscv32-unknown-linux-gnu-ld";
+        let execfile = "main";
+        let objectfile = "main.o";
+        let srcfile = args[2].clone();
+
+        eprintln!("Elf writter mode");
+
+        let f = std::fs::read_to_string(srcfile).unwrap();
+
+        utils::encode_to_elf(&f, objectfile).unwrap();
+
+        let output = std::process::Command::new(linker)
+            .arg(objectfile)
+            .arg("-o")
+            .arg(execfile)
+            .output()
+            .expect("Failed to link elf to executable");
+
+        if output.status.success() {
+            eprintln!("Sucess: code written to {}!", execfile)
+        } else {
+            eprintln!("Error: something went wrong :/")
+        }
+    }
+
+    if args.len() > 2 && matches!(args[1].as_str(), "--decode-bin") {
+        eprintln!("Binary instruction decode mode");
+        // let word = 0x00000eef;
+        // let word = 0x00001117;
+        // let word = 0xff010113;
+        use crate::lang::ext::InstructionFormat;
+
+        let n = args[2].as_str().trim().replace("0x", "");
+
+        let word = u32::from_str_radix(&n, 16).expect("Invalid instruction");
+
+        let iformat = InstructionFormat::decode(word);
+
+        println!("{:?}", iformat);
+
+        return ;
+    }
+
+    if args.len() > 2 && matches!(args[1].as_str(), "--decode-text") {
+        eprintln!("Text instruction decode mode");
+
+        let code = args[2].as_str();
+
+        let res = encode_to_word(code);
+
+        println!("0x{:08x}", res);
+
+        return ;
+    }
 
     // Read ELF and execute the Machine (only text)
     // use crate::emu::machine::Machine as _;
@@ -178,9 +145,10 @@ fn main() {
     // use crate::utils::new_machine_from_tools;
     // use crate::emu::machine::Machine as _;
     // let tools = build_code_repr(code);
-    // let m = new_machine_from_tools(&tools);
+    // let mut m = new_machine_from_tools(&tools);
+    // m.decode();
+    // m.decode();
     // println!("{:?}", m.words());
-    // println!("{:?}", m.read_registers());
 
     // Read ELF and execute the Machine (text + data)
     // use crate::lang::highassembly::Register;
@@ -193,13 +161,6 @@ fn main() {
     // m.decode();
     // assert!(m.assert_reg(17u32, 93));
     // assert!(m.assert_reg(10u32, 1000));
-
-    // Run with GDB support
-    let memsize = 1024*1024;
-    let port = 9999u16;
-    let riscv32_dbg = utils::wait_for_new_debugger_at_port(memsize, port);
-    riscv32_dbg.custom_gdb_event_loop_thread();
-    // riscv32_dbg.default_gdb_event_loop_thread();
 
     // Run instructions in memory
     // use crate::lang::lowassembly::DataEndianness;

@@ -23,7 +23,7 @@ pub enum DataEndianness {
 }
 
 impl DataEndianness {
-    pub fn induce_bytes_to_words(bytes: &[u8], target: DataEndianness) -> Vec<u32> {
+    pub fn build_words_from_bytes(bytes: &[u8], target: DataEndianness) -> Vec<u32> {
         let callback = match target {
             DataEndianness::Le => u32::from_le_bytes,
             DataEndianness::Be => u32::from_be_bytes,
@@ -39,38 +39,17 @@ impl DataEndianness {
             .collect()
     }
 
-    pub fn induce_bytes_to_word(bytes: [u8; 4], target: DataEndianness) -> u32 {
+    pub fn build_word_from_bytes(bytes: [u8; 4], target: DataEndianness) -> u32 {
         match target {
             DataEndianness::Le => u32::from_le_bytes(bytes),
             DataEndianness::Be => u32::from_be_bytes(bytes),
         }
     }
 
-    pub fn induce_word_to_bytes(word: u32, target: DataEndianness) -> [u8; 4] {
+    pub fn break_word_into_bytes(word: u32, target: DataEndianness) -> [u8; 4] {
         match target {
             DataEndianness::Le => u32::to_le_bytes(word),
             DataEndianness::Be => u32::to_be_bytes(word),
-        }
-    }
-
-    pub fn modify_word_to_word(n: u32, source: DataEndianness, target: DataEndianness) -> u32 {
-        match source {
-            DataEndianness::Le => {
-                if target == DataEndianness::Le {
-                    n
-                }
-                else {
-                    u32::to_le(n)
-                }
-            },
-            DataEndianness::Be => {
-                if target == DataEndianness::Be {
-                    n
-                }
-                else {
-                    u32::to_be(n)
-                }
-            },
         }
     }
 
@@ -94,6 +73,16 @@ impl DataEndianness {
                     u32::to_le(val)
                 }
             },
+        }
+    }
+
+    pub fn modify_bytes(bytes: [u8; 4], source: DataEndianness, target: DataEndianness) -> [u8; 4] {
+        if source == target {
+            bytes
+        }
+        else {
+            let conv = [bytes[3], bytes[2], bytes[1], bytes[0]];
+            conv
         }
     }
 }

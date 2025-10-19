@@ -8,6 +8,7 @@ pub trait Tokenizer {
 
 use crate::streamreader::{CharStreamReader, Position, StreamReader};
 
+#[derive(Debug)]
 pub enum CommonClass {
     Comment,
     Number,
@@ -140,7 +141,8 @@ pub trait CommonClassifier {
         let Some(ch) = it.current_token() else {
             return Ok(None);
         };
-        match self.is_token(ch) {
+        let class = self.is_token(ch);
+        match class {
             Some(CommonClass::Ambiguous)  => Ok(self.handle_ambiguous(it)),
             Some(CommonClass::Unit)       => Ok(self.handle_unit(it)),
             Some(CommonClass::Comment)    => Ok(self.handle_comment(it)),

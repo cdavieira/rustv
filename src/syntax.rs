@@ -457,7 +457,7 @@ pub mod gas {
         type Input = Vec<GenericBlock>;
 
         fn assemble(&self, instruction: Self::Input) -> AssemblerTools {
-            assembler::to_u32(instruction)
+            assembler::assemble(instruction)
         }
     }
 

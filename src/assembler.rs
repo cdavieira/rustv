@@ -89,7 +89,29 @@ impl AssemblerTools {
 
 
 
+/**/
 
+#[derive(Debug)]
+pub struct PositionedGenericLine {
+    root_relative_address: usize,
+    relative_address: usize,
+    line: GenericLine,
+}
+
+#[derive(Debug)]
+pub struct PositionedGenericBlock {
+    address: usize,
+    name: SectionName,
+    lines: Vec<PositionedGenericLine>,
+}
+
+
+
+
+// 2.1 Extracting the metadata section
+//   The metadata section is intended to:
+//    1. store directives that modify the visibility of labels
+//    2. the start address (yet to be supported)
 
 fn extract_metadata(
     blocks: &mut Vec<GenericBlock>
@@ -106,6 +128,8 @@ fn extract_metadata(
         None
     }
 }
+
+// 2.2 Casting the 'GenericBlock' type to its sibling type (which can store an address for each section)
 
 fn cast_generic_to_positioned_blocks(
     blocks: Vec<GenericBlock>
@@ -132,21 +156,7 @@ fn cast_generic_to_positioned_blocks(
         .collect()
 }
 
-// 2.1 Generating the start address of each section
-
-#[derive(Debug)]
-pub struct PositionedGenericLine {
-    root_relative_address: usize,
-    relative_address: usize,
-    line: GenericLine,
-}
-
-#[derive(Debug)]
-pub struct PositionedGenericBlock {
-    address: usize,
-    name: SectionName,
-    lines: Vec<PositionedGenericLine>,
-}
+// 2.3 Generating the start address of each section
 
 fn gen_section_address(
     blocks: Vec<PositionedGenericBlock>,
@@ -171,7 +181,7 @@ fn gen_section_address(
     new_blocks
 }
 
-// 2.2 Generating the relative address of each instruction
+// 2.4 Generating the relative address of each instruction
 
 fn gen_line_address(blocks: Vec<PositionedGenericBlock>) -> Vec<PositionedGenericBlock> {
     let mut new_blocks = Vec::new();
@@ -196,6 +206,19 @@ fn gen_line_address(blocks: Vec<PositionedGenericBlock>) -> Vec<PositionedGeneri
     }
     new_blocks
 }
+
+// 2.5 Generating the so called 'root relative address' of each line
+//   The ideia behind this 'root' is that some lines of the program might have been generated
+//   because of the expansion of other lines. For example:
+//     The instruction:
+//       li t1, 2025
+//     Gets expanded into:
+//       lui  t1, 1
+//       addi t1, 1
+//   The 'root relative address' stores the address of all lines before their supposed expansion.
+//   For the previous example, the 'root relative address' for the 'lui' and 'addi' lines are going
+//   to be the same (since both were generated from the 'li' line).
+//   This is important later on when creating a relocation
 
 fn gen_root_line_address(blocks: Vec<PositionedGenericBlock>) -> Vec<PositionedGenericBlock> {
     let mut new_blocks = Vec::new();
@@ -222,7 +245,7 @@ fn gen_root_line_address(blocks: Vec<PositionedGenericBlock>) -> Vec<PositionedG
     new_blocks
 }
 
-// 2.3 Generating section table
+// 2.6 Generating section table
 
 fn gen_section_table(sections: &Vec<PositionedGenericBlock>) -> HashMap<String, Section> {
     let mut map = HashMap::new();
@@ -236,7 +259,7 @@ fn gen_section_table(sections: &Vec<PositionedGenericBlock>) -> HashMap<String, 
     map
 }
 
-// 2.4 Generating symbol table
+// 2.7 Generating the symbol table
 
 fn gen_symbol_table(sections: &Vec<PositionedGenericBlock>) -> HashMap<String, Symbol> {
     let mut v = HashMap::new();
@@ -274,7 +297,7 @@ fn gen_symbol_table(sections: &Vec<PositionedGenericBlock>) -> HashMap<String, S
     v
 }
 
-// 2.5 Generating string table
+// 2.8 Generating the string table
 
 fn gen_string_table(_sections: &Vec<PositionedGenericBlock>) -> Vec<String> {
     let v = Vec::new();
@@ -287,7 +310,7 @@ fn gen_string_table(_sections: &Vec<PositionedGenericBlock>) -> Vec<String> {
     v
 }
 
-// 2.X Generating relocatable table
+// 2.9 Generating the relocation table
 
 fn gen_relocation_table(
     blocks: &Vec<PositionedGenericBlock>,
@@ -330,7 +353,7 @@ fn gen_relocation_table(
     relocation_table 
 }
 
-// 2.6 Resolving symbols
+// 2.10 Resolving symbols
 
 fn get_symb_addrs<'a, 'b>(
     symb: &str,
@@ -351,12 +374,14 @@ fn compute_offset(
     src_line: usize,
     symbol: &Symbol,
     symbol_section: &Section,
+    addend: i32,
 ) -> i32
 {
     let line_faddr: i32 = (src_section + src_line)
         .try_into()
         .unwrap();
     let symb_faddr: i32 = (symbol_section.address + symbol.relative_address)
+        .saturating_add_signed(addend as isize)
         .try_into()
         .unwrap();
 
@@ -380,26 +405,26 @@ fn resolve_symbols(
                         let res = get_symb_addrs(&s, symbols, sections);
                         if let Ok((symb, symb_sect)) = res {
                             let offset = compute_offset(
-                                section.address, line.root_relative_address, symb, symb_sect);
-                            new_args.push(ArgValue::Number(offset + addend));
+                                section.address, line.root_relative_address, symb, symb_sect, addend);
+                            new_args.push(ArgValue::Number(offset));
                         }
                     },
                     ArgValue::UseHi(s, addend) => {
                         let res = get_symb_addrs(&s, symbols, sections);
                         if let Ok((symb, symb_sect)) = res {
                             let offset = compute_offset(
-                                section.address, line.root_relative_address, symb, symb_sect);
+                                section.address, line.root_relative_address, symb, symb_sect, addend);
                             let hi = (offset >> 12) & 0b11111_11111_11111_11111;
-                            new_args.push(ArgValue::Number(hi + addend));
+                            new_args.push(ArgValue::Number(hi));
                         }
                     },
                     ArgValue::UseLo(s, addend) => {
                         let res = get_symb_addrs(&s, symbols, sections);
                         if let Ok((symb, symb_sect)) = res {
                             let offset = compute_offset(
-                                section.address, line.root_relative_address, symb, symb_sect);
+                                section.address, line.root_relative_address, symb, symb_sect, addend);
                             let lo = offset & 0b1111_1111_1111;
-                            new_args.push(ArgValue::Number(lo + addend));
+                            new_args.push(ArgValue::Number(lo));
                         }
                     },
                     _ => {
@@ -423,7 +448,7 @@ fn resolve_symbols(
     resolved_sections
 }
 
-// 2.7 Converting all arguments to numbers
+// 2.11 Converting all arguments to numbers
 
 fn generic_to_encodable_lines(lines: Vec<PositionedGenericLine>) -> Vec<EncodableLine> {
     let mut new_lines = Vec::new();
@@ -487,6 +512,9 @@ fn args_to_numbers(blocks: Vec<PositionedGenericBlock>) -> Vec<PositionedEncodab
     sections
 }
 
+// 2.12 Encoding blocks
+//   Each line gets associated with some alignment
+
 fn encode_blocks(blocks: Vec<PositionedEncodableBlock>) -> Vec<PositionedEncodedBlock> {
     let mut new_blocks = Vec::new();
     for block in blocks {
@@ -503,7 +531,7 @@ fn encode_blocks(blocks: Vec<PositionedEncodableBlock>) -> Vec<PositionedEncoded
     new_blocks
 }
 
-pub fn to_u32(mut blocks: Vec<GenericBlock>) -> AssemblerTools {
+pub fn assemble(mut blocks: Vec<GenericBlock>) -> AssemblerTools {
     let metadata = extract_metadata(&mut blocks);
 
     let blocks = cast_generic_to_positioned_blocks(blocks);

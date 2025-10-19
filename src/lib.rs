@@ -33,10 +33,7 @@ mod tests {
             StreamReader
         };
         use crate::tokenizer::Tokenizer;
-        use crate::lexer::Lexer;
-        use crate::parser::Parser;
         use crate::assembler::{
-            Assembler,
             AssemblerTools,
         };
         use crate::lang::highassembly::{
@@ -443,6 +440,27 @@ mod tests {
 
 
 
+        // Test Endianness
+        #[test]
+        fn endianness_rw_bytes_to_word() {
+            let val = 0x10080u32;
+            let values = DataEndianness::break_word_into_bytes(val, DataEndianness::Be);
+            let value_be = DataEndianness::build_word_from_bytes(values, DataEndianness::Be);
+            assert_eq!(values, [0x0, 0x01, 0x00, 0x80]);
+            assert_eq!(value_be, val);
+
+            let val = 0x00001117;
+            let values = DataEndianness::break_word_into_bytes(val, DataEndianness::Be);
+            let value_be = DataEndianness::build_word_from_bytes(values, DataEndianness::Be);
+            assert_eq!(values, [0x0, 0x0, 0x11, 0x17]);
+            assert_eq!(value_be, val);
+        }
+
+
+
+
+
+
         // CPU
         #[test]
         fn cpu_rw_all_gpr() {
@@ -463,6 +481,19 @@ mod tests {
             let default_value = 1000usize;
             cpu.write_pc(default_value);
             assert_eq!(cpu.read_pc(), default_value);
+        }
+
+        #[test]
+        fn cpu_write_all() {
+            let mut cpu = SimpleCPU::new();
+            let default_value = 1000u32;
+            let values: Vec<u32> = (0..32).map(|_| default_value).collect();
+            cpu.write_all(values, default_value as usize);
+            assert_eq!(cpu.read(0), 0);
+            assert_eq!(cpu.read_pc(), default_value as usize);
+            for reg in 1..32 {
+                assert_eq!(cpu.read(reg), default_value);
+            }
         }
 
 
@@ -489,7 +520,7 @@ mod tests {
             memory.reserve_words(values.len());
             for (idx, value) in values.into_iter().enumerate() {
                 memory.write_word(idx*4, value);
-                assert_eq!(memory.read_word(idx*4, DataEndianness::Le), value, "Error reading byte at {}", idx);
+                assert_eq!(memory.read_word(idx*4), value, "Error reading byte at {}", idx);
             }
         }
 
@@ -499,7 +530,7 @@ mod tests {
             let word = u32::from_be_bytes([0, 0, 0, 100u8]); //100
             memory.reserve_words(1);
             memory.write_word(0, word);
-            assert_eq!(memory.read_word(0, DataEndianness::Be), word);
+            assert_eq!(memory.read_word(0), word);
         }
 
         #[test]
@@ -507,7 +538,7 @@ mod tests {
             let mut memory = SimpleMemory::new(DataEndianness::Be);
             let values = [1u8, 2u8, 3u8, 4u8];
             memory.reserve_bytes(values.len());
-            memory.write_bytes(0, &values.to_vec());
+            memory.write_bytes(0, &values.to_vec(), DataEndianness::Be);
             assert_eq!(memory.bytes(), values);
         }
 
@@ -533,7 +564,7 @@ mod tests {
             ";
             let words = encode_to_words(code);
             let mut m = SimpleMachine::from_words(&words, DataEndianness::Be);
-            m.decode();
+            m.decode().unwrap();
             assert!(m.assert_reg(17u32, 93));
         }
 
@@ -545,8 +576,8 @@ mod tests {
             ";
             let words = encode_to_words(code);
             let mut m = SimpleMachine::from_words(&words, DataEndianness::Be);
-            m.decode();
-            m.decode();
+            m.decode().unwrap();
+            m.decode().unwrap();
             assert!(m.assert_reg(17u32, 93));
             assert!(m.assert_reg(10u32, 1000));
         }
@@ -561,7 +592,7 @@ mod tests {
             let words = encode_to_words(code);
             let mut m = SimpleMachine::from_words(&words, DataEndianness::Be);
             for _word in words {
-                m.decode();
+                m.decode().unwrap();
             }
             m
         }
@@ -572,7 +603,16 @@ mod tests {
             let text = tools.text_section_words();
             let text_len = text.len();
             for _ in 0..text_len {
-                m.decode();
+                m.decode().unwrap();
+            }
+            (m, tools)
+        }
+
+        fn isa_rvi32_mach_deterministic(code: &str, n_decodes: u32) -> (SimpleMachine, AssemblerTools) {
+            let tools = build_code_repr(code);
+            let mut m = new_machine_from_tools(&tools);
+            for _ in 0..n_decodes {
+                m.decode().unwrap();
             }
             (m, tools)
         }
@@ -791,7 +831,7 @@ mod tests {
                 _continue:
                     li t4, 5
             ";
-            let (m, _) = isa_rvi32_mach(code);
+            let (m, _) = isa_rvi32_mach_deterministic(code, 4);
             let reg = Register::T3.id() as usize;
             let regs = m.read_registers();
             let reg = regs[reg];
@@ -810,7 +850,7 @@ mod tests {
                 _continue:
                     li t4, 5
             ";
-            let (m, _) = isa_rvi32_mach(code);
+            let (m, _) = isa_rvi32_mach_deterministic(code, 4);
             let reg = Register::T3.id() as usize;
             let regs = m.read_registers();
             let reg = regs[reg];
@@ -829,7 +869,7 @@ mod tests {
                 _continue:
                     li t4, 5
             ";
-            let (m, _) = isa_rvi32_mach(code);
+            let (m, _) = isa_rvi32_mach_deterministic(code, 4);
             let reg = Register::T3.id() as usize;
             let regs = m.read_registers();
             let reg = regs[reg];
@@ -848,7 +888,7 @@ mod tests {
                 _continue:
                     li t4, 5
             ";
-            let (m, _) = isa_rvi32_mach(code);
+            let (m, _) = isa_rvi32_mach_deterministic(code, 4);
             let reg = Register::T3.id() as usize;
             let regs = m.read_registers();
             let reg = regs[reg];
@@ -896,7 +936,7 @@ mod tests {
                 mylabel2:
                     li t3, 4
             ";
-            let (m, _) = isa_rvi32_mach(code);
+            let (m, _) = isa_rvi32_mach_deterministic(code, 3);
             let t1 = Register::T1.id() as usize;
             let t2 = Register::T2.id() as usize;
             let regs = m.read_registers();
@@ -934,31 +974,86 @@ mod tests {
         }
 
         #[test]
-        #[ignore]
-        fn program_recfcall() {
+        fn program_stack() {
+            let code = "
+                    .globl _start
+                    .section .text
+                _start:
+                    // prepare stack
+                    la sp, 64(stacktop)
+                    jal ra, myfunc
+                    li a7, 93
+                    li a0, 1000
+                    ecall
+                    nop
+                    nop
+                    nop
+                myfunc:
+                    // allocate new function frame
+                    addi sp, sp, -16
+                    // save 'registers' in previous stack
+                    sw ra, 12(sp) // 12(sp) - 16(sp) = ra
+                    sw fp, 8(sp) // 8(sp) - 12(sp) = fp
+                    addi fp, sp, 16 // fp -> stack base
+                    la a1, -4(fp) // a1 = ra
+                    ret
+                    .section .data
+                stacktop:
+                    .skip 64
+            ";
+            let (m, _t) = isa_rvi32_mach(code);
+            let reg = Register::A1.id() as usize;
+            let regs = m.read_registers();
+            let reg = regs[reg] as i32;
+            let val = 124;
+            assert_eq!(reg, val);
+        }
+
+        #[test]
+        fn program_rec_fcall() {
             let code = "
                         .globl _start
                         .section .text
                 _start:
-                        addi sp, sp, 0x80000000
-                        li a2, 5
+                        la sp, 64(stacktop)
+                        mv t3, sp
+                        li a2, 1
                         jal ra, myrecfunc
                         li a7, 93
                         li a0, 1000
                         ecall
                 myrecfunc:
+                        // allocate new function frame and function pointer
+                        addi sp, sp, -16
+                        sw ra, 12(sp)    // 12(sp) - 16(sp) = ra
+                        sw fp, 8(sp)     // 8(sp) - 12(sp) = fp
+                        addi fp, sp, 16  // fp -> stack base
+                        // Do function work
                         beq a2, 0, end
                         addi a2, a2, -1
                         jal ra, myrecfunc
                 end:
+                        // Popping function frame
+                        lw ra, 12(sp)
+                        lw fp, 8(sp)
+                        addi sp, sp, 16
                         ret
+
+                        .section .data
+                stacktop:
+                    .skip 64
             ";
-            let (m, _) = isa_rvi32_mach(code);
-            let reg = Register::A0.id() as usize;
+            let n_executions = 28;
+            let (m, t) = isa_rvi32_mach_deterministic(code, n_executions );
+            let a2 = Register::A2.id() as usize;
+            let t3 = Register::T3.id() as usize;
+            let sp = Register::SP.id() as usize;
             let regs = m.read_registers();
-            let reg = regs[reg] as i32;
-            let val = -1;
-            assert_eq!(reg, val);
+            let a2reg = regs[a2] as i32;
+            let t3reg = regs[t3] as i32;
+            let spreg = regs[sp] as i32;
+            assert_eq!(a2reg, 0);
+            assert_eq!(t3reg, spreg);
         }
 
 

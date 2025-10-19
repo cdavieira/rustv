@@ -1,7 +1,7 @@
 use crate::utils::{
-    get_bits_from_to,
+    get_bits_range,
     get_n_bits_from,
-    get_single_bit_at,
+    get_bit_at,
     set_remaining_bits,
 };
 
@@ -9,12 +9,7 @@ use crate::utils::{
 
 // Available Instruction Immediate Formats (as in the ISA)
 
-/*
-Functions to convert an immediate as read from the parser into the number to be stored in an
-Instruction.
-
-The Instruction is going to use this result as-is later to assemble a 32-bit instruction.
-*/
+/* These types store the internal representation of a number for each different instruction format */
 
 pub trait Immediate {
     fn encode(imm: u32) -> Self ;
@@ -44,7 +39,7 @@ impl Immediate for ImmediateI {
     }
 
     fn decode(&self) -> u32 {
-        let sign_bit = get_single_bit_at(self.0, 11) as usize;
+        let sign_bit = get_bit_at(self.0, 11) as usize;
         set_remaining_bits(self.0, 11, sign_bit)
     }
 }
@@ -58,28 +53,28 @@ impl Immediate for ImmediateS {
 
     fn decode(&self) -> u32 {
         let imm = (self.0 << 5) | self.1;
-        let sign_bit = get_single_bit_at(imm, 11) as usize;
+        let sign_bit = get_bit_at(imm, 11) as usize;
         set_remaining_bits(imm, 11, sign_bit)
     }
 }
 
 impl Immediate for ImmediateB {
     fn encode(imm: u32) -> Self {
-        let bit11 = get_single_bit_at(imm, 11);
-        let bit12 = get_single_bit_at(imm, 12);
-        let bits_5_10 = get_bits_from_to(imm, 5, 10);
-        let bits_1_4  = get_bits_from_to(imm, 1, 4);
+        let bit11 = get_bit_at(imm, 11);
+        let bit12 = get_bit_at(imm, 12);
+        let bits_5_10 = get_bits_range(imm, 5, 10);
+        let bits_1_4  = get_bits_range(imm, 1, 4);
         let imm1  = (bit12     << 6) | bits_5_10;
         let imm2  = (bits_1_4  << 1) | bit11;
         ImmediateB(imm1, imm2)
     }
 
     fn decode(&self) -> u32 {
-        let bit0     = get_single_bit_at(self.1, 0);
-        let bit_1_4  = get_bits_from_to(self.1, 1, 4);
-        let bit_5_10 = get_bits_from_to(self.0, 0, 5);
-        let bit11    = get_single_bit_at(self.0, 6);
-        let imm = ((bit_5_10 << 5) | (bit_1_4 << 1) | bit0) << 1;
+        let bit0     = get_bit_at(self.1, 0);
+        let bit_1_4  = get_bits_range(self.1, 1, 4);
+        let bit_5_10 = get_bits_range(self.0, 0, 5);
+        let bit11    = get_bit_at(self.0, 6);
+        let imm = (bit_5_10 << 5) | (bit_1_4 << 1) | bit0;
         set_remaining_bits(imm, 12, bit11 as usize)
     }
 }
@@ -97,19 +92,19 @@ impl Immediate for ImmediateU {
 
 impl Immediate for ImmediateJ {
     fn encode(imm: u32) -> Self {
-        let p1 = get_bits_from_to(imm, 12, 19);
-        let p2 = get_single_bit_at(imm, 11);
-        let p3 = get_bits_from_to(imm, 1, 10);
-        let p4 = get_single_bit_at(imm, 20);
+        let p1 = get_bits_range(imm, 12, 19);
+        let p2 = get_bit_at(imm, 11);
+        let p3 = get_bits_range(imm, 1, 10);
+        let p4 = get_bit_at(imm, 20);
         let imm = (p4 << 19) | (p3 << 9) | (p2 << 8) | p1;
         ImmediateJ(imm)
     }
 
     fn decode(&self) -> u32 {
-        let bit_1_10  = get_bits_from_to(self.0, 9, 18);
-        let bit11     = get_single_bit_at(self.0, 8);
-        let bit_12_19 = get_bits_from_to(self.0, 0, 7);
-        let bit20     = get_single_bit_at(self.0, 19);
+        let bit_1_10  = get_bits_range(self.0, 9, 18);
+        let bit11     = get_bit_at(self.0, 8);
+        let bit_12_19 = get_bits_range(self.0, 0, 7);
+        let bit20     = get_bit_at(self.0, 19);
         let imm = ((bit_12_19 << 11) | (bit11 << 10) | bit_1_10) << 1;
         set_remaining_bits(imm, 20, bit20 as usize)
     }

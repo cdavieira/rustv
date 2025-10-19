@@ -10,14 +10,20 @@ A defesa de TCC pode ser adiantada (so que a nota so vai sair em março)
 
 
 Focus
-Handle exit syscall in debugger by returning the Exited StopReason event
-> This will likely require adding a return type to the 'handle' method of the debugger
-
-* Execute functions
-> only sp management missing?
-
-* Space/Skip directives
+* (OK) Execute functions
+* (OK) Execute recursion
+* (OK) Space/Skip directives
 > write tests
+
+* Handle exit syscall in debugger by returning the Exited StopReason event
+> This will likely require adding a return type to the 'handle' method of the debugger
+* Prepare a test to sort a vector (bubble sort)
+* Prepare a test to multiply elements of a vector (bubble sort)
+* Prepare a gdb tutorial (generating code through my program+ debugging it through gdb)
+* Improve code tracing during debug/runtime (r/w of registers/memory)
+* Replace comment start from // to # in order to behave as 'as'
+* Set starting code address
+> use _start as the starting label
 
 * Improve debugger (maybe with dwarf info through gimli or addr2line)
 > This is harder than it looks. This would require inferring
@@ -28,22 +34,26 @@ Handle exit syscall in debugger by returning the Exited StopReason event
 >>> Enriching debug sessions isn't required in order to run code. Generating
 >>> debug info isn't mandatory aswell for that matter.
 
-* Execute recursion
-* Prepare a test to sort a vector (bubble sort)
-* Prepare a test to multiply elements of a vector (bubble sort)
-* Prepare a gdb tutorial (generating code through my program+ debugging it through gdb)
-* Improve code tracing during debug/runtime (r/w of registers/memory)
-
-* Set starting code address
 * Create tests to check memory alignment after Parser runs
+
+* Improve commandline interface
+* Remove warnings when compiling
+* Create pseudo instructions for push/pop/managing stack on func entry/exit?
+* Write tests for:
+	* Memory trait
+	* CPU trait
+	* DataEndianness
+	* Machine methods
+	* Final Symbol Address
+	* Instruction immediate and instruction format
+* Create more methods for 'AssemblerTools' (retrieve symbol final address, find address of line, ...)
+* machine::handle isn't using the methods of the Machine trait for r/w memory/cpu...
+
 * Create Loader entity
 * Create Executor entity
 	* assembly into &[u32]
 	* debugger
 	* elf parser
-
-* The strategy used to create software breaks isnt ideal for the debugger...
-> We would have to use the predicted value for the pc!
 
 
 Code
@@ -51,8 +61,6 @@ Code
 	* Watch out for places in the code using 'as' casts
 * Write simple field evaluator to handle constant expressions?
 * Rewrite parts of the code where 'eprintln' is (poorly) used or isn't adequate
-* Support running real code in a virtual machine
-	* (stack.rs)
 * Write logger
 * pub(crate), pub(self), pub(in path) instead of raw pub
 * fix bug where consecutive bytes arent side by side in the memory of the machine
@@ -64,8 +72,6 @@ Code
 > assembler::gen_symbol_table. The address generation process will be subject
 > to change, because fixing this bug would affect the address of the two
 > consecutive bytes in code
-* Create spec::ImmediateFormat ?
-* 
 
 
 
@@ -102,6 +108,7 @@ Docs
 
 
 Misc
+* [X] The strategy used to create software breaks isnt ideal for the debugger...
 * [X] Prepare tests to test out all instructions from the RV32I (running in memory)
 * [X] Support arrays (addresses + offset)
 * [X] do not override symbol/string/relocation table when the symbol appears
@@ -122,3 +129,5 @@ Misc
 	* blt (B)
 * [X] Parse riscv32 elf files, decode instructions and execute them in a Virtual Context
 * [X] Fix the binary encoding of some instruction formats
+* [X] Create spec::ImmediateFormat
+* [X] Support running real code in a virtual machine

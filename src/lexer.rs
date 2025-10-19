@@ -185,7 +185,7 @@ In this implementation, it's the lexer job to:
    'ToRegister' trait
 
 OBS 1: Default implementation of extensions should be provided by this crate, as to standardize
-how operations turn into bytes according to the RISCV specification
+how operations are turned into bytes according to the RISCV specification
 
 OBS 2: Default implementation of common pseudoinstructions/directives are provided by this crate,
 as to standardize how operations turn into bytes according to the RISCV specification

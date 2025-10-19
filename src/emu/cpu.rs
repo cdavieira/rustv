@@ -51,18 +51,14 @@ impl CPU for SimpleCPU {
     }
 
     fn read_all(&self) -> Vec<u32> {
-        // println!("Reading all registers");
         let mut state = self.registers.clone();
-        let pc: u32 = self.pc.try_into().expect("read_all failed converting pc to u32");
-        state.push(pc);
+        state.push(self.pc as u32);
         state
     }
 
-    // TODO: avoid writing to the ZERO register
     fn write_all(&mut self, gps: Vec<u32>, pc: usize) -> () {
-        // println!("Writing all registers");
-        for (idx, reg) in gps.into_iter().enumerate() {
-            self.registers[idx] = reg;
+        for (idx, reg) in gps.into_iter().skip(1).enumerate() {
+            self.registers[idx+1] = reg;
         }
         self.pc = pc;
     }

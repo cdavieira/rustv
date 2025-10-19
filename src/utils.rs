@@ -28,10 +28,10 @@ pub fn build_code_repr(code: &str) -> AssemblerTools {
     let assembler = syntax::gas::Assembler;
 
     let tokens = tokenizer.get_tokens(code);
-    // println!("{:?}", &tokens);
+    // dbg!(&tokens);
 
     let lexemes = lexer.parse(tokens);
-    // println!("{:?}", &lexemes);
+    // dbg!(&lexemes);
 
     let blocks = parser.parse(lexemes);
     // dbg!(&blocks);
@@ -279,7 +279,7 @@ pub fn get_n_bits_from(n: &u32, bit_idx: u8, bit_amount: usize) -> u32 {
 /// Index convention (with the number 1 as an example):
 ///   (1 in binary) ->    00000000     00000000     00000000   00000001
 ///   ( bit index ) ->   31      24   23      16   15      8   7      0
-pub fn get_bits_from_to(n: u32, start: usize, end: usize) -> u32 {
+pub fn get_bits_range(n: u32, start: usize, end: usize) -> u32 {
     let mask = UWORD_MASK[end+1] & (!UWORD_MASK[start]);
     (n & mask) >> start
 }
@@ -287,7 +287,7 @@ pub fn get_bits_from_to(n: u32, start: usize, end: usize) -> u32 {
 /// Index convention (with the number 1 as an example):
 ///   (1 in binary) ->    00000000     00000000     00000000   00000001
 ///   ( bit index ) ->   31      24   23      16   15      8   7      0
-pub fn get_single_bit_at(n: u32, idx: usize) -> u32 {
+pub fn get_bit_at(n: u32, idx: usize) -> u32 {
     (n >> idx) & 0b1
 }
 

@@ -227,6 +227,8 @@ impl<T: Machine> SingleThreadBase for SimpleTarget<T> {
         Ok(())
     }
 
+    // TODO: passing 4 as the alignment will later on cause problems. The easiest way to deal with
+    // this is to switch the memory endian to match that of gdb (LittleEndian).
     fn read_addrs(
         &mut self,
         start_addr: u32,
@@ -239,7 +241,7 @@ impl<T: Machine> SingleThreadBase for SimpleTarget<T> {
         if start_addr < mem_size {
             let free_mem_size = mem_size - start_addr;
             let bytes_size = if data_size < free_mem_size { data_size } else { free_mem_size };
-            let bytes = self.machine.read_memory_bytes(start_addr, bytes_size, 1);
+            let bytes = self.machine.read_memory_bytes(start_addr, bytes_size, 4);
             for (idx, byte) in bytes.into_iter().enumerate() {
                 data[idx] = byte;
             }
@@ -257,9 +259,7 @@ impl<T: Machine> SingleThreadBase for SimpleTarget<T> {
     ) -> TargetResult<(), Self>
     {
         let start: usize = start_addr.try_into().unwrap();
-        for (idx, byte) in data.iter().enumerate() {
-            self.machine.write_memory_byte(start+idx, *byte);
-        }
+        self.machine.write_memory_bytes(start, data);
         Ok(())
     }
 
@@ -275,7 +275,6 @@ impl<T: Machine> SingleThreadResume for SimpleTarget<T> {
         &mut self,
         _signal: Option<Signal>,
     ) -> Result<(), Self::Error> {
-        println!("Calling 'resume' (Now Running)");
         self.state = TargetState::Running;
         Ok(())
     }
@@ -297,7 +296,6 @@ impl<T: Machine> SingleThreadSingleStep for SimpleTarget<T> {
         _signal: Option<Signal>,
     ) -> Result<(), Self::Error>
     {
-        println!("Calling 'step' (Now Stepping)");
         self.state = TargetState::Stepping;
         Ok(())
     }
@@ -323,7 +321,8 @@ impl<T: Machine> SwBreakpoint for SimpleTarget<T> {
         // used by this breakpoint (whatever that means)
         // println!("Trying to add a sw breakpoint at {} {}", addr, kind);
         // println!("But next pc is probably going to be {}", self.machine.predict_next_pc());
-        self.breakpoints.push((addr, kind));
+        let next_addr = self.machine.predict_next_pc();
+        self.breakpoints.push((next_addr as u32, kind));
         Ok(true)
     }
 
@@ -435,28 +434,50 @@ impl<T: Machine> run_blocking::BlockingEventLoop for SimpleGdbBlockingEventLoop<
             match target.state {
                 TargetState::Stepping => {
                     let _pc_before = target.machine.read_pc();
-                    target.machine.decode(); // execute one instruction
-                    let pc_after = target.machine.read_pc();
+                    let Ok(state) = target.machine.decode() else {
+                        return Err(run_blocking::WaitForStopReasonError::Target(()));
+                    };
 
-                    // if we hit a breakpoint, report SwBreak; else DoneStep
-                    if target.breakpoints.iter().any(|b| b.0 == pc_after) {
-                        target.state = TargetState::Idle;
-                        return Ok(run_blocking::Event::TargetStopped(SingleThreadStopReason::SwBreak(())));
-                    } else {
-                        target.state = TargetState::Idle;
-                        return Ok(run_blocking::Event::TargetStopped(SingleThreadStopReason::DoneStep));
+                    match state {
+                        crate::emu::machine::MachineState::Exit(s) => {
+                            return Ok(run_blocking::Event::TargetStopped(SingleThreadStopReason::Exited(s as u8)));
+                        },
+
+                        crate::emu::machine::MachineState::Ok => {
+                            let pc_after = target.machine.read_pc();
+
+                            // if we hit a breakpoint, report SwBreak; else DoneStep
+                            if target.breakpoints.iter().any(|b| b.0 == pc_after) {
+                                target.state = TargetState::Idle;
+                                return Ok(run_blocking::Event::TargetStopped(SingleThreadStopReason::SwBreak(())));
+                            } else {
+                                target.state = TargetState::Idle;
+                                return Ok(run_blocking::Event::TargetStopped(SingleThreadStopReason::DoneStep));
+                            }
+                        },
                     }
                 }
 
                 TargetState::Running => {
                     // Execute a single instruction per loop to remain responsive.
-                    target.machine.decode();
-                    let pc = target.machine.read_pc();
-                    if target.breakpoints.iter().any(|b| b.0 == pc) {
-                        target.state = TargetState::Idle;
-                        return Ok(run_blocking::Event::TargetStopped(SingleThreadStopReason::SwBreak(())));
+                    let Ok(state) = target.machine.decode() else {
+                        return Err(run_blocking::WaitForStopReasonError::Target(()));
+                    };
+
+                    match state {
+                        crate::emu::machine::MachineState::Exit(s) => {
+                            return Ok(run_blocking::Event::TargetStopped(SingleThreadStopReason::Exited(s as u8)));
+                        },
+
+                        crate::emu::machine::MachineState::Ok => {
+                            let pc = target.machine.read_pc();
+                            if target.breakpoints.iter().any(|b| b.0 == pc) {
+                                target.state = TargetState::Idle;
+                                return Ok(run_blocking::Event::TargetStopped(SingleThreadStopReason::SwBreak(())));
+                            }
+                            // continue the loop (we'll check incoming data every iteration)
+                        },
                     }
-                    // continue the loop (we'll check incoming data every iteration)
                 }
 
                 TargetState::Idle => {

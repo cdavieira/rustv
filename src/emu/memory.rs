@@ -19,21 +19,17 @@ pub trait Memory {
     fn read_byte(&self, idx: usize) -> u8 ;
     fn write_byte(&mut self, idx: usize, v: u8) -> () ;
 
-    fn read_word(&self, idx: usize, res_endian: DataEndianness) -> u32 ;
+    fn read_word(&self, idx: usize) -> u32 ;
     fn write_word(&mut self, idx: usize, val: u32) -> () ;
 
     fn read_bytes(&self, start_addr: usize, count: usize,
         res_endian: DataEndianness, alignment: usize
     ) -> Vec<u8> ;
-    fn write_bytes(&mut self, start_addr: usize, data: &Vec<u8>) -> () {
-        for (idx, i) in data.iter().enumerate() {
-            self.write_byte(start_addr + idx, *i);
-        }
-    }
+    fn write_bytes(&mut self, start_addr: usize, data: &[u8], src_endian: DataEndianness) -> () ;
 
     fn read_words(&self, start_addr: usize, count: usize,
         res_endian: DataEndianness) -> Vec<u32> ;
-    fn write_words(&mut self, start_addr: usize, data: &Vec<u32>) -> () {
+    fn write_words(&mut self, start_addr: usize, data: &[u32]) -> () {
         for (idx, i) in data.iter().enumerate() {
             self.write_word(start_addr + idx, *i);
         }
@@ -101,7 +97,7 @@ impl Memory for SimpleMemory {
         self.data
             .chunks_exact(4)
             .enumerate()
-            .map(|(idx, _)| self.read_word(idx*4, self.endianness))
+            .map(|(idx, _)| self.read_word(idx*4))
             .collect()
     }
 
@@ -111,7 +107,8 @@ impl Memory for SimpleMemory {
 
     fn read_file(&mut self, filename: &str) -> io::Result<()>  {
         let data = fs::read(filename)?;
-        self.write_bytes(0, &data);
+        let assumed_endianness = DataEndianness::Le;
+        self.write_bytes(0, &data, assumed_endianness);
         Ok(())
     }
 
@@ -130,7 +127,7 @@ impl Memory for SimpleMemory {
     }
 
     // TODO: maybe return an option to indicate that read_word failed
-    fn read_word(&self, idx: usize, res_endian: DataEndianness) -> u32 {
+    fn read_word(&self, idx: usize) -> u32 {
         if idx < self.data.len() {
             let idx: u64 = idx
                 .try_into()
@@ -142,8 +139,7 @@ impl Memory for SimpleMemory {
                 .try_into()
                 .expect("failed when reading word: conversion to [u8]");
 
-            let word_in_memory = DataEndianness::induce_bytes_to_word(bytes, self.endianness);
-            DataEndianness::modify_word_to_word(word_in_memory, self.endianness, res_endian)
+            DataEndianness::build_word_from_bytes(bytes, self.endianness)
         }
         else {
             0
@@ -152,8 +148,8 @@ impl Memory for SimpleMemory {
 
     // TODO: make this safe in terms of index access
     fn write_word(&mut self, idx: usize, val: u32) -> () {
-        // println!("{:x} written in mem as {:?}", v, bytes);
-        let values = DataEndianness::induce_word_to_bytes(val, self.endianness);
+        // println!("{:x} written in mem at {:?}", val, idx);
+        let values = DataEndianness::break_word_into_bytes(val, self.endianness);
         let bytes_buffer = self.data.get_mut(idx..idx+4).unwrap();
         bytes_buffer[0] = values[0];
         bytes_buffer[1] = values[1];
@@ -174,6 +170,7 @@ impl Memory for SimpleMemory {
                 .read_slice_at(start_addr, count)
                 .unwrap()
                 .to_vec();
+
             if res_endian != self.endianness && alignment > 1 {
                 swap_chunk_endianness(&bytes, alignment)
             }
@@ -186,9 +183,13 @@ impl Memory for SimpleMemory {
         }
     }
 
-    fn write_bytes(&mut self, start_addr: usize, data: &Vec<u8>) -> () {
-        for (idx, i) in data.iter().enumerate() {
-            self.write_byte(start_addr + idx, *i);
+    fn write_bytes(&mut self, start_addr: usize, data: &[u8], src_endian: DataEndianness) -> () {
+        for (idx, chunk) in data.chunks_exact(4).enumerate() {
+            let bytes = DataEndianness::modify_bytes(chunk.try_into().unwrap(), src_endian, self.endianness);
+            self.write_byte(start_addr + idx*4 + 0, bytes[0]);
+            self.write_byte(start_addr + idx*4 + 1, bytes[1]);
+            self.write_byte(start_addr + idx*4 + 2, bytes[2]);
+            self.write_byte(start_addr + idx*4 + 3, bytes[3]);
         }
     }
 
@@ -208,7 +209,9 @@ impl Memory for SimpleMemory {
             .collect()
     }
 
-    fn write_words(&mut self, start_addr: usize, data: &Vec<u32>) -> () {
+    // TODO: Theoretically, we would have to know the endianness of the incoming data in order to
+    // determine how transform that data to the same format used by the memory
+    fn write_words(&mut self, start_addr: usize, data: &[u32]) -> () {
         for (idx, i) in data.iter().enumerate() {
             self.write_word(start_addr + 4*idx, *i);
         }

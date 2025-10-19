@@ -1,4 +1,13 @@
-// TODO: create test to all these methods
+pub enum MachineState {
+    Exit(i32),
+    Ok,
+}
+
+#[derive(Debug)]
+pub enum MachineError {
+    UnknownInstruction(u32),
+    UnhandledInstruction(String),
+}
 
 pub trait Machine {
     // Init
@@ -13,7 +22,7 @@ pub trait Machine {
     fn fetch(&self) -> u32 ;
     fn jump(&mut self, off: usize) -> () ;
     fn set_pc(&mut self, new_pc: usize) -> () ;
-    fn decode(&mut self) -> () ;
+    fn decode(&mut self) -> Result<MachineState, MachineError> ;
     fn endianness(&self) -> DataEndianness ;
 
 
@@ -34,20 +43,20 @@ pub trait Machine {
     fn write_memory_byte(&mut self, addr: usize, value: u8) -> () ;
 
     fn read_memory_bytes(&self, addr: usize, count: usize, alignment: usize) -> Vec<u8> ;
-    fn write_memory_bytes(&mut self, addr: usize, values: &Vec<u8>) -> () ;
+    fn write_memory_bytes(&mut self, addr: usize, values: &[u8]) -> () ;
 
     fn read_memory_word(&self, addr: usize) -> u32 ;
     fn write_memory_word(&mut self, addr: usize, value: u32) -> () ;
 
     fn read_memory_words(&self, addr: usize, count: usize) -> Vec<u32> ;
-    fn write_memory_words(&mut self, addr: usize, values: &Vec<u32>) -> () ;
+    fn write_memory_words(&mut self, addr: usize, values: &[u32]) -> () ;
 
 
     // Debug
     fn assert_reg(&self, reg: u32, val: u32) -> bool ;
     fn assert_pc(&self, val: u32) -> bool ;
-    fn assert_memory_words(&self, addr: usize, word_count: usize, values: &Vec<u32>) -> bool ;
-    fn assert_memory_bytes(&self, addr: usize, byte_count: usize, values: &Vec<u8>, alignment: usize) -> bool ;
+    fn assert_memory_words(&self, addr: usize, word_count: usize, values: &[u32]) -> bool ;
+    fn assert_memory_bytes(&self, addr: usize, byte_count: usize, values: &[u8], alignment: usize) -> bool ;
     fn predict_next_pc(&self) -> usize ;
 }
 
@@ -107,7 +116,7 @@ impl Machine for SimpleMachine {
     fn from_bytes(data: &Vec<u8>, machine_endian: DataEndianness) -> Self  {
         let mut mem = SimpleMemory::new(DataEndianness::Be);
         mem.reserve_bytes(data.len());
-        mem.write_bytes(0, data);
+        mem.write_bytes(0, data, machine_endian);
         SimpleMachine {
             cpu: SimpleCPU::new(),
             mem,
@@ -132,7 +141,7 @@ impl Machine for SimpleMachine {
 
     fn fetch(&self) -> u32  {
         let pc = self.cpu.read_pc();
-        self.mem.read_word(pc, self.endian)
+        self.mem.read_word(pc)
     }
 
     fn jump(&mut self, off: usize) -> () {
@@ -144,13 +153,21 @@ impl Machine for SimpleMachine {
         self.cpu.write_pc(new_pc);
     }
 
-    fn decode(&mut self) -> ()  {
+    fn decode(&mut self) -> Result<MachineState, MachineError> {
         let word = self.fetch();
         if let Some(ifmt) = InstructionFormat::decode(word) {
             let new_pc = predict_next_pc(self, &ifmt);
-            handle(self, ifmt);
-            self.set_pc(new_pc);
-        };
+            // println!("{}: {:?} -> {}", self.read_pc(), &ifmt, new_pc);
+            let state = handle(self, ifmt);
+            if state.is_ok() {
+                self.set_pc(new_pc);
+            }
+            state
+        }
+        else {
+            eprintln!("WARNING: decode error: unknown word '{:x}'", word);
+            Err(MachineError::UnknownInstruction(word))
+        }
     }
 
     fn endianness(&self) -> DataEndianness  {
@@ -197,12 +214,12 @@ impl Machine for SimpleMachine {
         self.mem.read_bytes(addr, count, self.endian, alignment)
     }
 
-    fn write_memory_bytes(&mut self, addr: usize, values: &Vec<u8>) -> () {
-        self.mem.write_bytes(addr, values)
+    fn write_memory_bytes(&mut self, addr: usize, values: &[u8]) -> () {
+        self.mem.write_bytes(addr, values, self.endian)
     }
 
     fn read_memory_word(&self, addr: usize) -> u32 {
-        self.mem.read_word(addr, self.endian)
+        self.mem.read_word(addr)
     }
 
     fn write_memory_word(&mut self, addr: usize, value: u32) -> () {
@@ -213,7 +230,7 @@ impl Machine for SimpleMachine {
         self.mem.read_words(addr, count, self.endian)
     }
 
-    fn write_memory_words(&mut self, addr: usize, values: &Vec<u32>) -> () {
+    fn write_memory_words(&mut self, addr: usize, values: &[u32]) -> () {
         self.mem.write_words(addr, values);
     }
 
@@ -225,7 +242,7 @@ impl Machine for SimpleMachine {
         (self.cpu.read_pc() as u32) == val
     }
 
-    fn assert_memory_words(&self, addr: usize, word_count: usize, values: &Vec<u32>) -> bool {
+    fn assert_memory_words(&self, addr: usize, word_count: usize, values: &[u32]) -> bool {
         let words = self.mem.read_words(addr, word_count, self.endian);
         for (word_in_memory, word_test) in words.iter().zip(values) {
             if word_in_memory != word_test {
@@ -235,7 +252,7 @@ impl Machine for SimpleMachine {
         true
     }
 
-    fn assert_memory_bytes(&self, addr: usize, byte_count: usize, values: &Vec<u8>, alignment: usize) -> bool {
+    fn assert_memory_bytes(&self, addr: usize, byte_count: usize, values: &[u8], alignment: usize) -> bool {
         let bytes = self.mem.read_bytes(addr, byte_count, self.endian, alignment);
         for (byte_in_memory, byte_test) in bytes.iter().zip(values) {
             if byte_in_memory != byte_test {
@@ -256,7 +273,7 @@ impl Machine for SimpleMachine {
     }
 }
 
-fn handle(m: &mut SimpleMachine, ifmt: InstructionFormat) -> () {
+fn handle(m: &mut SimpleMachine, ifmt: InstructionFormat) -> Result<MachineState, MachineError> {
     match ifmt {
         InstructionFormat::R { funct7, rs2, rs1, funct3, rd, opcode: _ } => {
             let v1 = m.cpu.read(rs1 as usize);
@@ -270,7 +287,8 @@ fn handle(m: &mut SimpleMachine, ifmt: InstructionFormat) -> () {
                 (0b0000000, 0b001) => { v1 << v2 }, //SLL   
                 (0b0000000, 0b101) => { v1 >> v2 }, //SRL   
                 _ => {
-                    panic!("Unhandled R: (f7, f3) = ({}, {})", funct7, funct3);
+                    let errmsg = format!("Unhandled R: (f7, f3) = ({}, {})", funct7, funct3);
+                    return Err(MachineError::UnhandledInstruction(errmsg));
                 }
             };
             m.cpu.write(rd as usize, res);
@@ -278,7 +296,20 @@ fn handle(m: &mut SimpleMachine, ifmt: InstructionFormat) -> () {
         InstructionFormat::I { imm, rs1, funct3, rd, opcode } => {
             let rs1_val = m.cpu.read(rs1 as usize);
             let imm = imm.decode();
-            match (funct3, opcode) {
+            let opt = match (funct3, opcode) {
+                (0b000, 0b0010011) => { Some(rs1_val.wrapping_add_signed(imm as i32)) }, // ADDI  
+                (0b111, 0b0010011) => { Some(rs1_val & imm) }, // ANDI  
+                (0b110, 0b0010011) => { Some(rs1_val | imm) }, // ORI   
+                (0b100, 0b0010011) => { Some(rs1_val ^ imm) }, // XORI  
+                (0b000, 0b1100111) => { Some(m.cpu.read_pc() as u32 + 4) }, // JALR  
+                (0b010, 0b0000011) => {
+                    let addr = rs1_val.saturating_add_signed(imm as i32) as usize;
+                    Some(m.read_memory_word(addr))
+                }, // LW
+                (0b000, 0b0000011) => {
+                    let addr = rs1_val.saturating_add_signed(imm as i32) as usize;
+                    Some(m.read_memory_byte(addr) as u32)
+                }, // LB
                 (0b000, 0b1110011) => {
                     let a7 = m.cpu.read(Register::A7.id().into()) as usize;
                     if let Some(sys) = Sysno::new(a7) {
@@ -286,49 +317,23 @@ fn handle(m: &mut SimpleMachine, ifmt: InstructionFormat) -> () {
                             Sysno::write => {
                             },
                             Sysno::exit => {
+                                let a0 = m.cpu.read(Register::A0.id().into()) as usize;
+                                return Ok(MachineState::Exit(a0 as i32));
                             },
                             _ => {
                             }
                         }
                     }
+                    None
                 }, // ECALL 
-                (0b000, 0b1100111) => {
-                    let pc = m.cpu.read_pc();
-                    let ret_addr = pc + 4;
-                    m.cpu.write(rd as usize, ret_addr as u32);
-                }, // JALR  
-                (0b000, 0b0010011) => {
-                    let v = rs1_val + imm;
-                    m.cpu.write(rd as usize, v);
-                }, // ADDI  
-                (0b111, 0b0010011) => {
-                    let v = rs1_val & imm;
-                    m.cpu.write(rd as usize, v);
-                }, // ANDI  
-                (0b110, 0b0010011) => {
-                    let v = rs1_val | imm;
-                    m.cpu.write(rd as usize, v);
-                }, // ORI   
-                (0b100, 0b0010011) => {
-                    let v = rs1_val ^ imm;
-                    m.cpu.write(rd as usize, v);
-                }, // XORI  
-                (0b010, 0b0000011) => {
-                    let addr = (rs1_val as i32) + (imm as i32);
-                    let v = m.mem.read_word(addr as usize, m.endian);
-                    m.cpu.write(rd as usize, v);
-                }, // LW
-                (0b000, 0b0000011) => {
-                    let addr = (rs1_val as i32) + (imm as i32);
-                    let v = m.mem.read_byte(addr as usize);
-                    m.cpu.write(rd as usize, v as u32);
-                }, // LB
-                (0b100, 0b0000011) => {
-                    todo!();
-                }, // LBU
+                (0b100, 0b0000011) => None, // LBU
                 _ => {
-                    panic!("Unhandled I: (f3, op) = ({}, {})", funct3, opcode);
+                    let errmsg = format!("Unhandled I: (f3, op) = ({}, {})", funct3, opcode);
+                    return Err(MachineError::UnhandledInstruction(errmsg));
                 }
+            };
+            if let Some(res) = opt {
+                m.cpu.write(rd as usize, res as u32);
             }
         },
         InstructionFormat::S { imm, rs2, rs1, funct3, opcode } => {
@@ -340,7 +345,10 @@ fn handle(m: &mut SimpleMachine, ifmt: InstructionFormat) -> () {
             match (funct3, opcode) {
                 (0b010, 0b0100011) => m.mem.write_word(addr, val), //SW
                 (0b000, 0b0100011) => m.mem.write_byte(addr, (val & 0b1111_1111) as u8), //SB
-                _ => panic!("Unhandled S: (f3, op) = ({}, {})", funct3, opcode),
+                _ => {
+                    let errmsg = format!("Unhandled S: (f3, op) = ({}, {})", funct3, opcode);
+                    return Err(MachineError::UnhandledInstruction(errmsg));
+                }
             }
         },
         InstructionFormat::U { imm, rd, opcode } => {
@@ -353,7 +361,8 @@ fn handle(m: &mut SimpleMachine, ifmt: InstructionFormat) -> () {
                     m.cpu.write(rd as usize, addr as u32);
                 },
                 _ => {
-                    panic!("Unhandled U: op = {}", opcode);
+                    let errmsg = format!("Unhandled U: op = {}", opcode);
+                    return Err(MachineError::UnhandledInstruction(errmsg));
                 }
             }
         },
@@ -365,7 +374,8 @@ fn handle(m: &mut SimpleMachine, ifmt: InstructionFormat) -> () {
                     m.cpu.write(rd as usize, ret_addr as u32);
                 }, //JAL
                 _ => {
-                    panic!("Unhandled J: op = {}", opcode);
+                    let errmsg = format!("Unhandled J: op = {}", opcode);
+                    return Err(MachineError::UnhandledInstruction(errmsg));
                 }
             }
 
@@ -373,6 +383,8 @@ fn handle(m: &mut SimpleMachine, ifmt: InstructionFormat) -> () {
         InstructionFormat::B { .. } => {
         },
     }
+
+    Ok(MachineState::Ok)
 }
 
 

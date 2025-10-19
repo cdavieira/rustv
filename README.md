@@ -160,6 +160,7 @@ realtime, exporting to ELF and running the emulated environment
 * [ ] Explain the current test suite (Tokenizer, Machine, CPU, Memory, ELF export, ...)
 * [ ] Create diagrams/images explaining the Designs (assembly-to-elf, how the
 gdbstub works, how the fetch-decode cycle works)
+* [ ] tip: `gdb -x init.gdb`
 
 
 
