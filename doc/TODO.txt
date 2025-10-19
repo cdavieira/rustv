@@ -17,12 +17,30 @@ Focus
 * (OK) Prepare a test to sort a vector (~bubble~ selection sort)
 * (OK) Prepare a test to multiply elements of a vector
 
-* Prepare a gdb tutorial (generating code through my program+ debugging it through gdb)
-* Improve code tracing during debug/runtime (r/w of registers/memory)
-* Replace comment start from // to # in order to behave as 'as'
+Low priority and Easy:
 * Set starting code address
 > use _start as the starting label
+* Improve code tracing during debug/runtime (r/w of registers/memory)
+* Replace comment start from // to # in order to behave as 'as'
+* Create pseudo instructions for push/pop/managing stack on func entry/exit?
+* machine::handle isn't using the methods of the Machine trait for r/w memory/cpu...
 
+Low priority and hard:
+* Remove warnings when compiling
+* Throw error on syntax error
+* Investigate why _start label is loaded at a different address in gdb
+  (although its address is correct according to `info address _start`)
+
+High priority and Easy:
+* Prepare a gdb tutorial (generating code through my program+ debugging it through gdb)
+* Improve commandline interface
+* Create Loader entity
+* Create Executor entity
+	* assembly into &[u32]
+	* debugger
+	* elf parser
+
+High priority and Hard:
 * Improve debugger (maybe with dwarf info through gimli or addr2line)
 > This is harder than it looks. This would require inferring
 > functions/variables and more by either analysing the IR of the code or by
@@ -31,12 +49,7 @@ Focus
 >> Maybe that's too much considering the gains (a richer gdb debugging session)
 >>> Enriching debug sessions isn't required in order to run code. Generating
 >>> debug info isn't mandatory aswell for that matter.
-
-* Create tests to check memory alignment after Parser runs
-
-* Improve commandline interface
-* Remove warnings when compiling
-* Create pseudo instructions for push/pop/managing stack on func entry/exit?
+* Create more methods for 'AssemblerTools' (retrieve symbol final address, find address of line, ...)
 * Write tests for:
 	* Memory trait
 	* CPU trait
@@ -46,16 +59,16 @@ Focus
 	* Instruction immediate and instruction format
 	* Space/Skip directives
 	* Remaining M extension operations (div, rem, ...)
-* Create more methods for 'AssemblerTools' (retrieve symbol final address, find address of line, ...)
-* machine::handle isn't using the methods of the Machine trait for r/w memory/cpu...
-* Throw error on syntax error
-* Investigate why _start label is loaded at a different address in gdb (although its address is correct according to `info address _start`)
-
-* Create Loader entity
-* Create Executor entity
-	* assembly into &[u32]
-	* debugger
-	* elf parser
+	* Memory alignment after Parser runs
+* Plan on how to support extensions without having to directly write code, but
+  rather writing stuff using yaml/json and then parsing that during the program
+  runtime. That would replace the current need of: creating the
+  instruction/immediate formats, creating the extension enum interface, linking
+  lexemes to the enum variants and writing how the emulator should handle those
+  variants.
+* Support reverse stepping
+* Support custom sections (that would help with custom sections for stack, ...)
+* Fix side by side byte addressing problem (alignment related)
 
 
 Code

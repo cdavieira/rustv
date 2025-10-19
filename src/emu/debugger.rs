@@ -329,8 +329,8 @@ impl<T: Machine> SwBreakpoint for SimpleTarget<T> {
     {
         // According to the docs found in 'gdbstub_arch::riscv::Riscv32', kind is the 'size' to be
         // used by this breakpoint (whatever that means)
-        println!("Trying to add a sw breakpoint at {} {}", addr, kind);
-        println!("But next pc is probably going to be {}", self.machine.predict_next_pc());
+        // println!("Trying to add a sw breakpoint at {} {}", addr, kind);
+        // println!("But next pc is probably going to be {}", self.machine.predict_next_pc());
         let next_addr = self.machine.predict_next_pc();
 
         // we add both the predicted address by machine and the address sent by gdb to handle
