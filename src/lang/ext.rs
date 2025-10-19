@@ -70,12 +70,12 @@ impl Immediate for ImmediateB {
     }
 
     fn decode(&self) -> u32 {
-        let bit0     = get_bit_at(self.1, 0);
         let bit_1_4  = get_bits_range(self.1, 1, 4);
         let bit_5_10 = get_bits_range(self.0, 0, 5);
-        let bit11    = get_bit_at(self.0, 6);
-        let imm = (bit_5_10 << 5) | (bit_1_4 << 1) | bit0;
-        set_remaining_bits(imm, 12, bit11 as usize)
+        let bit11    = get_bit_at(self.1, 0);
+        let signbit    = get_bit_at(self.0, 6);
+        let imm = ( (bit11 << 10) | (bit_5_10 << 4) | bit_1_4 ) << 1;
+        set_remaining_bits(imm, 12, signbit as usize)
     }
 }
 
@@ -259,6 +259,7 @@ impl InstructionFormat {
 
 // Instruction Assembly Description
 
+#[derive(Debug)]
 pub enum ArgName {
     RS1,
     RS2,
@@ -446,7 +447,9 @@ fn get_args(
 ) -> (u32, u32, u32, i32)
 {
     if fields.len() != args.len() {
-        panic!("Insuficient number of arguments");
+        println!("{:?}", args);
+        println!("{:?}", fields);
+        panic!("Insuficient number of arguments: {} != {}", fields.len(), args.len());
     }
 
     let mut rs1: u32 = 0;

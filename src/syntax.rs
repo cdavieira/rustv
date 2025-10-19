@@ -253,7 +253,7 @@ pub mod gas {
             let mut chs = token.chars();
             let f: char = chs.nth(0).unwrap_or(' ');
             let first_ch_check = f.is_ascii_alphabetic() || matches!(f, '_' | '.');
-            let remaining_string_check = chs.all(|ch| ch.is_ascii_alphanumeric());
+            let remaining_string_check = chs.all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_'));
             first_ch_check && remaining_string_check
         }
 

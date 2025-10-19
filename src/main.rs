@@ -23,28 +23,26 @@ pub mod obj {
     pub mod elfwriter;
 }
 
-use env_logger::Env;
-use rustv::utils::encode_to_word;
-
-
 fn main() {
-    let args: Vec<String> = std::env::args().collect();
+    let arg_buffer: Vec<String> = std::env::args().collect();
+    let args: Vec<&str> =  arg_buffer.iter().map(|arg| arg.as_str()).collect();
+    let arglen = args.len();
 
-    if args.len() == 1 {
-        println!("Usage");
-        println!("  cargo run -- [ --build    | -b ] file.s");
-        println!("  cargo run -- [ --debugger | -d ]");
-        println!("  cargo run -- [ --decode-bin    ] 0x00001117");
-        println!("  cargo run -- [ --decode-text   ] \"addi a2,a1,3\"");
-        println!("  cargo run -- [ --elf      | -e ] file.s");
-        return ;
+    let show_usage    = arglen > 1 && matches!(args[1], "--help"     | "-h") || arglen == 1;
+    let start_stub    = arglen > 1 && matches!(args[1], "--debugger" | "-d");
+    let build_code    = arglen > 2 && matches!(args[1], "--build"    | "-b");
+    let write_elf     = arglen > 2 && matches!(args[1], "--elf"      | "-e");
+    let decode_binary = arglen > 2 && matches!(args[1], "--decode-bin"     );
+    let decode_text   = arglen > 2 && matches!(args[1], "--decode-text"    );
+
+    if show_usage {
+        usage();
+        return;
     }
 
-    if args.len() > 2 && matches!(args[1].as_str(), "--build" | "-b") {
-        let srcfile = args[2].clone();
+    if build_code {
+        let srcfile = args[2];
         let code = std::fs::read_to_string(srcfile).unwrap();
-
-        eprintln!("Code representation builder");
 
         use crate::utils::build_code_repr;
         let _tools = build_code_repr(&code);
@@ -59,15 +57,16 @@ fn main() {
         return ;
     }
 
-    if matches!(args[1].as_str(), "--debugger" | "-d") {
+    if start_stub {
+        use env_logger::Env;
+        use crate::utils::wait_for_new_debugger_at_port;
+
         let memsize = 1024*1024;
         let port    = 9999u16;
 
-        eprintln!("Debugger mode");
-
         env_logger::Builder::from_env(Env::default().default_filter_or("trace")).init();
 
-        let riscv32_dbg = utils::wait_for_new_debugger_at_port(memsize, port);
+        let riscv32_dbg = wait_for_new_debugger_at_port(memsize, port);
 
         riscv32_dbg.custom_gdb_event_loop_thread();
         // riscv32_dbg.default_gdb_event_loop_thread();
@@ -75,17 +74,17 @@ fn main() {
         return ;
     }
 
-    if args.len() > 2 && matches!(args[1].as_str(), "--elf" | "-e") {
+    if write_elf {
+        use crate::utils::encode_to_elf;
+
         let linker = "riscv32-unknown-linux-gnu-ld";
         let execfile = "main";
         let objectfile = "main.o";
-        let srcfile = args[2].clone();
-
-        eprintln!("Elf writter mode");
+        let srcfile = args[2];
 
         let f = std::fs::read_to_string(srcfile).unwrap();
 
-        utils::encode_to_elf(&f, objectfile).unwrap();
+        encode_to_elf(&f, objectfile).unwrap();
 
         let output = std::process::Command::new(linker)
             .arg(objectfile)
@@ -101,14 +100,11 @@ fn main() {
         }
     }
 
-    if args.len() > 2 && matches!(args[1].as_str(), "--decode-bin") {
-        eprintln!("Binary instruction decode mode");
-        // let word = 0x00000eef;
-        // let word = 0x00001117;
-        // let word = 0xff010113;
+    if decode_binary {
         use crate::lang::ext::InstructionFormat;
+        use crate::lang::ext::Immediate;
 
-        let n = args[2].as_str().trim().replace("0x", "");
+        let n = args[2].trim().replace("0x", "");
 
         let word = u32::from_str_radix(&n, 16).expect("Invalid instruction");
 
@@ -116,13 +112,27 @@ fn main() {
 
         println!("{:?}", iformat);
 
+        if let Some(iformat) = iformat {
+            match iformat {
+                InstructionFormat::B { imm, .. } => {
+                    println!("Immediate: {:x}", imm.decode());
+                },
+                // InstructionFormat::R { funct7, rs2, rs1, funct3, rd, opcode } => todo!(),
+                // InstructionFormat::I { imm, rs1, funct3, rd, opcode } => todo!(),
+                // InstructionFormat::S { imm, rs2, rs1, funct3, opcode } => todo!(),
+                // InstructionFormat::U { imm, rd, opcode } => todo!(),
+                // InstructionFormat::J { imm, rd, opcode } => todo!(),
+                _ => todo!(),
+            }
+        }
+
         return ;
     }
 
-    if args.len() > 2 && matches!(args[1].as_str(), "--decode-text") {
-        eprintln!("Text instruction decode mode");
+    if decode_text {
+        use crate::utils::encode_to_word;
 
-        let code = args[2].as_str();
+        let code = args[2];
 
         let res = encode_to_word(code);
 
@@ -178,4 +188,13 @@ fn main() {
     //     .map(|reg| reg as i32)
     //     .collect();
     // println!("{:?}", r);
+}
+
+fn usage() {
+    println!("Usage");
+    println!("  cargo run -- [ --build    | -b ] file.s");
+    println!("  cargo run -- [ --debugger | -d ]");
+    println!("  cargo run -- [ --decode-bin    ] 0x00001117");
+    println!("  cargo run -- [ --decode-text   ] \"addi a2,a1,3\"");
+    println!("  cargo run -- [ --elf      | -e ] file.s");
 }

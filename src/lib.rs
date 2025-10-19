@@ -55,7 +55,7 @@ mod tests {
             build_code_repr,
             encode_to_word,
             encode_to_words,
-            new_machine_from_tools,
+            new_machine_from_tools, set_remaining_bits,
         };
         use crate::obj::{
             elfwriter::ElfWriter,
@@ -308,6 +308,18 @@ mod tests {
 
 
         // TODO: Lexer tests
+
+
+
+        
+        // Bits utils
+
+        #[test]
+        fn bits_set_remaining_bits() {
+            let n = 0b101;
+            let m = set_remaining_bits(n, 2, 1);
+            assert_eq!(m, 0b11111111_11111111_11111111_11111101);
+        }
 
 
 
@@ -613,6 +625,21 @@ mod tests {
             let mut m = new_machine_from_tools(&tools);
             for _ in 0..n_decodes {
                 m.decode().unwrap();
+            }
+            (m, tools)
+        }
+
+        fn isa_rvi32_mach_until_exit(code: &str) -> (SimpleMachine, AssemblerTools) {
+            let tools = build_code_repr(code);
+            let mut m = new_machine_from_tools(&tools);
+            loop {
+                match m.decode() {
+                    Ok(state) => match state {
+                        emu::machine::MachineState::Exit(_status) => break,
+                        emu::machine::MachineState::Ok => {},
+                    }
+                    Err(_err)  => break,
+                }
             }
             (m, tools)
         }
@@ -1054,6 +1081,79 @@ mod tests {
             let spreg = regs[sp] as i32;
             assert_eq!(a2reg, 0);
             assert_eq!(t3reg, spreg);
+        }
+
+        #[test]
+        fn program_selection_sort() {
+            let code = "
+                        .globl _start
+                        .section .text
+                _start:
+                        la t0, myvector
+                        li  a2, 3
+                        addi a5, a2, -1
+                loop:
+                        loop_init_list:
+                        li  t1, 0
+                        li  a3, 0
+
+                        loop_condition:
+                        beq t1, a5, loop_end
+
+                        loop_body:
+
+                        //inner_loop:
+                                inner_loop_init_list:
+                                        mv   t2, t1
+                                        addi t2, t2, 1            // t2 = t1 + 1
+                                        mv  a4, a3
+                                        addi  a4, a4, 4           // a4 = a3 + 4
+
+                                inner_loop_condition:
+                                        beq t2, a2, inner_loop_end
+
+                                inner_loop_body:
+                                        add t3, t0, a3  // t3 = t0 + a3 (myvector + 4*i)
+                                        lw  t3, 0(t3)   // t3 = myvector[4*i]
+                                        add t4, t0, a4    // t4 = t0 + a4 (myvector + 4*j)
+                                        lw  t4, 0(t4)     // t4 = myvector[4*j]
+                                        // if myvector[j] < myvector[i]
+                                        //   continue;
+                                        // else
+                                        //   swap i'th element (t3) with j'th element (t4);
+                                        blt t4, t3, inner_loop_increment
+                                        mv t5, t3        // t5 = myvector[i]
+                                        add t6, t0, a3   // t6 = t0 + a3 (myvector + 4*i)
+                                        sw t4, 0(t6)     // *(myvector + 4*i) = t4
+                                        add t6, t0, a4   // t6 = t0 + a4 (myvector + 4*j)
+                                        sw t5, 0(t6)     // *(myvector + 4*j) = t5
+
+                                inner_loop_increment:
+                                        addi t2, t2, 1
+                                        addi a4, a4, 4
+                                        beq  x0, x0, inner_loop_condition // we've found ourselves in an (inner) loop :')
+
+                                inner_loop_end:
+
+                        loop_increment:
+                        addi t1, t1, 1
+                        addi a3, a3, 4
+                        beq  x0, x0, loop_condition // we've found ourselves in a loop :')
+
+                        loop_end:
+
+                        li a7, 93
+                        li a0, 0
+                        ecall
+
+                        .section .data
+                myvector: .word 3, 5, 10
+            ";
+            let (m, t) = isa_rvi32_mach_until_exit(code);
+            let datasection = t.sections.get(".data").unwrap();
+            let varaddr = datasection.address;
+            let regs = m.read_memory_words(varaddr, 3);
+            assert_eq!(regs, vec![10, 5, 3]);
         }
 
 

@@ -28,9 +28,11 @@ pub fn build_code_repr(code: &str) -> AssemblerTools {
     let assembler = syntax::gas::Assembler;
 
     let tokens = tokenizer.get_tokens(code);
+    // println!("{:?}", tokens);
     // dbg!(&tokens);
 
     let lexemes = lexer.parse(tokens);
+    // println!("{:?}", lexemes);
     // dbg!(&lexemes);
 
     let blocks = parser.parse(lexemes);
@@ -293,7 +295,7 @@ pub fn get_bit_at(n: u32, idx: usize) -> u32 {
 
 /// Sets all bits to the left of 'start' to be the same value as 'bit'
 ///
-/// Example: set_remaining_bits(0b0011, 3, 1) -> 0b1...011
+/// Example: set_remaining_bits(0b0011, 3, 1) -> 0b1..10011
 ///
 /// Index convention (with the number 1 as an example):
 ///   (1 in binary) ->    00000000     00000000     00000000   00000001

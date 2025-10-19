@@ -271,6 +271,16 @@ stopped
 4. Once in the Running state, the target takes over the control. Later on, it
    decides to stop and returns the reason for that to the stub.
 
+One thing i've noticed is that the command `si` of gdb doesn't translate into
+an actual `step` procedure sent over the transmission channel, but rather as a
+sequence of basically two operations: the insertion of a software breakpoint at
+the next address, followed by a `continue` procedure sent over the transmission
+channel. According to chatgpt, the `step` procedure is meant to be used for
+when the target supports hardware breakpoints, which is not the case for my
+debugger (at least for now). Since only software breakpoints are currently
+supported, this effectively means that the 'step' method of my debugger won't
+ever be issued, which means that its internal state won't ever be 'Stepping'
+
 ---
 
 How the communication between the gdbclient and stub works under the hood

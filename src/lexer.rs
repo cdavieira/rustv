@@ -28,6 +28,7 @@ pub trait Lexer {
 
 
 
+#[derive(Debug)]
 pub enum TokenClass {
     Number,
     String,
@@ -128,7 +129,9 @@ pub trait TokenClassifier {
 
     fn handle_token(&self, it: &mut StringStreamReader) -> Option<Self::Token> {
         let token = it.current_token().expect("Lexer failed when retrieving token");
-        match self.classify(token.as_str()) {
+        let class = self.classify(token.as_str());
+        // println!("Processing {} as {:?}", token, class);
+        match class {
             TokenClass::Label      => self.handle_label(it),
             TokenClass::Number     => self.handle_number(it),
             TokenClass::Symbol     => self.handle_symbol(it),

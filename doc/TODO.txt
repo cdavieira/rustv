@@ -13,10 +13,8 @@ Focus
 * (OK) Execute functions
 * (OK) Execute recursion
 * (OK) Space/Skip directives
-> write tests
+* (OK) Handle exit syscall in debugger by returning the Exited StopReason event
 
-* Handle exit syscall in debugger by returning the Exited StopReason event
-> This will likely require adding a return type to the 'handle' method of the debugger
 * Prepare a test to sort a vector (bubble sort)
 * Prepare a test to multiply elements of a vector (bubble sort)
 * Prepare a gdb tutorial (generating code through my program+ debugging it through gdb)
@@ -46,6 +44,7 @@ Focus
 	* Machine methods
 	* Final Symbol Address
 	* Instruction immediate and instruction format
+	* Space/Skip directives
 * Create more methods for 'AssemblerTools' (retrieve symbol final address, find address of line, ...)
 * machine::handle isn't using the methods of the Machine trait for r/w memory/cpu...
 
