@@ -14,9 +14,9 @@ Focus
 * (OK) Execute recursion
 * (OK) Space/Skip directives
 * (OK) Handle exit syscall in debugger by returning the Exited StopReason event
+* (OK) Prepare a test to sort a vector (~bubble~ selection sort)
+* (OK) Prepare a test to multiply elements of a vector
 
-* Prepare a test to sort a vector (bubble sort)
-* Prepare a test to multiply elements of a vector (bubble sort)
 * Prepare a gdb tutorial (generating code through my program+ debugging it through gdb)
 * Improve code tracing during debug/runtime (r/w of registers/memory)
 * Replace comment start from // to # in order to behave as 'as'
@@ -45,8 +45,11 @@ Focus
 	* Final Symbol Address
 	* Instruction immediate and instruction format
 	* Space/Skip directives
+	* Remaining M extension operations (div, rem, ...)
 * Create more methods for 'AssemblerTools' (retrieve symbol final address, find address of line, ...)
 * machine::handle isn't using the methods of the Machine trait for r/w memory/cpu...
+* Throw error on syntax error
+* Investigate why _start label is loaded at a different address in gdb (although its address is correct according to `info address _start`)
 
 * Create Loader entity
 * Create Executor entity

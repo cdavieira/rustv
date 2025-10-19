@@ -971,6 +971,25 @@ mod tests {
             assert_eq!(regs[t1], 8);
         }
 
+        #[test]
+        fn isa_m_mul() {
+            let code = "
+                li t1, 3
+                li t2, 4
+                li t3, -4
+                mul t4, t1, t2
+                mul t5, t2, t3
+            ";
+            let m = isa_rvi32_mach_only_text(code);
+            let t4 = Register::T4.id() as usize;
+            let t5 = Register::T5.id() as usize;
+            let regs = m.read_registers();
+            let t4 = regs[t4] as u32;
+            let t5 = regs[t5] as i32;
+            assert_eq!(t4, 12);
+            assert_eq!(t5, -16);
+        }
+
 
 
 
@@ -1071,7 +1090,7 @@ mod tests {
                     .skip 64
             ";
             let n_executions = 28;
-            let (m, t) = isa_rvi32_mach_deterministic(code, n_executions );
+            let (m, _t) = isa_rvi32_mach_deterministic(code, n_executions );
             let a2 = Register::A2.id() as usize;
             let t3 = Register::T3.id() as usize;
             let sp = Register::SP.id() as usize;
@@ -1154,6 +1173,54 @@ mod tests {
             let varaddr = datasection.address;
             let regs = m.read_memory_words(varaddr, 3);
             assert_eq!(regs, vec![10, 5, 3]);
+        }
+
+        #[test]
+        fn program_multiply_vector() {
+            let code = "
+                        .globl _start
+                        .section .text
+                _start:
+                        la t0, myvector // address of 'myvector' variable
+                        li t2, 3        // size of 'myvector'
+                        li t3, -12      // multiplier
+                        li t4, 4        // size of each element
+                loop:
+                        loop_init_list:
+                        li  t1, 0
+
+                        loop_condition:
+                        beq t1, t2, loop_end
+
+                        loop_body:
+                        mul  t5, t1, t4 // idx to i'th element (4*i)
+                        add  t5, t0, t5 // address to the i'th element (myvector + 4*i)
+                        lw   t6, 0(t5)  // value of the i'th element (t6 = myvector[4*i])
+                        mul  t6, t3, t6 // multiplied value (t6 = t3 * myvector[4*i])
+                        sw   t6, 0(t5)  // storing multiplied value  (*(myvector + 4*i) = t6)
+
+                        loop_increment:
+                        addi t1, t1, 1
+                        beq  x0, x0, loop_condition // we've found ourselves in a loop :')
+
+                        loop_end:
+
+                        li a7, 93
+                        li a0, 0
+                        ecall
+
+                        .section .data
+                myvector: .word 3, 5, 10
+            ";
+            let (m, t) = isa_rvi32_mach_until_exit(code);
+            let f = -12;
+            let datasection = t.sections.get(".data").unwrap();
+            let varaddr = datasection.address;
+            let regs: Vec<i32> = m.read_memory_words(varaddr, 3)
+                .into_iter()
+                .map(|reg| reg as i32)
+                .collect();
+            assert_eq!(regs, vec![3*f, 5*f, 10*f]);
         }
 
 

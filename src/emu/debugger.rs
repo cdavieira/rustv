@@ -11,6 +11,7 @@ use std::marker::PhantomData;
 
 
 use gdbstub::common::Signal;
+use gdbstub::target::ext::memory_map::MemoryMap;
 use gdbstub::target::{
     Target,
     TargetResult
@@ -198,6 +199,11 @@ impl<T: Machine> Target for SimpleTarget<T> {
     {
         Some(self)
     }
+
+    #[inline(always)]
+    fn support_memory_map(&mut self) -> Option<gdbstub::target::ext::memory_map::MemoryMapOps<'_, Self>> {
+        Some(self)
+    }
 }
 
 impl<T: Machine> SingleThreadBase for SimpleTarget<T> {
@@ -288,6 +294,8 @@ impl<T: Machine> SingleThreadResume for SimpleTarget<T> {
     ) -> Option<SingleThreadSingleStepOps<'_, Self>> {
         Some(self)
     }
+
+    //  support_reverse_cont, support_reverse_step
 }
 
 impl<T: Machine> SingleThreadSingleStep for SimpleTarget<T> {
@@ -308,6 +316,8 @@ impl<T: Machine> Breakpoints for SimpleTarget<T> {
     {
         Some(self)
     }
+    
+    // support_hw_breakpoint
 }
 
 impl<T: Machine> SwBreakpoint for SimpleTarget<T> {
@@ -319,10 +329,29 @@ impl<T: Machine> SwBreakpoint for SimpleTarget<T> {
     {
         // According to the docs found in 'gdbstub_arch::riscv::Riscv32', kind is the 'size' to be
         // used by this breakpoint (whatever that means)
-        // println!("Trying to add a sw breakpoint at {} {}", addr, kind);
-        // println!("But next pc is probably going to be {}", self.machine.predict_next_pc());
+        println!("Trying to add a sw breakpoint at {} {}", addr, kind);
+        println!("But next pc is probably going to be {}", self.machine.predict_next_pc());
         let next_addr = self.machine.predict_next_pc();
+
+        // we add both the predicted address by machine and the address sent by gdb to handle
+        // two cases:
+        //  1. dealing with function returns (my machine next address prediction)
+        //  2. dealing with random breakpoints set by the user (the address sent by gdb)
+        // If addr = pc + 4, but addr != next_addr, then this probably means we're dealing with a
+        // function return or a jump.
+        // On the other hand, if addr != pc + 4 and addr != next_addr and addr > next_addr, then
+        // we're probably dealing with a random breakpoint added by the user (which is ahead of the
+        // pc)
+        // For the first case, adding both can cause problems if we're returning in the middle of
+        // the function body, because that would add breakpoints right after those early return
+        // statements (which is probably undesirable). On the other hand, breakpoints added right
+        // after returns are literally impossible to be ever hit, and for that reason its not a
+        // problem (although with time that would clutter the breakpoints Map)
+        // For the second case, if we don't ever go back to that region of code and assuming the
+        // predicted pc is less than the actual breakpoint addr, then our program won't fall ill
+        // because of that extra breakpoint.
         self.breakpoints.push((next_addr as u32, kind));
+        self.breakpoints.push((addr, kind));
         Ok(true)
     }
 
@@ -345,6 +374,37 @@ impl<T: Machine> SwBreakpoint for SimpleTarget<T> {
             self.breakpoints.remove(pair.0);
         }
         Ok(true)
+    }
+}
+
+impl<T: Machine> MemoryMap for SimpleTarget<T> {
+    fn memory_map_xml(
+        &self,
+        offset: u64,
+        length: usize,
+        buf: &mut [u8],
+    ) -> TargetResult<usize, Self> {
+        // XML must be returned in chunks based on offset/length
+        // since GDB may request partial reads.
+
+        let memory_size_bytes = self.machine.bytes_count();
+        let xml = format!("
+<memory-map>
+  <memory type=\"ram\" start=\"0x00000000\" length=\"0x{:08x}\" permissions=\"rwx\"/>
+</memory-map>
+", memory_size_bytes);
+
+        let xml_bytes = xml.as_bytes();
+
+        if (offset as usize) >= xml_bytes.len() {
+            return Ok(0); // nothing left to read
+        }
+
+        let remaining = &xml_bytes[offset as usize..];
+        let n = remaining.len().min(length);
+        buf[..n].copy_from_slice(&remaining[..n]);
+
+        Ok(n)
     }
 }
 

@@ -31,6 +31,8 @@ pub struct ImmediateU(u32);
 #[derive(Debug, Copy, Clone)]
 pub struct ImmediateJ(u32);
 
+// TODO: check if 'imm' is in the valid interval according to the instruction type (I, for example)
+
 impl Immediate for ImmediateI {
     fn encode(imm: u32) -> Self {
         ImmediateI (
@@ -330,7 +332,6 @@ pub enum RV32I {
     BGE, BGEU, ECALL
 }
 
-// TODO: check if 'imm' is in the valid interval according to the instruction type (I, for example)
 impl Extension for RV32I {
     fn get_instruction_format(&self, rs1: u32, rs2: u32, rd: u32, imm: i32) -> InstructionFormat  {
         match self {
@@ -417,6 +418,52 @@ impl Extension for RV32I {
             RV32I::BGE   => ArgSyntax::N3(ArgName::RS1, ArgName::RS2, ArgName::OFF),
             RV32I::BGEU  => ArgSyntax::N3(ArgName::RS1, ArgName::RS2, ArgName::OFF),
             RV32I::FENCE => todo!(),
+        }
+    }
+}
+
+/** Implementing the extension M (Integer multiplication and division)
+
+As an example of an extension yet to be added, it is required for the implementer to:
+    * create an entity for this extension (the enum 'M')
+    * implement the trait 'Extension' for that entity
+
+Again, the 'Extension' trait allows the implementer to link its internal state (the
+identifiers/keywords for each instruction) to a specific instruction format
+
+OBS: According to 'The RISC-V Instruction Set Manual - Volume 1 (Unpriviledged Architecture) -
+Version 20250508', Chapter 13, the M includes 8 instructions for 32 bit architectures
+*/
+
+#[derive(Debug, Copy, Clone, Hash, PartialEq, Eq)]
+pub enum M {
+    MUL, MULH, MULHU, MULHSU, DIV, DIVU, REM, REMU
+}
+
+impl Extension for M {
+    fn get_instruction_format(&self, rs1: u32, rs2: u32, rd: u32, _imm: i32) -> InstructionFormat {
+        match self {
+            M::MUL    => InstructionFormat::r(0b0000001, rs2, rs1, 0b000, rd, 0b0110011),
+            M::MULH   => InstructionFormat::r(0b0000001, rs2, rs1, 0b001, rd, 0b0110011),
+            M::MULHSU => InstructionFormat::r(0b0000001, rs2, rs1, 0b010, rd, 0b0110011),
+            M::MULHU  => InstructionFormat::r(0b0000001, rs2, rs1, 0b011, rd, 0b0110011),
+            M::DIV    => InstructionFormat::r(0b0000001, rs2, rs1, 0b100, rd, 0b0110011),
+            M::DIVU   => InstructionFormat::r(0b0000001, rs2, rs1, 0b101, rd, 0b0110011),
+            M::REM    => InstructionFormat::r(0b0000001, rs2, rs1, 0b110, rd, 0b0110011),
+            M::REMU   => InstructionFormat::r(0b0000001, rs2, rs1, 0b111, rd, 0b0110011),
+        }
+    }
+
+    fn get_calling_syntax(&self) -> ArgSyntax  {
+        match self {
+            M::MUL    => ArgSyntax::N3(ArgName::RD, ArgName::RS1, ArgName::RS2),
+            M::MULH   => ArgSyntax::N3(ArgName::RD, ArgName::RS1, ArgName::RS2),
+            M::MULHU  => ArgSyntax::N3(ArgName::RD, ArgName::RS1, ArgName::RS2),
+            M::MULHSU => ArgSyntax::N3(ArgName::RD, ArgName::RS1, ArgName::RS2),
+            M::DIV    => ArgSyntax::N3(ArgName::RD, ArgName::RS1, ArgName::RS2),
+            M::DIVU   => ArgSyntax::N3(ArgName::RD, ArgName::RS1, ArgName::RS2),
+            M::REM    => ArgSyntax::N3(ArgName::RD, ArgName::RS1, ArgName::RS2),
+            M::REMU   => ArgSyntax::N3(ArgName::RD, ArgName::RS1, ArgName::RS2),
         }
     }
 }

@@ -7,6 +7,7 @@ pub mod gas {
         highassembly::GenericBlock,
         ext::Extension,
         ext::RV32I,
+        ext::M,
         pseudo::Pseudo,
         pseudo::PseudoInstruction,
         directive::Directive,
@@ -229,6 +230,14 @@ pub mod gas {
                 "bltu"  => Some(Box::new(RV32I::BLTU)) ,
                 "bge"   => Some(Box::new(RV32I::BGE))  ,
                 "bgeu"  => Some(Box::new(RV32I::BGEU)) ,
+                "mul"   => Some(Box::new(M::MUL))      ,
+                "mulh"  => Some(Box::new(M::MULH))     ,
+                "mulhu" => Some(Box::new(M::MULHU))    ,
+                "mulhsu"=> Some(Box::new(M::MULHSU))   ,
+                "div"   => Some(Box::new(M::DIV))      ,
+                "divu"  => Some(Box::new(M::DIVU))     ,
+                "rem"   => Some(Box::new(M::REM))      ,
+                "remu"  => Some(Box::new(M::REMU))     ,
                 _ => None,
             }
         }

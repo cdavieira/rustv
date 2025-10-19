@@ -79,6 +79,7 @@ use crate::lang::ext::{
 };
 use crate::lang::highassembly::Register;
 use crate::lang::lowassembly::DataEndianness;
+use crate::utils::set_remaining_bits;
 
 pub struct SimpleMachine {
     cpu: SimpleCPU,
@@ -281,11 +282,36 @@ fn handle(m: &mut SimpleMachine, ifmt: InstructionFormat) -> Result<MachineState
             let res = match (funct7, funct3) {
                 (0b0000000, 0b000) => { v1 + v2  }, //ADD
                 (0b0100000, 0b000) => { ((v1 as i32) - (v2 as i32)) as u32 }, //SUB
-                (0b0000000, 0b111) => { v1 & v2  }, //AND   
-                (0b0000000, 0b110) => { v1 | v2  }, //OR    
-                (0b0000000, 0b100) => { v1 ^ v2  }, //XOR   
-                (0b0000000, 0b001) => { v1 << v2 }, //SLL   
-                (0b0000000, 0b101) => { v1 >> v2 }, //SRL   
+                (0b0000000, 0b111) => { v1 & v2  }, //AND
+                (0b0000000, 0b110) => { v1 | v2  }, //OR
+                (0b0000000, 0b100) => { v1 ^ v2  }, //XOR
+                (0b0000000, 0b001) => { v1 << v2 }, //SLL
+                (0b0000000, 0b101) => { v1 >> v2 }, //SRL
+                (0b0000001, 0b000) => { //MUL
+                    let v1: i64 = v1.into();
+                    let v2: i64 = v2.into();
+                    (v1 * v2) as u32
+                },
+                (0b0000001, 0b001) => { //MULH
+                    let v1: i64 = v1.into();
+                    let v2: i64 = v2.into();
+                    ((v1 * v2) >> 32) as u32
+                },
+                (0b0000001, 0b010) => { //MULHSU
+                    let sign: i32 = ((v1 as i32) > 0).into();
+                    let v1: u64 = v1.into();
+                    let v2: u64 = v2.into();
+                    (sign * (((v1 * v2) >> 32) as i32) ) as u32
+                },
+                (0b0000001, 0b011) => { //MULHU
+                    let v1: u64 = v1.into();
+                    let v2: u64 = v2.into();
+                    ((v1 * v2) >> 32) as u32
+                },
+                (0b0000001, 0b100) => { ((v1 as i32) / (v2 as i32)) as u32 }, //DIV
+                (0b0000001, 0b101) => { v1 / v2 }, //DIVU
+                (0b0000001, 0b110) => { ((v1 as i32) % (v2 as i32)) as u32 }, //REM
+                (0b0000001, 0b111) => { v1 % v2 }, //REMU
                 _ => {
                     let errmsg = format!("Unhandled R: (f7, f3) = ({}, {})", funct7, funct3);
                     return Err(MachineError::UnhandledInstruction(errmsg));
@@ -297,11 +323,11 @@ fn handle(m: &mut SimpleMachine, ifmt: InstructionFormat) -> Result<MachineState
             let rs1_val = m.cpu.read(rs1 as usize);
             let imm = imm.decode();
             let opt = match (funct3, opcode) {
-                (0b000, 0b0010011) => { Some(rs1_val.wrapping_add_signed(imm as i32)) }, // ADDI  
-                (0b111, 0b0010011) => { Some(rs1_val & imm) }, // ANDI  
-                (0b110, 0b0010011) => { Some(rs1_val | imm) }, // ORI   
-                (0b100, 0b0010011) => { Some(rs1_val ^ imm) }, // XORI  
-                (0b000, 0b1100111) => { Some(m.cpu.read_pc() as u32 + 4) }, // JALR  
+                (0b000, 0b0010011) => { Some(rs1_val.wrapping_add_signed(imm as i32)) }, // ADDI
+                (0b111, 0b0010011) => { Some(rs1_val & imm) }, // ANDI
+                (0b110, 0b0010011) => { Some(rs1_val | imm) }, // ORI
+                (0b100, 0b0010011) => { Some(rs1_val ^ imm) }, // XORI
+                (0b000, 0b1100111) => { Some(m.cpu.read_pc() as u32 + 4) }, // JALR
                 (0b010, 0b0000011) => {
                     let addr = rs1_val.saturating_add_signed(imm as i32) as usize;
                     Some(m.read_memory_word(addr))
@@ -325,7 +351,7 @@ fn handle(m: &mut SimpleMachine, ifmt: InstructionFormat) -> Result<MachineState
                         }
                     }
                     None
-                }, // ECALL 
+                }, // ECALL
                 (0b100, 0b0000011) => None, // LBU
                 _ => {
                     let errmsg = format!("Unhandled I: (f3, op) = ({}, {})", funct3, opcode);
