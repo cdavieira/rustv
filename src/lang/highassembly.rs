@@ -2,11 +2,11 @@
 // * symbol resolution
 // * absolute/relative address assignment
 
-use crate::lang::{
+use crate::{lang::{
     directive::Directive,
     ext::Extension,
     pseudo::Pseudo,
-};
+}, streamreader::Position};
 
 
 
@@ -192,6 +192,7 @@ pub struct OpcodeLine {
 #[derive(Debug)]
 pub struct GenericLine {
     pub(crate) id: usize,
+    pub(crate) file_pos: Position,
     pub(crate) keyword: KeyValue,
     pub(crate) args: Vec<ArgValue>
 }

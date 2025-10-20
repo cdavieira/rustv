@@ -1,5 +1,5 @@
 pub trait Tokenizer {
-    fn get_tokens(&mut self, buffer: &str) -> Vec<String> ;
+    fn get_tokens(&mut self, buffer: &str) -> Vec<(String, Position)> ;
 }
 
 
@@ -206,12 +206,13 @@ impl std::fmt::Display for TokenizerError {
 
 ///Default implementation of 'Tokenizer' for any entity which implements 'CommonClassifier'
 impl<T: CommonClassifier> Tokenizer for T {
-    fn get_tokens(&mut self, buffer: &str) -> Vec<String>  {
+    fn get_tokens(&mut self, buffer: &str) -> Vec<(String, Position)>  {
         let mut it = CharStreamReader::new(buffer.chars(), '\n');
         let mut tokens = Vec::new();
         while it.current_token().is_some() {
+            let pos = it.current_position().unwrap();
             match self.handle_token(&mut it) {
-                Ok(Some(token)) => tokens.push(token),
+                Ok(Some(token)) => tokens.push((token, pos)),
                 Ok(None) => { }
                 Err(err) => panic!("{}", err),
             }

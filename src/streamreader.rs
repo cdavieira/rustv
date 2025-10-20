@@ -149,3 +149,4 @@ use std::str::Chars;
 use std::vec::IntoIter;
 pub type CharStreamReader<'a> = GenericStreamReader<char, Chars<'a>>;
 pub type StringStreamReader<'a> = GenericStreamReader<String, IntoIter<String>>;
+pub type PositionedStringStreamReader<'a> = GenericStreamReader<(String, Position), IntoIter<(String, Position)>>;

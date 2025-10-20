@@ -2,6 +2,7 @@ use crate::lang::lowassembly::{
     DataEndianness,
     EncodedData,
 };
+use crate::obj::dwarfwriter::add_debug_information;
 use crate::tokenizer::Tokenizer;
 use crate::lexer::Lexer;
 use crate::parser::Parser;
@@ -100,6 +101,60 @@ pub fn encode_to_elf(code: &str, output_file: &str) -> elfwriter::Result<()> {
             writer.handle_symbol_relocation(symbname, offset, addend, relidx).unwrap();
         }
     }
+
+    writer.save(output_file)
+}
+
+pub fn encode_to_elf_with_debug(code: &str, input_file: &str, output_file: &str) -> elfwriter::Result<()> {
+    let mut output = build_code_repr(code);
+
+    // Writing to ELF
+    let mut writer = elfwriter::ElfWriter::new();
+    let symbol_table = &mut output.symbols;
+    let relocation_table = &output.relocations;
+    let blocks = &output.blocks;
+    // let section_table = &output.sections;
+
+    if symbol_table.contains_key("_start") {
+        let symb = symbol_table.get("_start").expect("No _start found");
+        writer.set_start_address(symb.relative_address.try_into().unwrap());
+        symbol_table.remove("_start").unwrap();
+        // writer.handle_symbol_relocation("_start", 0, 0, 0).unwrap();
+    }
+    else {
+        writer.set_start_address(0);
+    }
+
+    for (name, symb) in symbol_table {
+        let symbol_section = symb.section.clone();
+        let symbol_addr = symb.relative_address.try_into().unwrap();
+        let length = symb.length;
+        writer.add_symbol(symbol_section, symbol_addr, &name, length as u64);
+    }
+
+    for block in blocks {
+        if block.instructions.len() > 0 {
+            let name = &block.name;
+            let data = encoded_data_to_bytes_le(&block.instructions);
+            let alignment = match name {
+                SectionName::Text => 4,
+                SectionName::Data => 1,
+                _ => panic!(""),
+            };
+            writer.set_section_data(name.clone(), data, alignment).expect("");
+        }
+    }
+
+    for (symbname, relocations) in relocation_table {
+        for relocation in relocations {
+            let offset = relocation.address.try_into().unwrap();
+            let addend = relocation.addend;
+            let relidx = relocation.id;
+            writer.handle_symbol_relocation(symbname, offset, addend, relidx).unwrap();
+        }
+    }
+
+    add_debug_information(&mut writer, output, input_file.as_bytes());
 
     writer.save(output_file)
 }

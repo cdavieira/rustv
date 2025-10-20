@@ -12,6 +12,7 @@ use object::read;
 
 use crate::assembler::{self, AssemblerTools};
 use crate::lang::highassembly::{self,};
+use crate::streamreader::Position;
 use crate::utils::swap_chunk_endianness;
 use crate::lang::lowassembly::{self, DataEndianness};
 
@@ -163,10 +164,11 @@ impl<'a> ElfReader<'a> {
                 let data = section.data().unwrap();
                 let data = DataEndianness::build_words_from_bytes(&data, DataEndianness::Le);
                 let alignment = section.align() as usize;
-                let instructions = data.into_iter().map(|word|
+                let instructions = data.into_iter().enumerate().map(|(idx, word)|
                     lowassembly::EncodedData {
                         data: vec![word],
                         alignment,
+                        file_pos: Position::new(idx, idx, 0),
                     }
                 ).collect();
                 lowassembly::PositionedEncodedBlock {
@@ -234,7 +236,7 @@ fn build_symbol_table<'a>(elf: &ElfFile32<'a>) -> HashMap<String, ElfSymbol> {
             let scope = match symbol.scope() {
                 read::SymbolScope::Compilation => String::from("Compilation"),
                 read::SymbolScope::Linkage => String::from("File"),
-                read::SymbolScope::Dynamic => panic!(),
+                read::SymbolScope::Dynamic => String::from("Dynamic"),
                 read::SymbolScope::Unknown => panic!(),
             };
             let length = symbol.size() as u64;

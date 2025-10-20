@@ -23,6 +23,7 @@ use object::write::{
 use std::collections::hash_map::HashMap;
 
 use crate::lang::highassembly::SectionName;
+use crate::obj::dwarfwriter::add_debug_information;
 
 
 
@@ -65,8 +66,8 @@ pub type Result<T> = std::result::Result<T, ElfWriterError>;
 // ElfWriter
 
 pub struct ElfWriter<'a> {
-    obj: write::Object<'a>,
-    text: SectionId,
+    pub(crate) obj: write::Object<'a>,
+    pub(crate) text: SectionId,
     data: SectionId,
     bss: SectionId,
     symbol_ids: HashMap<String, SymbolId>,
@@ -110,7 +111,7 @@ impl<'a> ElfWriter<'a> {
             // size: code_len as u64,
             size: 0,
             kind: write::SymbolKind::Text,
-            scope: write::SymbolScope::Linkage,
+            scope: write::SymbolScope::Dynamic,
             section: write::SymbolSection::Section(self.text),
             weak: false,
             flags: write::SymbolFlags::None,

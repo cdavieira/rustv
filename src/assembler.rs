@@ -462,6 +462,7 @@ fn generic_to_encodable_lines(lines: Vec<PositionedGenericLine>) -> Vec<Encodabl
                     .filter_map(|arg| arg.to_number())
                     .collect();
                 new_lines.push(EncodableLine {
+                    file_pos: line.line.file_pos,
                     key: EncodableKey::Op(op),
                     args
                 });
@@ -489,6 +490,7 @@ fn generic_to_encodable_lines(lines: Vec<PositionedGenericLine>) -> Vec<Encodabl
                     })
                     .collect();
                 new_lines.push(EncodableLine {
+                    file_pos: line.line.file_pos,
                     key: EncodableKey::Directive(d),
                     args
                 });

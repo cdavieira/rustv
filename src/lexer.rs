@@ -5,11 +5,13 @@ use crate::lang::highassembly::{
 use crate::streamreader::{
     StreamReader,
     StringStreamReader,
+    Position,
+    PositionedStringStreamReader,
 };
 
 #[derive(Debug)]
 pub enum GenericToken {
-    KeyToken(KeyValue),
+    KeyToken(KeyValue, Position),
     ArgToken(ArgValue),
 }
 
@@ -19,7 +21,7 @@ pub trait ToGenericToken {
 
 pub trait Lexer {
     type Token: ToGenericToken;
-    fn parse(&self, tokens: Vec<String>) -> Vec<<Self as Lexer>::Token> ;
+    fn parse(&self, tokens: Vec<(String, Position)>) -> Vec<<Self as Lexer>::Token> ;
 }
 
 
@@ -72,16 +74,16 @@ pub trait TokenClassifier {
         token.starts_with('"') && token.ends_with('"')
     }
 
-    fn handle_number(&self, it: &mut StringStreamReader) -> Option<Self::Token> ;
-    fn handle_string(&self, it: &mut StringStreamReader) -> Option<Self::Token> ;
-    fn handle_symbol(&self, it: &mut StringStreamReader) -> Option<Self::Token> ;
-    fn handle_register(&self, it: &mut StringStreamReader) -> Option<Self::Token> ;
-    fn handle_opcode(&self, it: &mut StringStreamReader) -> Option<Self::Token> ;
-    fn handle_identifier(&self, it: &mut StringStreamReader) -> Option<Self::Token> ;
-    fn handle_section(&self, it: &mut StringStreamReader) -> Option<Self::Token> ;
-    fn handle_directive(&self, it: &mut StringStreamReader) -> Option<Self::Token> ;
-    fn handle_custom(&self, it: &mut StringStreamReader) -> Option<Self::Token> ;
-    fn handle_label(&self, it: &mut StringStreamReader) -> Option<Self::Token> ;
+    fn handle_number(&self, it: &mut PositionedStringStreamReader) -> Option<Self::Token> ;
+    fn handle_string(&self, it: &mut PositionedStringStreamReader) -> Option<Self::Token> ;
+    fn handle_symbol(&self, it: &mut PositionedStringStreamReader) -> Option<Self::Token> ;
+    fn handle_register(&self, it: &mut PositionedStringStreamReader) -> Option<Self::Token> ;
+    fn handle_opcode(&self, it: &mut PositionedStringStreamReader) -> Option<Self::Token> ;
+    fn handle_identifier(&self, it: &mut PositionedStringStreamReader) -> Option<Self::Token> ;
+    fn handle_section(&self, it: &mut PositionedStringStreamReader) -> Option<Self::Token> ;
+    fn handle_directive(&self, it: &mut PositionedStringStreamReader) -> Option<Self::Token> ;
+    fn handle_custom(&self, it: &mut PositionedStringStreamReader) -> Option<Self::Token> ;
+    fn handle_label(&self, it: &mut PositionedStringStreamReader) -> Option<Self::Token> ;
 
     fn classify(&self, token: &str) -> TokenClass {
         if self.is_symbol(token) {
@@ -127,9 +129,9 @@ pub trait TokenClassifier {
         TokenClass::Ignore
     }
 
-    fn handle_token(&self, it: &mut StringStreamReader) -> Option<Self::Token> {
+    fn handle_token(&self, it: &mut PositionedStringStreamReader) -> Option<Self::Token> {
         let token = it.current_token().expect("Lexer failed when retrieving token");
-        let class = self.classify(token.as_str());
+        let class = self.classify(token.0.as_str());
         // println!("Processing {} as {:?}", token, class);
         match class {
             TokenClass::Label      => self.handle_label(it),
@@ -153,9 +155,9 @@ The 'Lexer' Trait is implemented for any entity which implements the 'lexer::Tok
 impl<T: ToGenericToken, C: TokenClassifier<Token = T>> Lexer for C {
     type Token = T;
 
-    fn parse(&self, tokens: Vec<String>) -> Vec<<Self as Lexer>::Token>  {
+    fn parse(&self, tokens: Vec<(String, Position)>) -> Vec<<Self as Lexer>::Token>  {
         let mut lexemes = Vec::new();
-        let mut it = StringStreamReader::new(tokens.into_iter(), String::from("\n"));
+        let mut it = PositionedStringStreamReader::new(tokens.into_iter(), (String::from("\n"), Position::new(0, 0, 0)));
         while let Some(_) = it.current_token() {
             if let Some(lex) = self.handle_token(&mut it) {
                 lexemes.push(lex);

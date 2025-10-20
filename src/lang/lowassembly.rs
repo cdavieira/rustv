@@ -8,7 +8,7 @@ use crate::{
         directive::Directive,
         ext::Extension,
         highassembly::SectionName,
-    },
+    }, streamreader::Position,
 };
 
 use super::ext::instruction_to_binary;
@@ -92,6 +92,7 @@ impl DataEndianness {
 
 #[derive(Debug)]
 pub struct EncodedData {
+    pub file_pos: Position,
     pub data: Vec<u32>,
     pub alignment: usize,
 }
@@ -108,6 +109,7 @@ pub enum EncodableKey {
 
 #[derive(Debug)]
 pub struct EncodableLine {
+    pub file_pos: Position,
     pub key: EncodableKey,
     pub args: Vec<i32>,
 }
@@ -118,6 +120,7 @@ impl EncodableLine {
             EncodableKey::Op(op) => {
                 let data = vec![instruction_to_binary(&op, &self.args)];
                 EncodedData {
+                    file_pos: self.file_pos,
                     data,
                     alignment: 4,
                 }
@@ -132,6 +135,7 @@ impl EncodableLine {
                     args
                 };
                 EncodedData {
+                    file_pos: self.file_pos,
                     data,
                     alignment,
                 }

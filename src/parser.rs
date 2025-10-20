@@ -37,9 +37,10 @@ fn group_tokens(tokens: Vec<GenericToken>) -> Vec<GenericLine> {
     let mut args = Vec::new();
     for token in tokens.into_iter().rev() {
         match token {
-            GenericToken::KeyToken(k) =>  {
+            GenericToken::KeyToken(k, p) =>  {
                 let group = GenericLine {
                     id: 0,
+                    file_pos: p,
                     keyword: k,
                     args: args.drain(..).rev().collect()
                 };
@@ -76,6 +77,7 @@ fn expand_pseudos(lines: Vec<GenericLine>) -> Vec<GenericLine> {
                     .map(|opcode_line| {
                         GenericLine {
                             id: line.id,
+                            file_pos: line.file_pos,
                             keyword: KeyValue::Op(opcode_line.keyword),
                             args: opcode_line.args,
                         }
@@ -105,6 +107,7 @@ fn expand_assembly_directives(lines: Vec<GenericLine>) -> Vec<GenericLine> {
                     .collect();
                 new_lines.push(GenericLine{
                     id: line.id,
+                    file_pos: line.file_pos,
                     keyword: line.keyword,
                     args: new_args
                 });

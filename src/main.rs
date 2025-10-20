@@ -21,6 +21,7 @@ pub mod lang {
 pub mod obj {
     pub mod elfreader;
     pub mod elfwriter;
+    pub mod dwarfwriter;
 }
 
 fn main() {
@@ -34,6 +35,7 @@ fn main() {
     let write_elf     = arglen > 2 && matches!(args[1], "--elf"      | "-e");
     let decode_binary = arglen > 2 && matches!(args[1], "--decode-bin"     );
     let decode_text   = arglen > 2 && matches!(args[1], "--decode-text"    );
+    let write_elf_dbg = arglen > 2 && matches!(args[1], "--elf-dbg"        );
 
     if show_usage {
         usage();
@@ -139,6 +141,32 @@ fn main() {
         println!("0x{:08x}", res);
 
         return ;
+    }
+
+    if write_elf_dbg {
+        use crate::utils::encode_to_elf_with_debug;
+
+        let linker = "riscv32-unknown-linux-gnu-ld";
+        let execfile = "main";
+        let objectfile = "main.o";
+        let srcfile = args[2];
+
+        let f = std::fs::read_to_string(srcfile).unwrap();
+
+        encode_to_elf_with_debug(&f, srcfile, objectfile).unwrap();
+
+        let output = std::process::Command::new(linker)
+            .arg(objectfile)
+            .arg("-o")
+            .arg(execfile)
+            .output()
+            .expect("Failed to link elf to executable");
+
+        if output.status.success() {
+            eprintln!("Sucess: code written to {}!", execfile)
+        } else {
+            eprintln!("Error: something went wrong :/")
+        }
     }
 
     // Read ELF and execute the Machine (only text)

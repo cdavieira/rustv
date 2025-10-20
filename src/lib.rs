@@ -21,6 +21,7 @@ pub mod lang {
 pub mod obj {
     pub mod elfreader;
     pub mod elfwriter;
+    pub mod dwarfwriter;
 }
 
 #[cfg(test)]
@@ -99,7 +100,7 @@ mod tests {
             ";
             let expected: Vec<String> = vec![];
             let mut tokenizer = syntax::gas::Tokenizer;
-            let res: Vec<String> = tokenizer.get_tokens(code);
+            let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
             assert_eq!(res, expected);
         }
 
@@ -110,7 +111,7 @@ mod tests {
                 .split_whitespace()
                 .map(|s| String::from(s)).collect();
             let mut tokenizer = syntax::gas::Tokenizer;
-            let res: Vec<String> = tokenizer.get_tokens(code);
+            let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
             assert_eq!(res, expected);
         }
 
@@ -122,7 +123,7 @@ mod tests {
                 .map(|ch| String::from(ch))
                 .collect();
             let mut tokenizer = syntax::gas::Tokenizer;
-            let res: Vec<String> = tokenizer.get_tokens(code);
+            let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
             assert_eq!(res, expected);
         }
 
@@ -134,7 +135,7 @@ mod tests {
             ";
             let expected: Vec<String> = vec![String::from("main:"), String::from("loop2:")];
             let mut tokenizer = syntax::gas::Tokenizer;
-            let res: Vec<String> = tokenizer.get_tokens(code);
+            let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
             assert_eq!(res, expected);
         }
 
@@ -146,7 +147,7 @@ mod tests {
             ";
             let expected: Vec<String> = vec![String::from(".globl"), String::from(".text")];
             let mut tokenizer = syntax::gas::Tokenizer;
-            let res: Vec<String> = tokenizer.get_tokens(code);
+            let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
             assert_eq!(res, expected);
         }
 
@@ -155,7 +156,7 @@ mod tests {
             let code = "-1 +3 -66 1000";
             let expected: Vec<String> = code.split_whitespace().map(|s| String::from(s)).collect();
             let mut tokenizer = syntax::gas::Tokenizer;
-            let res: Vec<String> = tokenizer.get_tokens(code);
+            let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
             assert_eq!(res, expected);
         }
 
@@ -166,7 +167,7 @@ mod tests {
                 "sw", "5", ",", "0x3", "(", "6", ")"
             ].map(|s| String::from(s));
             let mut tokenizer = syntax::gas::Tokenizer;
-            let res: Vec<String> = tokenizer.get_tokens(code);
+            let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
             assert_eq!(res, expected);
         }
 
@@ -183,7 +184,7 @@ mod tests {
                 "beq", "x0", ",", "3", "+", "-9", ",", "loop",
             ].map(|s| String::from(s));
             let mut tokenizer = syntax::gas::Tokenizer;
-            let res: Vec<String> = tokenizer.get_tokens(code);
+            let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
             assert_eq!(res, expected);
         }
 
@@ -219,7 +220,7 @@ mod tests {
                 "lw", "ra", ",", "-12", "(", "sp", ")",
             ].map(|s| String::from(s));
             let mut tokenizer = syntax::gas::Tokenizer;
-            let res: Vec<String> = tokenizer.get_tokens(code);
+            let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
             assert_eq!(res, expected);
         }
 
@@ -230,7 +231,7 @@ mod tests {
                 "\"isso ai\"", "\"esse \\\"cara\\\"\"",
             ].map(|s| String::from(s));
             let mut tokenizer = syntax::gas::Tokenizer;
-            let res: Vec<String> = tokenizer.get_tokens(code);
+            let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
             assert_eq!(res, expected);
         }
 
@@ -247,7 +248,7 @@ mod tests {
                 "beq", "x0", ",", "x0", ",", "loop",
             ].map(|s| String::from(s));
             let mut tokenizer = syntax::gas::Tokenizer;
-            let res: Vec<String> = tokenizer.get_tokens(code);
+            let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
             assert_eq!(res, expected);
         }
 
@@ -272,7 +273,7 @@ mod tests {
                 "addi", "s0", ",", "sp", ",", "16",
             ].map(|s| String::from(s));
             let mut tokenizer = syntax::gas::Tokenizer;
-            let res: Vec<String> = tokenizer.get_tokens(code);
+            let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
             assert_eq!(res, expected);
         }
 
@@ -300,7 +301,7 @@ mod tests {
                 "ret",
             ].map(|s| String::from(s));
             let mut tokenizer = syntax::gas::Tokenizer;
-            let res: Vec<String> = tokenizer.get_tokens(code);
+            let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
             assert_eq!(res, expected);
         }
 
