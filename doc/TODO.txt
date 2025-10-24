@@ -8,14 +8,10 @@ reuniao presencial (prox ou semana que vem que vem)
 
 A defesa de TCC pode ser adiantada (so que a nota so vai sair em março)
 
-
-Focus
-* (OK) Execute functions
-* (OK) Execute recursion
-* (OK) Space/Skip directives
-* (OK) Handle exit syscall in debugger by returning the Exited StopReason event
-* (OK) Prepare a test to sort a vector (~bubble~ selection sort)
-* (OK) Prepare a test to multiply elements of a vector
+Criteria for something easy/hard:
+* Technical/Engineering effort
+* It'll take some time to write
+* Requires investigation
 
 Low priority and Easy:
 * Set starting code address
@@ -41,14 +37,6 @@ High priority and Easy:
 	* elf parser
 
 High priority and Hard:
-* Improve debugger (maybe with dwarf info through gimli or addr2line)
-> This is harder than it looks. This would require inferring
-> functions/variables and more by either analysing the IR of the code or by
-> annotating those things explicitly through macros such as the ones
-> supported by gnu/gcc (.define .function, .endfunction, ...).
->> Maybe that's too much considering the gains (a richer gdb debugging session)
->>> Enriching debug sessions isn't required in order to run code. Generating
->>> debug info isn't mandatory aswell for that matter.
 * Create more methods for 'AssemblerTools' (retrieve symbol final address, find address of line, ...)
 * Write tests for:
 	* Memory trait
@@ -69,6 +57,8 @@ High priority and Hard:
 * Support reverse stepping
 * Support custom sections (that would help with custom sections for stack, ...)
 * Fix side by side byte addressing problem (alignment related)
+* Add float support
+  * Requires the addition of new registers
 
 
 Code
@@ -123,6 +113,13 @@ Docs
 
 
 Misc
+* [X] Execute functions
+* [X] Execute recursion
+* [X] Space/Skip directives
+* [X] Handle exit syscall in debugger by returning the Exited StopReason event
+* [X] Prepare a test to sort a vector (~bubble~ selection sort)
+* [X] Prepare a test to multiply elements of a vector
+* [X] Add dwarf info to ELF using gimli
 * [X] The strategy used to create software breaks isnt ideal for the debugger...
 * [X] Prepare tests to test out all instructions from the RV32I (running in memory)
 * [X] Support arrays (addresses + offset)

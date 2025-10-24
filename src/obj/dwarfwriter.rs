@@ -98,7 +98,6 @@ fn add_die_main_function_info(
     let entry = dwarf.unit.get_mut(subprogram);
     entry.set(gimli::DW_AT_external, gimli::write::AttributeValue::Flag(true));
     entry.set(gimli::DW_AT_name, gimli::write::AttributeValue::String(main_name.into()));
-    // entry.set(gimli::DW_AT_linkage_name, gimli::write::AttributeValue::String(main_name.into()));
     entry.set(
         gimli::DW_AT_decl_file,
         gimli::write::AttributeValue::FileIndex(Some(file_lines_id)),
@@ -210,8 +209,6 @@ pub fn add_debug_information<'a>(
     file_name: &[u8],
 ) -> () 
 {
-    // let file_name = *b"examples/funccall.s";
-
     let main_name = *b"_start";
 
     let encoding = gimli::Encoding {
@@ -279,7 +276,6 @@ pub fn add_debug_information<'a>(
     for (idx, inst) in insts.enumerate() {
         let row = (inst.file_pos.row() + 1) as u64;
         let col = inst.file_pos.col() as u64;
-        let _seq = inst.file_pos.seq() as u64;
         add_line(
             &mut line_program,
             file_lines_id,
@@ -288,17 +284,6 @@ pub fn add_debug_information<'a>(
             (idx as u64)*4
         );
     }
-
-    // let start_addr_of_last_cmd = main_size/4;
-    // let row_start = 3;
-    // let col_start = 8;
-    // for idx in 0..start_addr_of_last_cmd {
-    //     add_line(&mut line_program, file_lines_id, row_start + idx+1, col_start + 0, idx*4);
-    // }
-
-    // add_line(&mut line_program, file_lines_id, 1, 0, 0);
-    // add_line(&mut line_program, file_lines_id, 2, 0, 4);
-    // add_line(&mut line_program, file_lines_id, 3, 0, 8);
 
     line_program.end_sequence(main_size as u64);
 
