@@ -40,7 +40,7 @@ gdb(){
 
 run_elf(){
 	exit_if_empty "$1" "Missing file, provide one of:\n$(ls examples/)"
-	${CARGO} run -- --elf ./examples/$1
+	${CARGO} run -- --elf-dbg ./examples/$1
 }
 
 run_stub(){
