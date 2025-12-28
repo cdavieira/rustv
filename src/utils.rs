@@ -54,9 +54,7 @@ pub fn encode_to_word(code: &str) -> u32 {
     *encode_to_words(code).get(0).unwrap()
 }
 
-pub fn encode_to_elf(code: &str, output_file: &str) -> elfwriter::Result<()> {
-    let mut output = build_code_repr(code);
-
+fn write_from_tools<'a>(mut output: AssemblerTools) -> (elfwriter::ElfWriter<'a>, AssemblerTools) {
     // Writing to ELF
     let mut writer = elfwriter::ElfWriter::new();
     let symbol_table = &mut output.symbols;
@@ -102,77 +100,20 @@ pub fn encode_to_elf(code: &str, output_file: &str) -> elfwriter::Result<()> {
         }
     }
 
+    ( writer, output )
+}
+
+pub fn encode_to_elf(code: &str, output_file: &str) -> elfwriter::Result<()> {
+    let output = build_code_repr(code);
+    let (writer, _) = write_from_tools(output);
     writer.save(output_file)
 }
 
 pub fn encode_to_elf_with_debug(code: &str, input_file: &str, output_file: &str) -> elfwriter::Result<()> {
-    let mut output = build_code_repr(code);
-
-    // Writing to ELF
-    let mut writer = elfwriter::ElfWriter::new();
-    let symbol_table = &mut output.symbols;
-    let relocation_table = &output.relocations;
-    let blocks = &output.blocks;
-    // let section_table = &output.sections;
-
-    if symbol_table.contains_key("_start") {
-        let symb = symbol_table.get("_start").expect("No _start found");
-        writer.set_start_address(symb.relative_address.try_into().unwrap());
-        symbol_table.remove("_start").unwrap();
-        // writer.handle_symbol_relocation("_start", 0, 0, 0).unwrap();
-    }
-    else {
-        writer.set_start_address(0);
-    }
-
-    for (name, symb) in symbol_table {
-        let symbol_section = symb.section.clone();
-        let symbol_addr = symb.relative_address.try_into().unwrap();
-        let length = symb.length;
-        writer.add_symbol(symbol_section, symbol_addr, &name, length as u64);
-    }
-
-    for block in blocks {
-        if block.instructions.len() > 0 {
-            let name = &block.name;
-            let data = encoded_data_to_bytes_le(&block.instructions);
-            let alignment = match name {
-                SectionName::Text => 4,
-                SectionName::Data => 1,
-                _ => panic!(""),
-            };
-            writer.set_section_data(name.clone(), data, alignment).expect("");
-        }
-    }
-
-    for (symbname, relocations) in relocation_table {
-        for relocation in relocations {
-            let offset = relocation.address.try_into().unwrap();
-            let addend = relocation.addend;
-            let relidx = relocation.id;
-            writer.handle_symbol_relocation(symbname, offset, addend, relidx).unwrap();
-        }
-    }
-
-    add_debug_information(&mut writer, output, input_file.as_bytes());
-
+    let output = build_code_repr(code);
+    let (mut writer, tools) = write_from_tools(output);
+    add_debug_information(&mut writer, tools, input_file.as_bytes());
     writer.save(output_file)
-}
-
-pub fn new_machine_from_elf_textsection(filename: &str) -> SimpleMachine {
-    let data = std::fs::read(filename)
-        .expect("Failed reading elf file");
-
-    let reader = elfreader::ElfReader::new(
-        &data,
-        DataEndianness::Le
-    )
-        .expect("Failed instantiating elf file reader");
-
-    let textdata = &reader.section(".text").data;
-    // print_bytes_hex(textdata);
-
-    SimpleMachine::from_bytes(textdata, DataEndianness::Be)
 }
 
 pub fn new_machine_from_tools(
@@ -222,27 +163,44 @@ pub fn new_machine_from_elf(
     )
         .expect("Failed instantiating elf file reader");
 
-    let textsec = reader.section(".text");
+    let textsec = reader.section(".text").unwrap();
     let datasec = reader.section(".data");
-    let textdata = &textsec.data;
-    let datadata = &datasec.data;
-    let text_start = textsec.address as usize;
-    let data_start = datasec.address as usize;
-    let pc = reader.pc();
 
-    let minsize = textdata.len() + datadata.len();
-    let max_start = if text_start > data_start { text_start } else { data_start };
-    let memsize = if max_start > minsize {
-        max_start + minsize
-    } else {
-        max_start + (minsize - max_start)
+    let textdata = &textsec.data;
+    let text_start = textsec.address as usize;
+
+    let has_data_section = datasec.is_some();
+
+    let (memsize, data_start, datadata) = {
+        if !has_data_section {
+            let memsize = text_start + textdata.len();
+            (memsize, None, None)
+        }
+        else {
+            let datadata = &datasec.unwrap().data;
+            let data_start = datasec.unwrap().address as usize;
+            let minsize = textdata.len() + datadata.len();
+            let max_start = if text_start > data_start { text_start } else { data_start };
+            let memsize = if max_start > minsize {
+                max_start + minsize
+            } else {
+                max_start + (minsize - max_start)
+            };
+            (memsize, Some(data_start), Some(datadata))
+        }
     };
     // print_bytes_hex(textdata);
 
+    let pc = reader.pc();
+
     let mut m = SimpleMachine::from_bytes_size(memsize, DataEndianness::Be);
+
     m.write_memory_bytes(text_start, textdata);
-    m.write_memory_bytes(data_start, datadata);
+    if has_data_section {
+        m.write_memory_bytes(data_start.unwrap(), datadata.unwrap());
+    }
     m.jump(pc);
+
     m
 }
 

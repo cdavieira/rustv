@@ -29,13 +29,16 @@ fn main() {
     let args: Vec<&str> =  arg_buffer.iter().map(|arg| arg.as_str()).collect();
     let arglen = args.len();
 
-    let show_usage    = arglen > 1 && matches!(args[1], "--help"     | "-h") || arglen == 1;
-    let start_stub    = arglen > 1 && matches!(args[1], "--debugger" | "-d");
-    let build_code    = arglen > 2 && matches!(args[1], "--build"    | "-b");
-    let write_elf     = arglen > 2 && matches!(args[1], "--elf"      | "-e");
-    let decode_binary = arglen > 2 && matches!(args[1], "--decode-bin"     );
-    let decode_text   = arglen > 2 && matches!(args[1], "--decode-text"    );
-    let write_elf_dbg = arglen > 2 && matches!(args[1], "--elf-dbg"        );
+    let show_usage     = arglen > 1 && matches!(args[1], "--help"     | "-h") || arglen == 1;
+    let start_stub     = arglen > 1 && matches!(args[1], "--debugger" | "-d");
+    let build_code     = arglen > 2 && matches!(args[1], "--build"    | "-b");
+    let write_elf      = arglen > 2 && matches!(args[1], "--elf"      | "-e");
+    let decode_binary  = arglen > 2 && matches!(args[1], "--decode-bin"     );
+    let decode_text    = arglen > 2 && matches!(args[1], "--decode-text"    );
+    let write_elf_dbg  = arglen > 2 && matches!(args[1], "--elf-dbg"        );
+    let run_from_elf   = arglen > 2 && matches!(args[1], "--run-elf"        );
+    let run_from_tools = arglen > 2 && matches!(args[1], "--run-tools"      );
+    // let run_from_raw   = arglen > 2 && matches!(args[1], "--run-raw"        );
 
     if show_usage {
         usage();
@@ -60,14 +63,13 @@ fn main() {
     }
 
     if start_stub {
-        use env_logger::Env;
-        use crate::utils::wait_for_new_debugger_at_port;
-
         let memsize = 1024*1024;
         let port    = 9999u16;
 
+        use env_logger::Env;
         env_logger::Builder::from_env(Env::default().default_filter_or("trace")).init();
 
+        use crate::utils::wait_for_new_debugger_at_port;
         let riscv32_dbg = wait_for_new_debugger_at_port(memsize, port);
 
         riscv32_dbg.custom_gdb_event_loop_thread();
@@ -100,6 +102,8 @@ fn main() {
         } else {
             eprintln!("Error: something went wrong :/")
         }
+
+        return;
     }
 
     if decode_binary {
@@ -167,38 +171,38 @@ fn main() {
         } else {
             eprintln!("Error: something went wrong :/")
         }
+
+        return ;
     }
 
-    // Read ELF and execute the Machine (only text)
-    // use crate::emu::machine::Machine as _;
-    // let inputfile = "main.o";
-    // let mut m = utils::new_machine_from_elf_textsection(inputfile);
-    // m.decode();
-    // m.decode();
-    // assert!(m.assert_reg(17u32, 93));
-    // assert!(m.assert_reg(10u32, 1000));
+    if run_from_elf {
+        // Read ELF and execute the Machine (text + data)
+        use crate::emu::machine::Machine as _;
 
-    // Read code and instantiate Machine from parser tools
-    // use crate::utils::build_code_repr;
-    // use crate::utils::new_machine_from_tools;
-    // use crate::emu::machine::Machine as _;
-    // let tools = build_code_repr(code);
-    // let mut m = new_machine_from_tools(&tools);
-    // m.decode();
-    // m.decode();
-    // println!("{:?}", m.words());
+        let inputfile = args[2];
 
-    // Read ELF and execute the Machine (text + data)
-    // use crate::lang::highassembly::Register;
-    // use crate::emu::machine::Machine as _;
-    // let inputfile = "main";
-    // let mut m = utils::new_machine_from_elf(inputfile);
-    // m.decode();
-    // assert!(m.assert_reg(Register::A0.id().into(), 1));
-    // m.decode();
-    // m.decode();
-    // assert!(m.assert_reg(17u32, 93));
-    // assert!(m.assert_reg(10u32, 1000));
+        let mut m = utils::new_machine_from_elf(inputfile);
+        while let Ok(_state) = m.decode() {
+        }
+
+        return ;
+    }
+
+    if run_from_tools {
+        // Read code and instantiate Machine from parser tools
+        use crate::utils::build_code_repr;
+        use crate::utils::new_machine_from_tools;
+        use crate::emu::machine::Machine as _;
+
+        let inputfile = args[2];
+
+        let tools = build_code_repr(inputfile);
+        let mut m = new_machine_from_tools(&tools);
+        while let Ok(_state) = m.decode() {
+        }
+
+        return ;
+    }
 
     // Run instructions in memory
     // use crate::lang::lowassembly::DataEndianness;
@@ -225,4 +229,8 @@ fn usage() {
     println!("  cargo run -- [ --decode-bin    ] 0x00001117");
     println!("  cargo run -- [ --decode-text   ] \"addi a2,a1,3\"");
     println!("  cargo run -- [ --elf      | -e ] file.s");
+    println!("  cargo run -- [ --elf-dbg       ] file.s");
+    println!("  cargo run -- [ --run-elf       ] executable");
+    println!("  cargo run -- [ --run-tools     ] file.s");
+    println!("  cargo run -- [ --help     | -h ]");
 }

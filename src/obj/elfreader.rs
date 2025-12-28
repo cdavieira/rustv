@@ -100,8 +100,8 @@ impl<'a> ElfReader<'a> {
         })
     }
 
-    pub fn section(&self, name: &str) -> &ElfSection {
-        self.section_table.get(name).unwrap()
+    pub fn section(&self, name: &str) -> Option<&ElfSection> {
+        self.section_table.get(name)
     }
 
     pub fn pc(&self) -> usize {
@@ -120,6 +120,7 @@ impl<'a> ElfReader<'a> {
                 (pair.1.name.to_string(), section)
             })
             .collect();
+
         let symbols: HashMap<String, assembler::Symbol> = self.symbol_table
             .iter()
             .map(|pair| {
@@ -133,7 +134,9 @@ impl<'a> ElfReader<'a> {
                 (pair.0.to_string(), s)
             })
             .collect();
+
         let mut relocations = HashMap::new();
+
         self.relocation_table
             .iter()
             .enumerate()
@@ -156,6 +159,7 @@ impl<'a> ElfReader<'a> {
                 //     buffer.push(rel);
                 // }
             });
+
         let blocks: Vec<_> = self.elf.sections()
             .map(|section| {
                 let name = section.name().unwrap();
@@ -178,6 +182,7 @@ impl<'a> ElfReader<'a> {
                 }
             })
             .collect();
+
         AssemblerTools {
             metadata: None,
             strings: Vec::new(),
@@ -237,23 +242,25 @@ fn build_symbol_table<'a>(elf: &ElfFile32<'a>) -> HashMap<String, ElfSymbol> {
                 read::SymbolScope::Compilation => String::from("Compilation"),
                 read::SymbolScope::Linkage => String::from("File"),
                 read::SymbolScope::Dynamic => String::from("Dynamic"),
-                read::SymbolScope::Unknown => panic!(),
+                // read::SymbolScope::Unknown => panic!(),
+                read::SymbolScope::Unknown => String::from("Unknown"),
             };
             let length = symbol.size() as u64;
             let section_symb = symbol.section();
-            let section_idx = section_symb.index().unwrap();
-            let section = elf.section_by_index(section_idx).unwrap();
-            let s = ElfSymbol {
-                name,
-                address: address as u32,
-                section: section.name().unwrap().to_string(),
-                length,
-                scope,
-            };
-            symbol_table.insert(
-                s.name.clone(),
-                s,
-            );
+            if let Some(section_idx) = section_symb.index() {
+                let section = elf.section_by_index(section_idx).unwrap();
+                let s = ElfSymbol {
+                    name,
+                    address: address as u32,
+                    section: section.name().unwrap().to_string(),
+                    length,
+                    scope,
+                };
+                symbol_table.insert(
+                    s.name.clone(),
+                    s,
+                );
+            }
         }
     }
     symbol_table

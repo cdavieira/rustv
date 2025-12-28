@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 
 CROSSPREFIX="riscv32-unknown-linux-gnu-"
-LD="${CROSSPREFIX}ld"
-OBJDUMP="${CROSSPREFIX}objdump"
-READELF="${CROSSPREFIX}readelf"
-GDB="${CROSSPREFIX}gdb"
+CROSS_LD="${CROSSPREFIX}ld"
+CROSS_OBJDUMP="${CROSSPREFIX}objdump"
+CROSS_READELF="${CROSSPREFIX}readelf"
+CROSS_GDB="${CROSSPREFIX}gdb"
+
+GDB="gdb"
 CARGO="cargo"
+
 GDB_SCRIPT="./init.gdb"
 
 exit_if_empty() {
@@ -20,17 +23,17 @@ exit_if_empty() {
 link(){
 	exit_if_empty "$1" "Missing object"
 	exit_if_empty "$2" "Missing output filename"
-	${LD} $1 -o $2
+	${CROSS_LD} $1 -o $2
 }
 
 examine_elf(){
 	exit_if_empty "$1" "Missing object/executable"
-	${READELF} -a $1
+	${CROSS_READELF} -a $1
 }
 
 examine_text_section(){
 	exit_if_empty "$1" "Missing object/executable"
-	${OBJDUMP} -d $1
+	${CROSS_OBJDUMP} -d $1
 }
 
 gdb(){
@@ -57,6 +60,16 @@ run_builder(){
 	${CARGO} run -- --build ./examples/$1
 }
 
+emu_from_elf(){
+	exit_if_empty "$1" "Missing executable"
+	${CARGO} run -- --run-elf $1
+}
+
+emu_from_tools(){
+	exit_if_empty "$1" "Missing file, provide one of:\n$(ls examples/)"
+	${CARGO} run -- --run-tools ./examples/$1
+}
+
 case "$1" in
 	"compile")  run_elf $2 ;;
 	"build")    run_builder $2 ;;
@@ -66,5 +79,7 @@ case "$1" in
 	"gdb")      gdb $2 ;;
 	"readelf")  examine_elf $2 ;;
 	"objdump")  examine_text_section $2 ;;
-	*) echo "$0 [compile | builder | link | decoder | stub | gdb | readelf | objdump ]"
+	"emu_elf")  examine_text_section $2 ;;
+	"emu_tools")  examine_text_section $2 ;;
+	*) echo "$0 [builder | compile | decoder | emu_elf | emu_tools | gdb | link | objdump | readelf | stub ]"
 esac
