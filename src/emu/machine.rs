@@ -79,7 +79,6 @@ use crate::lang::ext::{
 };
 use crate::lang::highassembly::Register;
 use crate::lang::lowassembly::DataEndianness;
-use crate::utils::set_remaining_bits;
 
 pub struct SimpleMachine {
     cpu: SimpleCPU,

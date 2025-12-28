@@ -567,13 +567,6 @@ fn custom_handle_machine_state<'a, T: Machine>(
     target: &mut SimpleTarget<T>
 ) -> Result<GdbStubStateMachine<'a, SimpleTarget<T>, TcpStream>, ()>
 {
-    // static mut FCALL: u32 = 0;
-    // unsafe {
-    //     let f = FCALL;
-    //     println!("\nFCALL {}", f);
-    //     FCALL += 1;
-    // }
-
     match stub_sm {
         gdbstub::stub::state_machine::GdbStubStateMachine::Idle(mut gdb_stub_state_machine_inner) => {
             let read_result = ConnectionExt::read(gdb_stub_state_machine_inner.borrow_conn());

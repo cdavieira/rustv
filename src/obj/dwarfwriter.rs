@@ -209,8 +209,6 @@ pub fn add_debug_information<'a>(
     file_name: &[u8],
 ) -> () 
 {
-    let main_name = *b"_start";
-
     let encoding = gimli::Encoding {
         format: gimli::Format::Dwarf32,
         version: 5,
@@ -244,14 +242,16 @@ pub fn add_debug_information<'a>(
 
 
 
+    let main_name = *b"_start";
+
+    let (main_symbol, main_size) = get_start(writer, &main_name);
+
     let main_address = gimli::write::Address::Symbol {
         // This is a user defined identifier for the symbol.
         // In this case, we will use 0 to mean the main function.
         symbol: 0,
         addend: 0,
     };
-
-    let (main_symbol, main_size) = get_start(writer, &main_name);
 
     // Set attributes on the root DIE.
     let range_list_id = dwarf.unit.ranges.add(gimli::write::RangeList(vec![
