@@ -20,6 +20,9 @@ Low priority and Easy:
 * Replace comment start from // to # in order to behave as 'as'
 * Create pseudo instructions for push/pop/managing stack on func entry/exit?
 * machine::handle isn't using the methods of the Machine trait for r/w memory/cpu...
+* Create option to run the emulator directly using an executable supplied in
+  the commandline
+* remove unnecessary pub(crate) from some structs
 
 Low priority and hard:
 * Remove warnings when compiling
@@ -37,6 +40,8 @@ High priority and Easy:
 	* elf parser
 
 High priority and Hard:
+* Compile a program using riscv32-unknown-linux-gnu-gcc with options which
+  allow that to be executed by my emulator
 * Create more methods for 'AssemblerTools' (retrieve symbol final address, find address of line, ...)
 * Write tests for:
 	* Memory trait
