@@ -15,7 +15,7 @@ use crate::lang::highassembly::{
     GenericBlock
 };
 
-use crate::lexer::{
+use crate::tokenizer::{
     ToGenericToken,
     GenericToken,
 };

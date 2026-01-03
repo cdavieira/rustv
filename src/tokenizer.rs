@@ -1,222 +1,248 @@
+use crate::lang::highassembly::{
+    ArgValue,
+    KeyValue,
+};
+use crate::streamreader::{
+    StreamReader,
+    StringStreamReader,
+    Position,
+    PositionedStringStreamReader,
+};
+
+#[derive(Debug)]
+pub enum GenericToken {
+    KeyToken(KeyValue, Position),
+    ArgToken(ArgValue),
+}
+
+pub trait ToGenericToken {
+    fn to_generic_token(self) -> Option<GenericToken>;
+}
+
 pub trait Tokenizer {
-    fn get_tokens(&mut self, buffer: &str) -> Vec<(String, Position)> ;
+    type Token: ToGenericToken;
+    fn parse(&self, tokens: Vec<(String, Position)>) -> Vec<<Self as Tokenizer>::Token> ;
 }
 
 
 
-/* The following code was written to ease the implementation of the 'Tokenizer' trait. */
+// Note: the code below was written to ease the process of implementing the 'Lexer' trait.
 
-use crate::streamreader::{CharStreamReader, Position, StreamReader};
+
 
 #[derive(Debug)]
-pub enum CommonClass {
-    Comment,
+pub enum TokenClass {
     Number,
     String,
+    Symbol,
+    Register,
+    Opcode,
     Identifier,
-    Unit,
-    Ignore,
-    Ambiguous,
+    Section,
+    Directive,
+    Label,
+    Custom,
+    Ignore
 }
 
 /**
-'Tokenizer' is implemented for any entity which implements the 'tokenizer::CommonClassifier' trait
-
-'tokenizer::CommonClassifier': a tokenization strategy where N chars can be mapped to one of the categories/variants stored in enum 'CommonClass'. The implementor is responsible for the mapping
+'tokenizer::TokenClassifier': a strategy where N chars can be mapped to one of the categories/variants stored in enum 'TokenClass'. The implementor is responsible for the mapping
 */
-pub trait CommonClassifier {
-    fn is_ambiguous(&self, ch: char) -> bool;
-    fn handle_ambiguous(&self, it: &mut CharStreamReader) -> Option<String>;
+pub trait TokenClassifier {
+    type Token;
 
-
-    fn is_unit(&self, ch: char) -> bool;
-    fn handle_unit(&self, it: &mut CharStreamReader) -> Option<String> {
-        it.read_and_advance().map(|c| c.to_string())
-    }
-
-
-    fn is_comment(&self, ch: char) -> bool;
-    fn handle_comment(&self, it: &mut CharStreamReader) -> Option<String>;
-
-
-    fn is_identifier(&self, ch: char) -> bool;
-    fn handle_identifier(&self, it: &mut CharStreamReader) -> Option<String>;
-
-
-    fn is_string(&self, ch: char) -> bool {
-        ch == '"'
-    }
-    fn handle_string(&self, it: &mut CharStreamReader) -> Option<String> {
-        let Some(start) = it.current_token() else {
-            return None;
-        };
-
-        let mut s = String::new();
-
-        if start == '"' {
-            s.push(start);
-        }
-
-        while let Some(ch) = it.advance_and_read() {
-            s.push(ch);
-            if ch == '"' {
-                it.advance();
-                break;
-            }
-            if ch == '\\' {
-                match it.advance_and_read() {
-                    Some('"') => s.push('"'),
-                    _ => { },
-                }
-            }
-        }
-
-        Some(s)
-    }
-
-
-    fn is_ignore(&self, ch: char) -> bool {
-        ch.is_whitespace()
-    }
-    fn handle_ignore(&self, it: &mut CharStreamReader) -> Option<String> {
-        it.advance();
-        None
-    }
-
-
-    //all numbers usually begin with digits from 0 to 9 (ex: 0x1, 2, 0o4, 0b0101, ...)
-    fn is_number(&self, ch: char) -> bool {
-        ch.is_digit(10)
-    }
-    fn handle_number(&self, it: &mut CharStreamReader) -> Option<String> {
-        let Some(first_digit) = it.current_token() else {
-            return None;
-        };
-
-        let Some(second_digit) = it.next_token() else {
-            return handle_decimal(it);
-        };
-
-        if first_digit == '0' {
-            match second_digit {
-                'x' | 'X' => handle_hexadecimal(it),
-                _ => handle_decimal(it),
-            }
+    fn is_symbol(&self, token: &str) -> bool ;
+    fn is_register(&self, token: &str) -> bool ;
+    fn is_opcode(&self, token: &str) -> bool ;
+    fn is_identifier(&self, token: &str) -> bool ;
+    fn is_section(&self, token: &str) -> bool ;
+    fn is_directive(&self, _: &str) -> bool ;
+    fn is_custom(&self, token: &str) -> bool ;
+    fn is_label(&self, token: &str) -> bool ;
+    fn is_number(&self, token: &str) -> bool {
+        let is_decimal = token.parse::<i32>().is_ok();
+        let is_hex = if token.contains('x') {
+            let without_pref = token.replace("0x", "");
+            i32::from_str_radix(&without_pref, 16).is_ok()
         }
         else {
-            handle_decimal(it)
-        }
-    }
-
-
-    fn is_token(&self, ch: char) -> Option<CommonClass> {
-        if self.is_ambiguous(ch) {
-            return Some(CommonClass::Ambiguous);
-        }
-        if self.is_unit(ch) {
-            return Some(CommonClass::Unit);
-        }
-        if self.is_comment(ch) {
-            return Some(CommonClass::Comment);
-        }
-        if self.is_string(ch) {
-            return Some(CommonClass::String);
-        }
-        if self.is_ignore(ch) {
-            return Some(CommonClass::Ignore);
-        }
-        if self.is_number(ch) {
-            return Some(CommonClass::Number);
-        }
-        if self.is_identifier(ch){
-            return Some(CommonClass::Identifier);
-        }
-        None
-    }
-    fn handle_token(
-        &mut self,
-        it: &mut CharStreamReader,
-    ) -> Result<Option<String>>
-    {
-        let Some(ch) = it.current_token() else {
-            return Ok(None);
+            false
         };
-        let class = self.is_token(ch);
+        is_decimal || is_hex
+    }
+    fn is_string(&self, token: &str) -> bool {
+        token.starts_with('"') && token.ends_with('"')
+    }
+
+    fn handle_number(&self, it: &mut PositionedStringStreamReader) -> Option<Self::Token> ;
+    fn handle_string(&self, it: &mut PositionedStringStreamReader) -> Option<Self::Token> ;
+    fn handle_symbol(&self, it: &mut PositionedStringStreamReader) -> Option<Self::Token> ;
+    fn handle_register(&self, it: &mut PositionedStringStreamReader) -> Option<Self::Token> ;
+    fn handle_opcode(&self, it: &mut PositionedStringStreamReader) -> Option<Self::Token> ;
+    fn handle_identifier(&self, it: &mut PositionedStringStreamReader) -> Option<Self::Token> ;
+    fn handle_section(&self, it: &mut PositionedStringStreamReader) -> Option<Self::Token> ;
+    fn handle_directive(&self, it: &mut PositionedStringStreamReader) -> Option<Self::Token> ;
+    fn handle_custom(&self, it: &mut PositionedStringStreamReader) -> Option<Self::Token> ;
+    fn handle_label(&self, it: &mut PositionedStringStreamReader) -> Option<Self::Token> ;
+
+    fn classify(&self, token: &str) -> TokenClass {
+        if self.is_symbol(token) {
+            return TokenClass::Symbol;
+        }
+
+        if self.is_register(token) {
+            return TokenClass::Register;
+        }
+
+        if self.is_opcode(token) {
+            return TokenClass::Opcode;
+        }
+
+        if self.is_directive(token) {
+            return TokenClass::Directive;
+        }
+
+        if self.is_section(token) {
+            return TokenClass::Section;
+        }
+
+        if self.is_custom(token) {
+            return TokenClass::Custom;
+        }
+
+        if self.is_label(token) {
+            return TokenClass::Label;
+        }
+
+        if self.is_number(token) {
+            return TokenClass::Number;
+        }
+
+        if self.is_string(token) {
+            return TokenClass::String;
+        }
+
+        if self.is_identifier(token) {
+            return TokenClass::Identifier;
+        }
+
+        TokenClass::Ignore
+    }
+
+    fn handle_token(&self, it: &mut PositionedStringStreamReader) -> Option<Self::Token> {
+        let token = it.current_token().expect("Lexer failed when retrieving token");
+        let class = self.classify(token.0.as_str());
+        // println!("Processing {} as {:?}", token, class);
         match class {
-            Some(CommonClass::Ambiguous)  => Ok(self.handle_ambiguous(it)),
-            Some(CommonClass::Unit)       => Ok(self.handle_unit(it)),
-            Some(CommonClass::Comment)    => Ok(self.handle_comment(it)),
-            Some(CommonClass::String)     => Ok(self.handle_string(it)),
-            Some(CommonClass::Ignore)     => Ok(self.handle_ignore(it)),
-            Some(CommonClass::Number)     => Ok(self.handle_number(it)),
-            Some(CommonClass::Identifier) => Ok(self.handle_identifier(it)),
-            None => {
-                let pos = it.current_position().unwrap_or(Position::new(0, 0, 0));
-                Err(TokenizerError::AutomataException(pos))
+            TokenClass::Label      => self.handle_label(it),
+            TokenClass::Number     => self.handle_number(it),
+            TokenClass::Symbol     => self.handle_symbol(it),
+            TokenClass::Section    => self.handle_section(it),
+            TokenClass::Directive  => self.handle_directive(it),
+            TokenClass::Custom     => self.handle_custom(it),
+            TokenClass::Opcode     => self.handle_opcode(it),
+            TokenClass::String     => self.handle_string(it),
+            TokenClass::Identifier => self.handle_identifier(it),
+            TokenClass::Register   => self.handle_register(it),
+            TokenClass::Ignore     => None
+        }
+    }
+}
+
+/*
+The 'Lexer' Trait is implemented for any entity which implements the 'tokenizer::TokenClassifier' trait
+*/
+impl<T: ToGenericToken, C: TokenClassifier<Token = T>> Tokenizer for C {
+    type Token = T;
+
+    fn parse(&self, tokens: Vec<(String, Position)>) -> Vec<<Self as Tokenizer>::Token>  {
+        let mut lexemes = Vec::new();
+        let mut it = PositionedStringStreamReader::new(tokens.into_iter(), (String::from("\n"), Position::new(0, 0, 0)));
+        while let Some(_) = it.current_token() {
+            if let Some(lex) = self.handle_token(&mut it) {
+                lexemes.push(lex);
             }
+            it.advance();
         }
-    }
-}
-
-fn handle_number(it: &mut CharStreamReader, is_valid: impl Fn(char) -> bool) -> Option<String>{
-    let mut n = String::new();
-    while let Some(ch) = it.current_token() {
-        if !is_valid(ch) {
-            break;
-        }
-        n.push(ch);
-        it.advance();
-    }
-    Some(n)
-}
-
-fn handle_hexadecimal(it: &mut CharStreamReader) -> Option<String> {
-    let prefix = String::from("0x");
-    it.advance();
-    it.advance();
-    let suffix = handle_number(it, |ch| ch.is_ascii_hexdigit()).unwrap();
-    Some(prefix + &suffix)
-}
-
-fn handle_decimal(it: &mut CharStreamReader) -> Option<String> {
-    handle_number(it, |ch| ch.is_digit(10))
-}
-
-
-
-
-type Result<T> = std::result::Result<T, TokenizerError>;
-
-#[derive(Debug)]
-pub enum TokenizerError {
-    AutomataException(Position),
-}
-
-impl std::fmt::Display for TokenizerError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            TokenizerError::AutomataException(pos) => 
-                write!(f, "Automata exception at line {} column {}", pos.row(), pos.col()),
-        }
+        lexemes
     }
 }
 
 
 
 
-///Default implementation of 'Tokenizer' for any entity which implements 'CommonClassifier'
-impl<T: CommonClassifier> Tokenizer for T {
-    fn get_tokens(&mut self, buffer: &str) -> Vec<(String, Position)>  {
-        let mut it = CharStreamReader::new(buffer.chars(), '\n');
-        let mut tokens = Vec::new();
-        while it.current_token().is_some() {
-            let pos = it.current_position().unwrap();
-            match self.handle_token(&mut it) {
-                Ok(Some(token)) => tokens.push((token, pos)),
-                Ok(None) => { }
-                Err(err) => panic!("{}", err),
-            }
-        }
-        tokens
+
+/*
+In this implementation, it's the tokenizer job to:
+0. (Optional, not recommended) Implement extensions to be supported as an Enum which implements the 'Extension' trait
+1. Map the symbolic representation of all or a subset of the instructions of an Extension to their
+   correspondent enum variant through the 'ToExtension' trait
+
+2. (Optional) Implement pseudo instructions to be supported as an Enum which implements the 'Pseudo' trait
+3. Map the symbolic representation of each pseudo instruction to their correspondent enum variant
+   through the 'ToPseudo' trait
+
+4. (Optional) Implement the directives to be supported as an Enum which implements the 'Directive' trait
+5. Map the symbolic representation of each directive to their correspondent enum variant through
+   the 'ToDirective' trait
+
+7. Map the symbolic representation of registers to their correspondent enum variant through the
+   'ToRegister' trait
+
+OBS 1: Default implementation of extensions should be provided by this crate, as to standardize
+how operations are turned into bytes according to the RISCV specification
+
+OBS 2: Default implementation of common pseudoinstructions/directives are provided by this crate,
+as to standardize how operations turn into bytes according to the RISCV specification
+
+=== About 'To*' Traits
+'To*' traits allow implementers to link arbitrary data to Extensions, Pseudoinstrucions or
+Directives
+
+If the 'to_*' method returns the 'Some' variant, then 'token' maps to an existing
+Extension/PseudoInstruction/Directive (thus grating support for that functionality)
+
+On the other hand, if the return is the 'None' variant, then 'token' doesn't support any existing
+Extension/PseudoInstruction/Directive
+*/
+
+// Token standardization
+
+use crate::lang::{
+    ext::Extension,
+    pseudo::Pseudo,
+    directive::Directive,
+    highassembly::Register,
+};
+
+pub trait ToExtension<T> {
+    fn to_extension(&self, token: T) -> Option<Box<dyn Extension>> ;
+
+    fn in_extension(&self, token: T) -> bool {
+        self.to_extension(token).is_some()
+    }
+}
+
+pub trait ToPseudo {
+    fn to_pseudo(&self, token: &str) -> Option<Box<dyn Pseudo>> ;
+
+    fn is_pseudo(&self, token: &str) -> bool {
+        self.to_pseudo(token).is_some()
+    }
+}
+
+pub trait ToDirective {
+    fn to_directive(&self, token: &str) -> Option<Box<dyn Directive>> ;
+
+    fn is_directive(&self, token: &str) -> bool {
+        self.to_directive(token).is_some()
+    }
+}
+
+pub trait ToRegister {
+    fn to_register(&self, token: &str) -> Option<Register> ;
+
+    fn is_register(&self, token: &str) -> bool {
+        self.to_register(token).is_some()
     }
 }

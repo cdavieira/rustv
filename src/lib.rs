@@ -33,7 +33,7 @@ mod tests {
             Position,
             StreamReader
         };
-        use crate::tokenizer::Tokenizer;
+        use crate::lexer::Lexer;
         use crate::assembler::{
             AssemblerTools,
         };
@@ -99,7 +99,7 @@ mod tests {
                 //awesome
             ";
             let expected: Vec<String> = vec![];
-            let mut tokenizer = syntax::gas::Tokenizer;
+            let mut tokenizer = syntax::gas::Lexer;
             let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
             assert_eq!(res, expected);
         }
@@ -110,7 +110,7 @@ mod tests {
             let expected: Vec<String> = code
                 .split_whitespace()
                 .map(|s| String::from(s)).collect();
-            let mut tokenizer = syntax::gas::Tokenizer;
+            let mut tokenizer = syntax::gas::Lexer;
             let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
             assert_eq!(res, expected);
         }
@@ -122,7 +122,7 @@ mod tests {
                 .filter(|ch| !matches!(ch, ' ' | '\n') )
                 .map(|ch| String::from(ch))
                 .collect();
-            let mut tokenizer = syntax::gas::Tokenizer;
+            let mut tokenizer = syntax::gas::Lexer;
             let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
             assert_eq!(res, expected);
         }
@@ -134,7 +134,7 @@ mod tests {
                 loop2:
             ";
             let expected: Vec<String> = vec![String::from("main:"), String::from("loop2:")];
-            let mut tokenizer = syntax::gas::Tokenizer;
+            let mut tokenizer = syntax::gas::Lexer;
             let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
             assert_eq!(res, expected);
         }
@@ -146,7 +146,7 @@ mod tests {
                 .text
             ";
             let expected: Vec<String> = vec![String::from(".globl"), String::from(".text")];
-            let mut tokenizer = syntax::gas::Tokenizer;
+            let mut tokenizer = syntax::gas::Lexer;
             let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
             assert_eq!(res, expected);
         }
@@ -155,7 +155,7 @@ mod tests {
         fn tokenize_numbers(){
             let code = "-1 +3 -66 1000";
             let expected: Vec<String> = code.split_whitespace().map(|s| String::from(s)).collect();
-            let mut tokenizer = syntax::gas::Tokenizer;
+            let mut tokenizer = syntax::gas::Lexer;
             let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
             assert_eq!(res, expected);
         }
@@ -166,7 +166,7 @@ mod tests {
             let expected = [
                 "sw", "5", ",", "0x3", "(", "6", ")"
             ].map(|s| String::from(s));
-            let mut tokenizer = syntax::gas::Tokenizer;
+            let mut tokenizer = syntax::gas::Lexer;
             let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
             assert_eq!(res, expected);
         }
@@ -183,7 +183,7 @@ mod tests {
                 "add", "x11", ",", "x5", "+", "5", ",", "x0",
                 "beq", "x0", ",", "3", "+", "-9", ",", "loop",
             ].map(|s| String::from(s));
-            let mut tokenizer = syntax::gas::Tokenizer;
+            let mut tokenizer = syntax::gas::Lexer;
             let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
             assert_eq!(res, expected);
         }
@@ -219,7 +219,7 @@ mod tests {
                 "jal", "t4", ",", "0x1000",
                 "lw", "ra", ",", "-12", "(", "sp", ")",
             ].map(|s| String::from(s));
-            let mut tokenizer = syntax::gas::Tokenizer;
+            let mut tokenizer = syntax::gas::Lexer;
             let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
             assert_eq!(res, expected);
         }
@@ -230,7 +230,7 @@ mod tests {
             let expected = [
                 "\"isso ai\"", "\"esse \\\"cara\\\"\"",
             ].map(|s| String::from(s));
-            let mut tokenizer = syntax::gas::Tokenizer;
+            let mut tokenizer = syntax::gas::Lexer;
             let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
             assert_eq!(res, expected);
         }
@@ -247,7 +247,7 @@ mod tests {
                 "add", "x11", ",", "x5", ",", "x0",
                 "beq", "x0", ",", "x0", ",", "loop",
             ].map(|s| String::from(s));
-            let mut tokenizer = syntax::gas::Tokenizer;
+            let mut tokenizer = syntax::gas::Lexer;
             let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
             assert_eq!(res, expected);
         }
@@ -272,7 +272,7 @@ mod tests {
                 "sw", "s0", ",", "8", "(", "sp", ")",
                 "addi", "s0", ",", "sp", ",", "16",
             ].map(|s| String::from(s));
-            let mut tokenizer = syntax::gas::Tokenizer;
+            let mut tokenizer = syntax::gas::Lexer;
             let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
             assert_eq!(res, expected);
         }
@@ -300,7 +300,7 @@ mod tests {
                 "addi", "sp", ",", "sp", ",", "16",
                 "ret",
             ].map(|s| String::from(s));
-            let mut tokenizer = syntax::gas::Tokenizer;
+            let mut tokenizer = syntax::gas::Lexer;
             let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
             assert_eq!(res, expected);
         }
@@ -1313,7 +1313,7 @@ mod tests {
             if let Ok(data) = read_io_res {
                 let read_res = ElfReader::new(&data, DataEndianness::Le);
                 if let Ok(reader) = read_res {
-                    let bytes_read = &reader.section(".text").data;
+                    let bytes_read = &reader.section(".text").unwrap().data;
                     assert_eq!(bytes_read, &bytes_written);
                 }
                 else {

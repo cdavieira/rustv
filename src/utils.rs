@@ -3,8 +3,8 @@ use crate::lang::lowassembly::{
     EncodedData,
 };
 use crate::obj::dwarfwriter::add_debug_information;
-use crate::tokenizer::Tokenizer;
 use crate::lexer::Lexer;
+use crate::tokenizer::Tokenizer;
 use crate::parser::Parser;
 use crate::assembler::{
     Assembler,
@@ -23,20 +23,20 @@ use crate::obj::elfwriter;
 use crate::obj::elfreader;
 
 pub fn build_code_repr(code: &str) -> AssemblerTools {
-    let mut tokenizer = syntax::gas::Tokenizer;
-    let lexer = syntax::gas::Lexer;
+    let mut lexer = syntax::gas::Lexer;
+    let tokenizer = syntax::gas::Tokenizer;
     let parser = syntax::gas::Parser;
     let assembler = syntax::gas::Assembler;
 
-    let tokens = tokenizer.get_tokens(code);
+    let lexemes = lexer.get_tokens(code);
     // println!("{:?}", tokens);
     // dbg!(&tokens);
 
-    let lexemes = lexer.parse(tokens);
+    let tokens = tokenizer.parse(lexemes);
     // println!("{:?}", lexemes);
     // dbg!(&lexemes);
 
-    let blocks = parser.parse(lexemes);
+    let blocks = parser.parse(tokens);
     // dbg!(&blocks);
 
     let tools = assembler.assemble(blocks);
@@ -140,9 +140,6 @@ pub fn new_machine_from_tools(
 
     let pc = 0;
 
-    // println!("{} {} {}", text_start, data_start, memsize);
-    // println!("{:?} {} {:?} {}", textdata, textdata.len(), datadata, datadata.len());
-    // print_bytes_hex(&datadata);
     let mut m = SimpleMachine::from_bytes_size(memsize, DataEndianness::Be);
     m.write_memory_bytes(text_start, &textdata);
     m.write_memory_bytes(data_start, &datadata);
@@ -189,7 +186,6 @@ pub fn new_machine_from_elf(
             (memsize, Some(data_start), Some(datadata))
         }
     };
-    // print_bytes_hex(textdata);
 
     let pc = reader.pc();
 

@@ -15,12 +15,16 @@ pub mod gas {
     };
 
     use crate::streamreader::{
-        CharStreamReader, Position, PositionedStringStreamReader, StreamReader, StringStreamReader
+        CharStreamReader,
+        Position,
+        PositionedStringStreamReader,
+        StreamReader,
+        StringStreamReader,
     };
 
-    use crate::tokenizer::CommonClassifier;
+    use crate::lexer::CommonClassifier;
 
-    use crate::lexer::{
+    use crate::tokenizer::{
         TokenClassifier,
         ToPseudo,
         ToRegister,
@@ -35,11 +39,11 @@ pub mod gas {
     use crate::assembler::{self, AssemblerTools};
 
 
-    /* Tokenizer */
+    /* Lexer */
 
-    pub struct Tokenizer ;
+    pub struct Lexer ;
 
-    impl CommonClassifier for Tokenizer {
+    impl CommonClassifier for Lexer {
         fn is_ambiguous(&self, ch: char) -> bool {
             ch == '+' || ch == '-'
         }
@@ -98,8 +102,8 @@ pub mod gas {
 
 
 
-    // /* Lexer */
-    pub struct Lexer ;
+    /* Tokenizer */
+    pub struct Tokenizer ;
 
     #[derive(Debug)]
     pub enum Token {
@@ -120,7 +124,7 @@ pub mod gas {
         Comma,
     }
 
-    impl ToRegister for Lexer {
+    impl ToRegister for Tokenizer {
         fn to_register(&self, token: &str) -> Option<Register>  {
             match token {
                 "x0" | "zero" => Some(Register::X0),
@@ -161,7 +165,7 @@ pub mod gas {
         }
     }
 
-    impl ToPseudo for Lexer {
+    impl ToPseudo for Tokenizer {
         fn to_pseudo(&self, token: &str) -> Option<Box<dyn Pseudo>>  {
             match token {
                 "ret" => Some(Box::new(PseudoInstruction::RET)),
@@ -174,7 +178,7 @@ pub mod gas {
         }
     }
 
-    impl ToDirective for Lexer {
+    impl ToDirective for Tokenizer {
         fn to_directive(&self, token: &str) -> Option<Box<dyn Directive>>  {
             match token {
                 ".byte"  => Some(Box::new(DirectiveInstruction::Byte)),
@@ -186,7 +190,7 @@ pub mod gas {
         }
     }
 
-    impl ToExtension<&str> for Lexer {
+    impl ToExtension<&str> for Tokenizer {
         fn to_extension(&self, token: &str) -> Option<Box<dyn Extension>> {
             match token {
                 "lui"   => Some(Box::new(RV32I::LUI))  ,
@@ -241,7 +245,7 @@ pub mod gas {
         }
     }
 
-    impl TokenClassifier for Lexer {
+    impl TokenClassifier for Tokenizer {
         type Token = Token;
 
         fn is_register(&self, token: &str) -> bool {
