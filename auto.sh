@@ -71,15 +71,15 @@ emu_from_tools(){
 }
 
 case "$1" in
-	"compile")  run_elf $2 ;;
-	"build")    run_builder $2 ;;
-	"link")     link $2 $3 ;;
-	"stub")     run_stub   ;;
-	"decoder")  run_decoder $2 ;;
-	"gdb")      gdb $2 ;;
-	"readelf")  examine_elf $2 ;;
-	"objdump")  examine_text_section $2 ;;
-	"emu_elf")  examine_text_section $2 ;;
-	"emu_tools")  examine_text_section $2 ;;
+	"compile")   run_elf $2 ;;
+	"build")     run_builder $2 ;;
+	"link")      link $2 $3 ;;
+	"stub")      run_stub   ;;
+	"decoder")   run_decoder $2 ;;
+	"gdb")       gdb $2 ;;
+	"readelf")   examine_elf $2 ;;
+	"objdump")   examine_text_section $2 ;;
+	"emu_elf")   emu_from_elf $2 ;;
+	"emu_tools") emu_from_tools $2 ;;
 	*) echo "$0 [builder | compile | decoder | emu_elf | emu_tools | gdb | link | objdump | readelf | stub ]"
 esac

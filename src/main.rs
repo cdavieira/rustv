@@ -38,7 +38,7 @@ fn main() {
     let write_elf_dbg  = arglen > 2 && matches!(args[1], "--elf-dbg"        );
     let run_from_elf   = arglen > 2 && matches!(args[1], "--run-elf"        );
     let run_from_tools = arglen > 2 && matches!(args[1], "--run-tools"      );
-    // let run_from_raw   = arglen > 2 && matches!(args[1], "--run-raw"        );
+    let run_from_raw   = arglen > 2 && matches!(args[1], "--run-raw"        );
 
     if show_usage {
         usage();
@@ -114,23 +114,20 @@ fn main() {
 
         let word = u32::from_str_radix(&n, 16).expect("Invalid instruction");
 
-        let iformat = InstructionFormat::decode(word);
+        let iformat = InstructionFormat::decode(word).expect("Unknown instruction format");
 
-        println!("{:?}", iformat);
+        println!("Instruction format: {:?}", iformat);
 
-        if let Some(iformat) = iformat {
-            match iformat {
-                InstructionFormat::B { imm, .. } => {
-                    println!("Immediate: {:x}", imm.decode());
-                },
-                // InstructionFormat::R { funct7, rs2, rs1, funct3, rd, opcode } => todo!(),
-                // InstructionFormat::I { imm, rs1, funct3, rd, opcode } => todo!(),
-                // InstructionFormat::S { imm, rs2, rs1, funct3, opcode } => todo!(),
-                // InstructionFormat::U { imm, rd, opcode } => todo!(),
-                // InstructionFormat::J { imm, rd, opcode } => todo!(),
-                _ => todo!(),
-            }
-        }
+        let imm = match iformat {
+            InstructionFormat::B { imm, .. } => imm.decode(),
+            InstructionFormat::I { imm, .. } => imm.decode(),
+            InstructionFormat::S { imm, .. } => imm.decode(),
+            InstructionFormat::U { imm, .. } => imm.decode(),
+            InstructionFormat::J { imm, .. } => imm.decode(),
+            _ => 0,
+        };
+
+        println!("Immediate: {:x}", imm);
 
         return ;
     }
@@ -182,8 +179,11 @@ fn main() {
         let inputfile = args[2];
 
         let mut m = utils::new_machine_from_elf(inputfile);
-        while let Ok(_state) = m.decode() {
+
+        while let Ok(_) = m.decode() {
         }
+
+        print_registers(&m);
 
         return ;
     }
@@ -196,30 +196,53 @@ fn main() {
 
         let inputfile = args[2];
 
-        let tools = build_code_repr(inputfile);
+        let data = std::fs::read(inputfile)
+            .expect("Failed reading elf file");
+
+        let code = String::from_utf8(data)
+            .expect("Failed converting bytes to string");
+
+        let tools = build_code_repr(&code);
+
         let mut m = new_machine_from_tools(&tools);
-        while let Ok(_state) = m.decode() {
+
+        while let Ok(_) = m.decode() {
         }
+
+        print_registers(&m);
 
         return ;
     }
 
-    // Run instructions in memory
-    // use crate::lang::lowassembly::DataEndianness;
-    // use crate::emu::machine::SimpleMachine;
-    // use crate::utils::encode_to_words;
-    // use crate::emu::machine::Machine as _;
-    // let words = encode_to_words(code);
-    // let mut m = SimpleMachine::from_words(&words, DataEndianness::Be);
-    // for _word in words {
-    //     m.decode();
-    // }
-    // let r: Vec<_> = m
-    //     .read_registers()
-    //     .into_iter()
-    //     .map(|reg| reg as i32)
-    //     .collect();
-    // println!("{:?}", r);
+    if run_from_raw {
+        // Read code and instantiate Machine from raw binary
+        //
+        // This mode supports only executing code found in the text section, therefore the use of
+        // variables/functions and so on is forbidden and might cause the program to crash
+        use crate::utils::encode_to_words;
+        use crate::lang::lowassembly::DataEndianness;
+        use crate::emu::machine::SimpleMachine;
+        use crate::emu::machine::Machine as _;
+
+        let inputfile = args[2];
+
+        let data = std::fs::read(inputfile)
+            .expect("Failed reading elf file");
+
+        let code = String::from_utf8(data)
+            .expect("Failed converting bytes to string");
+
+        let words = encode_to_words(&code);
+
+        let mut m = SimpleMachine::from_words(&words, DataEndianness::Be);
+
+        while let Ok(_) = m.decode() {
+        }
+
+        print_registers(&m);
+
+        return ;
+    }
 }
 
 fn usage() {
@@ -232,5 +255,15 @@ fn usage() {
     println!("  cargo run -- [ --elf-dbg       ] file.s");
     println!("  cargo run -- [ --run-elf       ] executable");
     println!("  cargo run -- [ --run-tools     ] file.s");
+    println!("  cargo run -- [ --run-raw       ] file.s");
     println!("  cargo run -- [ --help     | -h ]");
+}
+
+fn print_registers<T: crate::emu::machine::Machine>(m: &T) -> () {
+    let r: Vec<_> = m
+        .read_registers()
+        .into_iter()
+        .map(|reg| reg as i32)
+        .collect();
+    println!("{:?}", r);
 }
