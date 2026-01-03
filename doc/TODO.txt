@@ -87,18 +87,10 @@ Code
 
 Design/Improvements
 * Use &str instead of String for the Tokenizer
-* Review lexer/tokenizer names
-	* Lexer isnt really a lexer, more like a categorizer/classifier/parser
 * Review how args (for instructions) are being handled
 	* This is a vector of 0-3 elements
 	* The instruction requires a syntax and args, which are then parsed by the function 'get_args'
 * Review using 'Rc' in order to reduce the number of duplicates for instances of 'dyn Extension'
-
-
-
-Test
-* Add second extension
-	* Check how hard it is to add a new extension
 
 
 
@@ -118,6 +110,8 @@ Docs
 
 
 Misc
+* [X] Add second extension (RV32M)
+* [X] Review lexer/tokenizer names
 * [X] Execute functions
 * [X] Execute recursion
 * [X] Space/Skip directives
