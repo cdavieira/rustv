@@ -31,6 +31,7 @@ fn main() {
 
     let show_usage     = arglen > 1 && matches!(args[1], "--help"     | "-h") || arglen == 1;
     let start_stub     = arglen > 1 && matches!(args[1], "--debugger" | "-d");
+    let assemble_code  = arglen > 2 && matches!(args[1], "--assemble" | "-a");
     let build_code     = arglen > 2 && matches!(args[1], "--build"    | "-b");
     let write_elf      = arglen > 2 && matches!(args[1], "--elf"      | "-e");
     let decode_binary  = arglen > 2 && matches!(args[1], "--decode-bin"     );
@@ -45,18 +46,32 @@ fn main() {
         return;
     }
 
-    if build_code {
+    if assemble_code {
+        use crate::utils::encode_to_elf;
+
         let srcfile = args[2];
+        let objectfile = "main.o";
+
         let code = std::fs::read_to_string(srcfile).unwrap();
 
+        encode_to_elf(&code, objectfile).unwrap();
+
+        return;
+    }
+
+    if build_code {
         use crate::utils::build_code_repr;
-        let _tools = build_code_repr(&code);
-        // let data = tools.data_section_words();
-
         // use crate::utils::words_to_bytes_be;
-        // let data = words_to_bytes_be(&data);
-
         // use crate::utils::print_bytes_hex;
+
+        let srcfile = args[2];
+
+        let code = std::fs::read_to_string(srcfile).unwrap();
+
+        let tools = build_code_repr(&code);
+
+        // let data = tools.data_section_words();
+        // let data = words_to_bytes_be(&data);
         // print_bytes_hex(&data);
 
         return ;
