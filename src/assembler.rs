@@ -1,26 +1,14 @@
-use crate::lang::highassembly::{
-    ArgValue,
-    SectionName,
-    KeyValue,
-    GenericBlock,
-    GenericLine,
-};
+use crate::lang::highassembly::{ArgValue, GenericBlock, GenericLine, KeyValue, SectionName};
 use crate::lang::lowassembly::{
-    EncodableKey,
-    EncodableLine,
-    PositionedEncodableBlock,
-    PositionedEncodedBlock,
+    EncodableKey, EncodableLine, PositionedEncodableBlock, PositionedEncodedBlock,
 };
+use crate::utils::words_to_bytes_be;
 use std::collections::HashMap;
 
 pub trait Assembler {
     type Input;
-    fn assemble(&self, instructions: Self::Input) -> AssemblerTools ;
+    fn assemble(&self, instructions: Self::Input) -> AssemblerTools;
 }
-
-
-
-
 
 /**/
 
@@ -49,19 +37,21 @@ pub struct RelocationEntry {
 pub struct AssemblerTools {
     pub(crate) metadata: Option<GenericBlock>,
     pub(crate) sections: HashMap<String, Section>,
-    pub(crate) symbols:  HashMap<String, Symbol>,
-    pub(crate) strings:  Vec<String>,
-    pub(crate) relocations:  HashMap<String, Vec<RelocationEntry>>,
+    pub(crate) symbols: HashMap<String, Symbol>,
+    pub(crate) strings: Vec<String>,
+    pub(crate) relocations: HashMap<String, Vec<RelocationEntry>>,
     pub(crate) blocks: Vec<PositionedEncodedBlock>,
 }
 
 impl AssemblerTools {
     fn section_words(&self, name: SectionName) -> Vec<u32> {
-        let text_sections_data: Vec<Vec<u32>> = self.blocks
+        let text_sections_data: Vec<Vec<u32>> = self
+            .blocks
             .iter()
             .filter_map(|block| {
                 if block.name == name {
-                    let data: Vec<_> = block.instructions
+                    let data: Vec<_> = block
+                        .instructions
                         .iter()
                         .map(|i| i.data.clone())
                         .flatten()
@@ -72,22 +62,37 @@ impl AssemblerTools {
                 }
             })
             .collect();
-        text_sections_data
-            .into_iter()
-            .flatten()
-            .collect()
+        text_sections_data.into_iter().flatten().collect()
     }
 
     pub fn text_section_words(&self) -> Vec<u32> {
         self.section_words(SectionName::Text)
     }
 
+    pub fn text_section_bytes_be(&self) -> Vec<u8> {
+        let words = self.text_section_words();
+        words_to_bytes_be(&words)
+    }
+
+    pub fn text_section_start(&self) -> usize {
+        let textsec = self.sections.get(".text").unwrap();
+        textsec.address
+    }
+
     pub fn data_section_words(&self) -> Vec<u32> {
         self.section_words(SectionName::Data)
     }
+
+    pub fn data_section_bytes_be(&self) -> Vec<u8> {
+        let words = self.data_section_words();
+        words_to_bytes_be(&words)
+    }
+
+    pub fn data_section_start(&self) -> usize {
+        let sec = self.sections.get(".data").unwrap();
+        sec.address
+    }
 }
-
-
 
 /**/
 
@@ -105,53 +110,40 @@ pub struct PositionedGenericBlock {
     lines: Vec<PositionedGenericLine>,
 }
 
-
-
-
 // 2.1 Extracting the metadata section
 //   The metadata section is intended to:
 //    1. store directives that modify the visibility of labels
 //    2. the start address (yet to be supported)
 
-fn extract_metadata(
-    blocks: &mut Vec<GenericBlock>
-) -> Option<GenericBlock>
-{
+fn extract_metadata(blocks: &mut Vec<GenericBlock>) -> Option<GenericBlock> {
     let pair = blocks
         .iter()
         .enumerate()
         .find(|(_, block)| block.name == SectionName::Metadata);
     if let Some((index, _)) = pair {
         Some(blocks.remove(index))
-    }
-    else {
+    } else {
         None
     }
 }
 
 // 2.2 Casting the 'GenericBlock' type to its sibling type (which can store an address for each section)
 
-fn cast_generic_to_positioned_blocks(
-    blocks: Vec<GenericBlock>
-) -> Vec<PositionedGenericBlock>
-{
-    blocks.
-        into_iter()
-        .map(|block| {
-            PositionedGenericBlock {
-                address: 0,
-                name: block.name,
-                lines: block.lines
-                    .into_iter()
-                    .map(|line| {
-                        PositionedGenericLine {
-                            root_relative_address: 0,
-                            relative_address: 0,
-                            line,
-                        }
-                    })
-                    .collect(),
-            }
+fn cast_generic_to_positioned_blocks(blocks: Vec<GenericBlock>) -> Vec<PositionedGenericBlock> {
+    blocks
+        .into_iter()
+        .map(|block| PositionedGenericBlock {
+            address: 0,
+            name: block.name,
+            lines: block
+                .lines
+                .into_iter()
+                .map(|line| PositionedGenericLine {
+                    root_relative_address: 0,
+                    relative_address: 0,
+                    line,
+                })
+                .collect(),
         })
         .collect()
 }
@@ -162,17 +154,17 @@ fn gen_section_address(
     blocks: Vec<PositionedGenericBlock>,
     initial_addr: usize,
     block_offset: usize,
-) -> Vec<PositionedGenericBlock>
-{
+) -> Vec<PositionedGenericBlock> {
     //OBS: if block_offset % 4 != 0, then this could lead to section alignment problems
     let mut new_blocks = Vec::new();
     let mut next_block_address = initial_addr;
     for block in blocks {
-        let block_size: usize = block.lines
+        let block_size: usize = block
+            .lines
             .iter()
             .map(|line| line.line.size_bytes_at_word_boundary())
             .sum();
-        new_blocks.push(PositionedGenericBlock{
+        new_blocks.push(PositionedGenericBlock {
             address: next_block_address,
             ..block
         });
@@ -187,7 +179,8 @@ fn gen_line_address(blocks: Vec<PositionedGenericBlock>) -> Vec<PositionedGeneri
     let mut new_blocks = Vec::new();
     for block in blocks {
         let mut relative_address = 0;
-        let lines_with_address = block.lines
+        let lines_with_address = block
+            .lines
             .into_iter()
             .map(|line| {
                 let new_line = PositionedGenericLine {
@@ -199,7 +192,7 @@ fn gen_line_address(blocks: Vec<PositionedGenericBlock>) -> Vec<PositionedGeneri
                 new_line
             })
             .collect();
-        new_blocks.push(PositionedGenericBlock{
+        new_blocks.push(PositionedGenericBlock {
             lines: lines_with_address,
             ..block
         });
@@ -229,13 +222,13 @@ fn gen_root_line_address(blocks: Vec<PositionedGenericBlock>) -> Vec<PositionedG
                 line_map.insert(line.line.id, line.relative_address);
             }
         }
-        let new_lines = block.lines
+        let new_lines = block
+            .lines
             .into_iter()
             .map(|line| PositionedGenericLine {
-                    root_relative_address: *line_map.get(&line.line.id).unwrap(),
-                    ..line
-                }
-            )
+                root_relative_address: *line_map.get(&line.line.id).unwrap(),
+                ..line
+            })
             .collect();
         new_blocks.push(PositionedGenericBlock {
             lines: new_lines,
@@ -270,15 +263,11 @@ fn gen_symbol_table(sections: &Vec<PositionedGenericBlock>) -> HashMap<String, S
                 KeyValue::Label(s) => {
                     if !v.contains_key(s) {
                         let symbol_size = match it.next() {
-                            Some(next_line) => {
-                                match next_line.line.keyword {
-                                    KeyValue::AssemblyDirective(_) => {
-                                        line.line.size_bytes_unaligned()
-                                    },
-                                    _ => 0usize,
-                                }
+                            Some(next_line) => match next_line.line.keyword {
+                                KeyValue::AssemblyDirective(_) => line.line.size_bytes_unaligned(),
+                                _ => 0usize,
                             },
-                            None => 0usize
+                            None => 0usize,
                         };
                         let value = Symbol {
                             section: section.name.clone(),
@@ -288,9 +277,8 @@ fn gen_symbol_table(sections: &Vec<PositionedGenericBlock>) -> HashMap<String, S
                         };
                         v.insert(s.clone(), value);
                     }
-                },
-                _ => {
                 }
+                _ => {}
             }
         }
     }
@@ -343,14 +331,13 @@ fn gen_relocation_table(
                                     .push(relocation);
                             }
                         };
-                    },
-                    _ => {
-                    },
+                    }
+                    _ => {}
                 }
             }
         }
     }
-    relocation_table 
+    relocation_table
 }
 
 // 2.10 Resolving symbols
@@ -375,11 +362,8 @@ fn compute_offset(
     symbol: &Symbol,
     symbol_section: &Section,
     addend: i32,
-) -> i32
-{
-    let line_faddr: i32 = (src_section + src_line)
-        .try_into()
-        .unwrap();
+) -> i32 {
+    let line_faddr: i32 = (src_section + src_line).try_into().unwrap();
     let symb_faddr: i32 = (symbol_section.address + symbol.relative_address)
         .saturating_add_signed(addend as isize)
         .try_into()
@@ -391,9 +375,8 @@ fn compute_offset(
 fn resolve_symbols(
     blocks: Vec<PositionedGenericBlock>,
     symbols: &HashMap<String, Symbol>,
-    sections: &HashMap<String, Section>
-) -> Vec<PositionedGenericBlock>
-{
+    sections: &HashMap<String, Section>,
+) -> Vec<PositionedGenericBlock> {
     let mut resolved_sections = Vec::new();
     for section in blocks {
         let mut new_lines = Vec::new();
@@ -405,34 +388,49 @@ fn resolve_symbols(
                         let res = get_symb_addrs(&s, symbols, sections);
                         if let Ok((symb, symb_sect)) = res {
                             let offset = compute_offset(
-                                section.address, line.root_relative_address, symb, symb_sect, addend);
+                                section.address,
+                                line.root_relative_address,
+                                symb,
+                                symb_sect,
+                                addend,
+                            );
                             new_args.push(ArgValue::Number(offset));
                         }
-                    },
+                    }
                     ArgValue::UseHi(s, addend) => {
                         let res = get_symb_addrs(&s, symbols, sections);
                         if let Ok((symb, symb_sect)) = res {
                             let offset = compute_offset(
-                                section.address, line.root_relative_address, symb, symb_sect, addend);
+                                section.address,
+                                line.root_relative_address,
+                                symb,
+                                symb_sect,
+                                addend,
+                            );
                             let hi = (offset >> 12) & 0b11111_11111_11111_11111;
                             new_args.push(ArgValue::Number(hi));
                         }
-                    },
+                    }
                     ArgValue::UseLo(s, addend) => {
                         let res = get_symb_addrs(&s, symbols, sections);
                         if let Ok((symb, symb_sect)) = res {
                             let offset = compute_offset(
-                                section.address, line.root_relative_address, symb, symb_sect, addend);
+                                section.address,
+                                line.root_relative_address,
+                                symb,
+                                symb_sect,
+                                addend,
+                            );
                             let lo = offset & 0b1111_1111_1111;
                             new_args.push(ArgValue::Number(lo));
                         }
-                    },
+                    }
                     _ => {
                         new_args.push(arg.clone());
                     }
                 }
             }
-            new_lines.push(PositionedGenericLine{
+            new_lines.push(PositionedGenericLine {
                 line: GenericLine {
                     args: new_args,
                     ..line.line
@@ -440,7 +438,7 @@ fn resolve_symbols(
                 ..line
             });
         }
-        resolved_sections.push(PositionedGenericBlock{
+        resolved_sections.push(PositionedGenericBlock {
             lines: new_lines,
             ..section
         });
@@ -457,16 +455,13 @@ fn generic_to_encodable_lines(lines: Vec<PositionedGenericLine>) -> Vec<Encodabl
         let args = line.line.args;
         match kw {
             KeyValue::Op(op) => {
-                let args: Vec<i32> = args
-                    .iter()
-                    .filter_map(|arg| arg.to_number())
-                    .collect();
+                let args: Vec<i32> = args.iter().filter_map(|arg| arg.to_number()).collect();
                 new_lines.push(EncodableLine {
                     file_pos: line.line.file_pos,
                     key: EncodableKey::Op(op),
-                    args
+                    args,
                 });
-            },
+            }
             KeyValue::AssemblyDirective(d) => {
                 let handle_endian = match d.datatype().size_bytes() {
                     1 => i32::from_le_bytes,
@@ -484,7 +479,7 @@ fn generic_to_encodable_lines(lines: Vec<PositionedGenericLine>) -> Vec<Encodabl
                             chunk.get(0).map_or(0u8, |v| *v),
                             chunk.get(1).map_or(0u8, |v| *v),
                             chunk.get(2).map_or(0u8, |v| *v),
-                            chunk.get(3).map_or(0u8, |v| *v)
+                            chunk.get(3).map_or(0u8, |v| *v),
                         ];
                         handle_endian(b)
                     })
@@ -492,9 +487,9 @@ fn generic_to_encodable_lines(lines: Vec<PositionedGenericLine>) -> Vec<Encodabl
                 new_lines.push(EncodableLine {
                     file_pos: line.line.file_pos,
                     key: EncodableKey::Directive(d),
-                    args
+                    args,
                 });
-            },
+            }
             _ => {}
         }
     }
@@ -524,10 +519,11 @@ fn encode_blocks(blocks: Vec<PositionedEncodableBlock>) -> Vec<PositionedEncoded
         new_blocks.push(PositionedEncodedBlock {
             addr: block.addr,
             name: block.name,
-            instructions: block.instructions
+            instructions: block
+                .instructions
                 .into_iter()
                 .map(|line| line.encode())
-                .collect()
+                .collect(),
         });
     }
     new_blocks
@@ -548,8 +544,8 @@ pub fn assemble(mut blocks: Vec<GenericBlock>) -> AssemblerTools {
     // dbg!(&blocks);
 
     let sections = gen_section_table(&blocks);
-    let symbols  = gen_symbol_table(&blocks);
-    let strings  = gen_string_table(&blocks);
+    let symbols = gen_symbol_table(&blocks);
+    let strings = gen_string_table(&blocks);
     let relocations = gen_relocation_table(&blocks, &symbols, &sections);
     // dbg!(&sections);
     // dbg!(&symbols);

@@ -1,26 +1,15 @@
-use crate::lang::lowassembly::{
-    DataEndianness,
-    EncodedData,
-};
-use crate::obj::dwarfwriter::add_debug_information;
-use crate::lexer::Lexer;
-use crate::tokenizer::Tokenizer;
-use crate::parser::Parser;
-use crate::assembler::{
-    Assembler,
-    AssemblerTools,
-};
-use crate::syntax;
-use crate::lang::highassembly::{
-    SectionName,
-};
-use crate::emu::machine::{
-    Machine,
-    SimpleMachine,
-};
+use crate::assembler::{Assembler, AssemblerTools};
 use crate::emu::debugger::SimpleGdbStub;
-use crate::obj::elfwriter;
+use crate::emu::machine::{Machine, SimpleMachine};
+use crate::lang::highassembly::SectionName;
+use crate::lang::lowassembly::{DataEndianness, EncodedData};
+use crate::lexer::Lexer;
+use crate::obj::dwarfwriter::add_debug_information;
 use crate::obj::elfreader;
+use crate::obj::elfwriter;
+use crate::parser::Parser;
+use crate::syntax;
+use crate::tokenizer::Tokenizer;
 
 pub fn build_code_repr(code: &str) -> AssemblerTools {
     let mut lexer = syntax::gas::Lexer;
@@ -46,8 +35,7 @@ pub fn build_code_repr(code: &str) -> AssemblerTools {
 }
 
 pub fn encode_to_words(code: &str) -> Vec<u32> {
-    build_code_repr(code)
-        .text_section_words()
+    build_code_repr(code).text_section_words()
 }
 
 pub fn encode_to_word(code: &str) -> u32 {
@@ -55,19 +43,16 @@ pub fn encode_to_word(code: &str) -> u32 {
 }
 
 fn write_from_tools<'a>(mut output: AssemblerTools) -> (elfwriter::ElfWriter<'a>, AssemblerTools) {
-    // Writing to ELF
     let mut writer = elfwriter::ElfWriter::new();
     let symbol_table = &mut output.symbols;
     let relocation_table = &output.relocations;
     let blocks = &output.blocks;
-    // let section_table = &output.sections;
 
     if symbol_table.contains_key("_start") {
         let symb = symbol_table.get("_start").expect("No _start found");
         writer.set_start_address(symb.relative_address.try_into().unwrap());
         symbol_table.remove("_start").unwrap();
-    }
-    else {
+    } else {
         writer.set_start_address(0);
     }
 
@@ -87,7 +72,9 @@ fn write_from_tools<'a>(mut output: AssemblerTools) -> (elfwriter::ElfWriter<'a>
                 SectionName::Data => 1,
                 _ => panic!(""),
             };
-            writer.set_section_data(name.clone(), data, alignment).expect("");
+            writer
+                .set_section_data(name.clone(), data, alignment)
+                .expect("");
         }
     }
 
@@ -96,11 +83,13 @@ fn write_from_tools<'a>(mut output: AssemblerTools) -> (elfwriter::ElfWriter<'a>
             let offset = relocation.address.try_into().unwrap();
             let addend = relocation.addend;
             let relidx = relocation.id;
-            writer.handle_symbol_relocation(symbname, offset, addend, relidx).unwrap();
+            writer
+                .handle_symbol_relocation(symbname, offset, addend, relidx)
+                .unwrap();
         }
     }
 
-    ( writer, output )
+    (writer, output)
 }
 
 pub fn encode_to_elf(code: &str, output_file: &str) -> elfwriter::Result<()> {
@@ -109,29 +98,30 @@ pub fn encode_to_elf(code: &str, output_file: &str) -> elfwriter::Result<()> {
     writer.save(output_file)
 }
 
-pub fn encode_to_elf_with_debug(code: &str, input_file: &str, output_file: &str) -> elfwriter::Result<()> {
+pub fn encode_to_elf_with_debug(
+    code: &str,
+    input_file: &str,
+    output_file: &str,
+) -> elfwriter::Result<()> {
     let output = build_code_repr(code);
     let (mut writer, tools) = write_from_tools(output);
     add_debug_information(&mut writer, tools, input_file.as_bytes());
     writer.save(output_file)
 }
 
-pub fn new_machine_from_tools(
-    tools: &AssemblerTools,
-) -> SimpleMachine
-{
-    let textsec = tools.sections.get(".text").unwrap();
-    let textdata = tools.text_section_words();
-    let text_start = textsec.address;
-    let textdata = words_to_bytes_be(&textdata);
+pub fn new_machine_from_tools(tools: &AssemblerTools) -> SimpleMachine {
+    let text_start = tools.text_section_start();
+    let textdata = tools.text_section_bytes_be();
 
-    let datasec = tools.sections.get(".data").unwrap();
-    let datadata = tools.data_section_words();
-    let data_start = datasec.address;
-    let datadata = words_to_bytes_be(&datadata);
+    let data_start = tools.data_section_start();
+    let datadata = tools.data_section_bytes_be();
 
     let minsize = textdata.len() + datadata.len();
-    let max_start = if text_start > data_start { text_start } else { data_start };
+    let max_start = if text_start > data_start {
+        text_start
+    } else {
+        data_start
+    };
     let memsize = if max_start > minsize {
         max_start + minsize
     } else {
@@ -147,17 +137,10 @@ pub fn new_machine_from_tools(
     m
 }
 
-pub fn new_machine_from_elf(
-    filename: &str,
-) -> SimpleMachine
-{
-    let data = std::fs::read(filename)
-        .expect("Failed reading elf file");
+pub fn new_machine_from_elf(filename: &str) -> SimpleMachine {
+    let data = std::fs::read(filename).expect("Failed reading elf file");
 
-    let reader = elfreader::ElfReader::new(
-        &data,
-        DataEndianness::Be
-    )
+    let reader = elfreader::ElfReader::new(&data, DataEndianness::Be)
         .expect("Failed instantiating elf file reader");
 
     let textsec = reader.section(".text").unwrap();
@@ -172,12 +155,15 @@ pub fn new_machine_from_elf(
         if !has_data_section {
             let memsize = text_start + textdata.len();
             (memsize, None, None)
-        }
-        else {
+        } else {
             let datadata = &datasec.unwrap().data;
             let data_start = datasec.unwrap().address as usize;
             let minsize = textdata.len() + datadata.len();
-            let max_start = if text_start > data_start { text_start } else { data_start };
+            let max_start = if text_start > data_start {
+                text_start
+            } else {
+                data_start
+            };
             let memsize = if max_start > minsize {
                 max_start + minsize
             } else {
@@ -210,13 +196,13 @@ pub fn new_machine_from_words(text_words: &Vec<u32>) -> SimpleMachine {
     SimpleMachine::from_words(text_words, DataEndianness::Be)
 }
 
-pub fn wait_for_new_debugger_at_port<'a>(memsize: usize, port: u16) -> SimpleGdbStub<'a, SimpleMachine> {
+pub fn wait_for_new_debugger_at_port<'a>(
+    memsize: usize,
+    port: u16,
+) -> SimpleGdbStub<'a, SimpleMachine> {
     SimpleGdbStub::<SimpleMachine>::new(memsize, port)
         .expect("Failed when instantiating riscv32 debugger")
 }
-
-
-
 
 // Data conversion
 
@@ -286,12 +272,12 @@ pub fn get_n_bits_from(n: &u32, bit_idx: u8, bit_amount: usize) -> u32 {
 }
 
 /// Example: get_bits_from_to(0b1111, 1, 2) -> 0b0110
-/// 
+///
 /// Index convention (with the number 1 as an example):
 ///   (1 in binary) ->    00000000     00000000     00000000   00000001
 ///   ( bit index ) ->   31      24   23      16   15      8   7      0
 pub fn get_bits_range(n: u32, start: usize, end: usize) -> u32 {
-    let mask = UWORD_MASK[end+1] & (!UWORD_MASK[start]);
+    let mask = UWORD_MASK[end + 1] & (!UWORD_MASK[start]);
     (n & mask) >> start
 }
 
@@ -311,12 +297,7 @@ pub fn get_bit_at(n: u32, idx: usize) -> u32 {
 ///   ( bit index ) ->   31      24   23      16   15      8   7      0
 pub fn set_remaining_bits(n: u32, start: usize, bit: usize) -> u32 {
     let mask = UWORD_MASK[start];
-    if bit == 0 {
-        n & mask
-    }
-    else {
-        n | !mask
-    }
+    if bit == 0 { n & mask } else { n | !mask }
 }
 
 /// Converts a vector of u32 into a vector of u8, ensuring Big Endianness for the resulting bytes
@@ -341,8 +322,7 @@ pub fn words_to_bytes_le(words: &Vec<u32>) -> Vec<u8> {
 }
 
 pub fn encoded_data_to_bytes_le(data: &Vec<EncodedData>) -> Vec<u8> {
-    data
-        .into_iter()
+    data.into_iter()
         .map(|words_data| {
             let mut raw_bytes = Vec::new();
             for word in &words_data.data {
@@ -367,11 +347,6 @@ pub fn swap_chunk_endianness(v: &[u8], chunk_size: usize) -> Vec<u8> {
     }
     u
 }
-
-
-
-
-
 
 // Data visualization
 
