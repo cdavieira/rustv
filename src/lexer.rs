@@ -1,8 +1,6 @@
 pub trait Lexer {
-    fn get_tokens(&mut self, buffer: &str) -> Vec<(String, Position)> ;
+    fn get_tokens(&mut self, buffer: &str) -> Vec<(String, Position)>;
 }
-
-
 
 /* The following code was written to ease the implementation of the 'Lexer' trait. */
 
@@ -28,20 +26,16 @@ pub trait CommonClassifier {
     fn is_ambiguous(&self, ch: char) -> bool;
     fn handle_ambiguous(&self, it: &mut CharStreamReader) -> Option<String>;
 
-
     fn is_unit(&self, ch: char) -> bool;
     fn handle_unit(&self, it: &mut CharStreamReader) -> Option<String> {
         it.read_and_advance().map(|c| c.to_string())
     }
 
-
     fn is_comment(&self, ch: char) -> bool;
     fn handle_comment(&self, it: &mut CharStreamReader) -> Option<String>;
 
-
     fn is_identifier(&self, ch: char) -> bool;
     fn handle_identifier(&self, it: &mut CharStreamReader) -> Option<String>;
-
 
     fn is_string(&self, ch: char) -> bool {
         ch == '"'
@@ -66,14 +60,17 @@ pub trait CommonClassifier {
             if ch == '\\' {
                 match it.advance_and_read() {
                     Some('"') => s.push('"'),
-                    _ => { },
+                    Some('n') => {
+                        s.pop();
+                        s.push('\n');
+                    }
+                    _ => {}
                 }
             }
         }
 
         Some(s)
     }
-
 
     fn is_ignore(&self, ch: char) -> bool {
         ch.is_whitespace()
@@ -82,7 +79,6 @@ pub trait CommonClassifier {
         it.advance();
         None
     }
-
 
     //all numbers usually begin with digits from 0 to 9 (ex: 0x1, 2, 0o4, 0b0101, ...)
     fn is_number(&self, ch: char) -> bool {
@@ -102,12 +98,10 @@ pub trait CommonClassifier {
                 'x' | 'X' => handle_hexadecimal(it),
                 _ => handle_decimal(it),
             }
-        }
-        else {
+        } else {
             handle_decimal(it)
         }
     }
-
 
     fn is_token(&self, ch: char) -> Option<CommonClass> {
         if self.is_ambiguous(ch) {
@@ -128,27 +122,23 @@ pub trait CommonClassifier {
         if self.is_number(ch) {
             return Some(CommonClass::Number);
         }
-        if self.is_identifier(ch){
+        if self.is_identifier(ch) {
             return Some(CommonClass::Identifier);
         }
         None
     }
-    fn handle_token(
-        &mut self,
-        it: &mut CharStreamReader,
-    ) -> Result<Option<String>>
-    {
+    fn handle_token(&mut self, it: &mut CharStreamReader) -> Result<Option<String>> {
         let Some(ch) = it.current_token() else {
             return Ok(None);
         };
         let class = self.is_token(ch);
         match class {
-            Some(CommonClass::Ambiguous)  => Ok(self.handle_ambiguous(it)),
-            Some(CommonClass::Unit)       => Ok(self.handle_unit(it)),
-            Some(CommonClass::Comment)    => Ok(self.handle_comment(it)),
-            Some(CommonClass::String)     => Ok(self.handle_string(it)),
-            Some(CommonClass::Ignore)     => Ok(self.handle_ignore(it)),
-            Some(CommonClass::Number)     => Ok(self.handle_number(it)),
+            Some(CommonClass::Ambiguous) => Ok(self.handle_ambiguous(it)),
+            Some(CommonClass::Unit) => Ok(self.handle_unit(it)),
+            Some(CommonClass::Comment) => Ok(self.handle_comment(it)),
+            Some(CommonClass::String) => Ok(self.handle_string(it)),
+            Some(CommonClass::Ignore) => Ok(self.handle_ignore(it)),
+            Some(CommonClass::Number) => Ok(self.handle_number(it)),
             Some(CommonClass::Identifier) => Ok(self.handle_identifier(it)),
             None => {
                 let pos = it.current_position().unwrap_or(Position::new(0, 0, 0));
@@ -158,7 +148,7 @@ pub trait CommonClassifier {
     }
 }
 
-fn handle_number(it: &mut CharStreamReader, is_valid: impl Fn(char) -> bool) -> Option<String>{
+fn handle_number(it: &mut CharStreamReader, is_valid: impl Fn(char) -> bool) -> Option<String> {
     let mut n = String::new();
     while let Some(ch) = it.current_token() {
         if !is_valid(ch) {
@@ -182,9 +172,6 @@ fn handle_decimal(it: &mut CharStreamReader) -> Option<String> {
     handle_number(it, |ch| ch.is_digit(10))
 }
 
-
-
-
 type Result<T> = std::result::Result<T, LexerError>;
 
 #[derive(Debug)]
@@ -195,28 +182,33 @@ pub enum LexerError {
 impl std::fmt::Display for LexerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LexerError::AutomataException(pos) => 
-                write!(f, "Automata exception at line {} column {}", pos.row(), pos.col()),
+            LexerError::AutomataException(pos) => write!(
+                f,
+                "Automata exception at line {} column {}",
+                pos.row(),
+                pos.col()
+            ),
         }
     }
 }
 
-
-
-
 ///Default implementation of 'Lexer' for any entity which implements 'CommonClassifier'
 impl<T: CommonClassifier> Lexer for T {
-    fn get_tokens(&mut self, buffer: &str) -> Vec<(String, Position)>  {
+    fn get_tokens(&mut self, buffer: &str) -> Vec<(String, Position)> {
         let mut it = CharStreamReader::new(buffer.chars(), '\n');
+
         let mut tokens = Vec::new();
+
         while it.current_token().is_some() {
             let pos = it.current_position().unwrap();
+
             match self.handle_token(&mut it) {
                 Ok(Some(token)) => tokens.push((token, pos)),
-                Ok(None) => { }
+                Ok(None) => {}
                 Err(err) => panic!("{}", err),
             }
         }
+
         tokens
     }
 }
