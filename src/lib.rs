@@ -1,10 +1,10 @@
-pub mod streamreader;
-pub mod tokenizer;
-pub mod syntax;
-pub mod lexer;
-pub mod utils;
-pub mod parser;
 pub mod assembler;
+pub mod lexer;
+pub mod parser;
+pub mod streamreader;
+pub mod syntax;
+pub mod tokenizer;
+pub mod utils;
 pub mod emu {
     pub mod cpu;
     pub mod debugger;
@@ -19,80 +19,91 @@ pub mod lang {
     pub mod pseudo;
 }
 pub mod obj {
+    pub mod dwarfwriter;
     pub mod elfreader;
     pub mod elfwriter;
-    pub mod dwarfwriter;
 }
 
 #[cfg(test)]
 mod tests {
     mod gas {
         use super::super::*;
-        use crate::streamreader::{
-            CharStreamReader,
-            Position,
-            StreamReader
-        };
-        use crate::lexer::Lexer;
-        use crate::assembler::{
-            AssemblerTools,
-        };
-        use crate::lang::highassembly::{
-            Register,
-            SectionName,
-        };
-        use crate::lang::lowassembly::{
-            DataEndianness,
-        };
+        use crate::assembler::AssemblerTools;
         use crate::emu::{
-            memory::Memory,
+            cpu::CPU, cpu::SimpleCPU, machine::Machine, machine::SimpleMachine, memory::Memory,
             memory::SimpleMemory,
-            cpu::CPU,
-            cpu::SimpleCPU,
-            machine::Machine,
-            machine::SimpleMachine,
         };
+        use crate::lang::highassembly::{Register, SectionName};
+        use crate::lang::lowassembly::DataEndianness;
+        use crate::lexer::Lexer;
+        use crate::obj::{elfreader::ElfReader, elfwriter::ElfWriter};
+        use crate::streamreader::{CharStreamReader, Position, StreamReader};
         use crate::utils::{
-            build_code_repr,
-            encode_to_word,
-            encode_to_words,
-            new_machine_from_tools, set_remaining_bits,
-        };
-        use crate::obj::{
-            elfwriter::ElfWriter,
-            elfreader::ElfReader,
+            build_code_repr, encode_to_word, encode_to_words, new_machine_from_tools,
+            set_remaining_bits,
         };
 
         // Custom iterator
         #[test]
-        fn char_iterator(){
+        fn char_iterator() {
             let buf = "h\nm a";
             let mut it = CharStreamReader::new(buf.chars(), '\n');
             let states = [
-                (Some('h') , Some(Position::new(0, 0, 0)), Some('\n'), Some(Position::new(1, 0, 1))),
-                (Some('\n'), Some(Position::new(1, 0, 1)), Some('m') , Some(Position::new(2, 1, 0))),
-                (Some('m') , Some(Position::new(2, 1, 0)), Some(' ') , Some(Position::new(3, 1, 1))),
-                (Some(' ') , Some(Position::new(3, 1, 1)), Some('a') , Some(Position::new(4, 1, 2))),
-                (Some('a') , Some(Position::new(4, 1, 2)), None, None),
-                (None      , None, None, None),
+                (
+                    Some('h'),
+                    Some(Position::new(0, 0, 0)),
+                    Some('\n'),
+                    Some(Position::new(1, 0, 1)),
+                ),
+                (
+                    Some('\n'),
+                    Some(Position::new(1, 0, 1)),
+                    Some('m'),
+                    Some(Position::new(2, 1, 0)),
+                ),
+                (
+                    Some('m'),
+                    Some(Position::new(2, 1, 0)),
+                    Some(' '),
+                    Some(Position::new(3, 1, 1)),
+                ),
+                (
+                    Some(' '),
+                    Some(Position::new(3, 1, 1)),
+                    Some('a'),
+                    Some(Position::new(4, 1, 2)),
+                ),
+                (Some('a'), Some(Position::new(4, 1, 2)), None, None),
+                (None, None, None, None),
             ];
             for (index, state) in states.iter().enumerate() {
-                assert_eq!(it.current_token(), state.0, "current token failed at {}", index);
-                assert_eq!(it.current_position(), state.1, "current position failed at {}", index);
+                assert_eq!(
+                    it.current_token(),
+                    state.0,
+                    "current token failed at {}",
+                    index
+                );
+                assert_eq!(
+                    it.current_position(),
+                    state.1,
+                    "current position failed at {}",
+                    index
+                );
                 assert_eq!(it.next_token(), state.2, "next token failed at {}", index);
-                assert_eq!(it.next_position(), state.3, "next position failed at {}", index);
+                assert_eq!(
+                    it.next_position(),
+                    state.3,
+                    "next position failed at {}",
+                    index
+                );
                 it.advance_and_read();
             }
         }
 
-
-
-
-
         // Tokenization of sources
 
         #[test]
-        fn tokenize_ignore_comments(){
+        fn tokenize_ignore_comments() {
             let code = "
                 //this is gonna be great\n
 
@@ -100,97 +111,126 @@ mod tests {
             ";
             let expected: Vec<String> = vec![];
             let mut tokenizer = syntax::gas::Lexer;
-            let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
+            let res: Vec<String> = tokenizer
+                .get_tokens(code)
+                .into_iter()
+                .map(|token| token.0)
+                .collect();
             assert_eq!(res, expected);
         }
 
         #[test]
-        fn tokenize_words(){
+        fn tokenize_words() {
             let code = "abc paulista oloco";
-            let expected: Vec<String> = code
-                .split_whitespace()
-                .map(|s| String::from(s)).collect();
+            let expected: Vec<String> = code.split_whitespace().map(|s| String::from(s)).collect();
             let mut tokenizer = syntax::gas::Lexer;
-            let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
+            let res: Vec<String> = tokenizer
+                .get_tokens(code)
+                .into_iter()
+                .map(|token| token.0)
+                .collect();
             assert_eq!(res, expected);
         }
 
         #[test]
-        fn tokenize_commas_parenthesis(){
+        fn tokenize_commas_parenthesis() {
             let code = "a, b, c(d, e(f)g, h";
-            let expected: Vec<String> = code.chars()
-                .filter(|ch| !matches!(ch, ' ' | '\n') )
+            let expected: Vec<String> = code
+                .chars()
+                .filter(|ch| !matches!(ch, ' ' | '\n'))
                 .map(|ch| String::from(ch))
                 .collect();
             let mut tokenizer = syntax::gas::Lexer;
-            let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
+            let res: Vec<String> = tokenizer
+                .get_tokens(code)
+                .into_iter()
+                .map(|token| token.0)
+                .collect();
             assert_eq!(res, expected);
         }
 
         #[test]
-        fn tokenize_labels(){
+        fn tokenize_labels() {
             let code = "
                 main:
                 loop2:
             ";
             let expected: Vec<String> = vec![String::from("main:"), String::from("loop2:")];
             let mut tokenizer = syntax::gas::Lexer;
-            let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
+            let res: Vec<String> = tokenizer
+                .get_tokens(code)
+                .into_iter()
+                .map(|token| token.0)
+                .collect();
             assert_eq!(res, expected);
         }
 
         #[test]
-        fn tokenize_sections(){
+        fn tokenize_sections() {
             let code = "
                 .globl
                 .text
             ";
             let expected: Vec<String> = vec![String::from(".globl"), String::from(".text")];
             let mut tokenizer = syntax::gas::Lexer;
-            let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
+            let res: Vec<String> = tokenizer
+                .get_tokens(code)
+                .into_iter()
+                .map(|token| token.0)
+                .collect();
             assert_eq!(res, expected);
         }
 
         #[test]
-        fn tokenize_numbers(){
+        fn tokenize_numbers() {
             let code = "-1 +3 -66 1000";
             let expected: Vec<String> = code.split_whitespace().map(|s| String::from(s)).collect();
             let mut tokenizer = syntax::gas::Lexer;
-            let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
+            let res: Vec<String> = tokenizer
+                .get_tokens(code)
+                .into_iter()
+                .map(|token| token.0)
+                .collect();
             assert_eq!(res, expected);
         }
 
         #[test]
-        fn tokenize_hex_offset(){
+        fn tokenize_hex_offset() {
             let code = "sw 5,0x3(6)";
-            let expected = [
-                "sw", "5", ",", "0x3", "(", "6", ")"
-            ].map(|s| String::from(s));
+            let expected = ["sw", "5", ",", "0x3", "(", "6", ")"].map(|s| String::from(s));
             let mut tokenizer = syntax::gas::Lexer;
-            let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
+            let res: Vec<String> = tokenizer
+                .get_tokens(code)
+                .into_iter()
+                .map(|token| token.0)
+                .collect();
             assert_eq!(res, expected);
         }
 
         #[test]
-        fn tokenize_binary_ops(){
+        fn tokenize_binary_ops() {
             let code = "
                 loop:   beq  x11, x0,  exit
                         add  x11, x5 + 5,  x0
                         beq  x0,  3 + -9,  loop
             ";
             let expected = [
-                "loop:", "beq", "x11", ",", "x0", ",", "exit",
-                "add", "x11", ",", "x5", "+", "5", ",", "x0",
-                "beq", "x0", ",", "3", "+", "-9", ",", "loop",
-            ].map(|s| String::from(s));
+                "loop:", "beq", "x11", ",", "x0", ",", "exit", "add", "x11", ",", "x5", "+", "5",
+                ",", "x0", "beq", "x0", ",", "3", "+", "-9", ",", "loop",
+            ]
+            .map(|s| String::from(s));
             let mut tokenizer = syntax::gas::Lexer;
-            let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
+            let res: Vec<String> = tokenizer
+                .get_tokens(code)
+                .into_iter()
+                .map(|token| token.0)
+                .collect();
             assert_eq!(res, expected);
         }
 
         //add, and, or (R), lui (U), jal (J), addi, andi, ori, lw (I), sw (S), beq, blt (B)
         #[test]
-        fn tokenize_rv32i_subset0(){
+        fn tokenize_rv32i_subset0() {
             let code = "
                 addi    sp, sp, 16
                 andi    sp, sp, 16
@@ -206,32 +246,33 @@ mod tests {
                 lw      ra, -12(sp)
             ";
             let expected = [
-                "addi", "sp", ",", "sp", ",", "16",
-                "andi", "sp", ",", "sp", ",", "16",
-                "ori", "sp", ",", "sp", ",", "16",
-                "sw", "t0", ",", "3", "(", "t1", ")",
-                "beq", "t1", ",", "t2", ",", "0x900",
-                "blt", "t1", ",", "t2", ",", "0x900",
-                "lui", "t3", ",", "25",
-                "add", "t3", ",", "t2", ",", "t1",
-                "or", "t3", ",", "t2", ",", "t1",
-                "and", "t3", ",", "t2", ",", "t1",
-                "jal", "t4", ",", "0x1000",
-                "lw", "ra", ",", "-12", "(", "sp", ")",
-            ].map(|s| String::from(s));
+                "addi", "sp", ",", "sp", ",", "16", "andi", "sp", ",", "sp", ",", "16", "ori",
+                "sp", ",", "sp", ",", "16", "sw", "t0", ",", "3", "(", "t1", ")", "beq", "t1", ",",
+                "t2", ",", "0x900", "blt", "t1", ",", "t2", ",", "0x900", "lui", "t3", ",", "25",
+                "add", "t3", ",", "t2", ",", "t1", "or", "t3", ",", "t2", ",", "t1", "and", "t3",
+                ",", "t2", ",", "t1", "jal", "t4", ",", "0x1000", "lw", "ra", ",", "-12", "(",
+                "sp", ")",
+            ]
+            .map(|s| String::from(s));
             let mut tokenizer = syntax::gas::Lexer;
-            let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
+            let res: Vec<String> = tokenizer
+                .get_tokens(code)
+                .into_iter()
+                .map(|token| token.0)
+                .collect();
             assert_eq!(res, expected);
         }
 
         #[test]
-        fn tokenize_strings(){
+        fn tokenize_strings() {
             let code = "\"isso ai\"  \"esse \\\"cara\\\"\"";
-            let expected = [
-                "\"isso ai\"", "\"esse \\\"cara\\\"\"",
-            ].map(|s| String::from(s));
+            let expected = ["\"isso ai\"", "\"esse \\\"cara\\\"\""].map(|s| String::from(s));
             let mut tokenizer = syntax::gas::Lexer;
-            let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
+            let res: Vec<String> = tokenizer
+                .get_tokens(code)
+                .into_iter()
+                .map(|token| token.0)
+                .collect();
             assert_eq!(res, expected);
         }
 
@@ -243,12 +284,16 @@ mod tests {
                         beq  x0,  x0,  loop
             ";
             let expected = [
-                "loop:", "beq", "x11", ",", "x0", ",", "exit",
-                "add", "x11", ",", "x5", ",", "x0",
+                "loop:", "beq", "x11", ",", "x0", ",", "exit", "add", "x11", ",", "x5", ",", "x0",
                 "beq", "x0", ",", "x0", ",", "loop",
-            ].map(|s| String::from(s));
+            ]
+            .map(|s| String::from(s));
             let mut tokenizer = syntax::gas::Lexer;
-            let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
+            let res: Vec<String> = tokenizer
+                .get_tokens(code)
+                .into_iter()
+                .map(|token| token.0)
+                .collect();
             assert_eq!(res, expected);
         }
 
@@ -264,16 +309,17 @@ mod tests {
                     addi s0, sp, 16
             ";
             let expected = [
-                ".text",
-                ".globl", "main",
-                "main:",
-                "addi", "sp", ",", "sp", ",", "-16",
-                "sw", "ra", ",", "12", "(", "sp", ")",
-                "sw", "s0", ",", "8", "(", "sp", ")",
-                "addi", "s0", ",", "sp", ",", "16",
-            ].map(|s| String::from(s));
+                ".text", ".globl", "main", "main:", "addi", "sp", ",", "sp", ",", "-16", "sw",
+                "ra", ",", "12", "(", "sp", ")", "sw", "s0", ",", "8", "(", "sp", ")", "addi",
+                "s0", ",", "sp", ",", "16",
+            ]
+            .map(|s| String::from(s));
             let mut tokenizer = syntax::gas::Lexer;
-            let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
+            let res: Vec<String> = tokenizer
+                .get_tokens(code)
+                .into_iter()
+                .map(|token| token.0)
+                .collect();
             assert_eq!(res, expected);
         }
 
@@ -291,28 +337,22 @@ mod tests {
                     ret
             ";
             let expected = [
-                ".text",
-                ".globl", "main",
-                "main:",
-                "li", "a0", ",", "0",
-                "lw", "ra", ",", "12", "(", "sp", ")",
-                "lw", "s0", ",", "8", "(", "sp", ")",
-                "addi", "sp", ",", "sp", ",", "16",
-                "ret",
-            ].map(|s| String::from(s));
+                ".text", ".globl", "main", "main:", "li", "a0", ",", "0", "lw", "ra", ",", "12",
+                "(", "sp", ")", "lw", "s0", ",", "8", "(", "sp", ")", "addi", "sp", ",", "sp", ",",
+                "16", "ret",
+            ]
+            .map(|s| String::from(s));
             let mut tokenizer = syntax::gas::Lexer;
-            let res: Vec<String> = tokenizer.get_tokens(code).into_iter().map(|token| token.0).collect();
+            let res: Vec<String> = tokenizer
+                .get_tokens(code)
+                .into_iter()
+                .map(|token| token.0)
+                .collect();
             assert_eq!(res, expected);
         }
 
-
-
-
         // TODO: Lexer tests
 
-
-
-        
         // Bits utils
 
         #[test]
@@ -321,9 +361,6 @@ mod tests {
             let m = set_remaining_bits(n, 2, 1);
             assert_eq!(m, 0b11111111_11111111_11111111_11111101);
         }
-
-
-
 
         // Binary encoding of instructions
 
@@ -448,11 +485,6 @@ mod tests {
             assert_eq!(res, expected, "LeFT: {res:x}, RIGHT: {expected:x}");
         }
 
-
-
-
-
-
         // Test Endianness
         #[test]
         fn endianness_rw_bytes_to_word() {
@@ -468,11 +500,6 @@ mod tests {
             assert_eq!(values, [0x0, 0x0, 0x11, 0x17]);
             assert_eq!(value_be, val);
         }
-
-
-
-
-
 
         // CPU
         #[test]
@@ -509,11 +536,6 @@ mod tests {
             }
         }
 
-
-
-
-
-
         // Memory
         #[test]
         fn memory_rw_byte() {
@@ -522,7 +544,12 @@ mod tests {
             memory.reserve_bytes(values.len());
             for (idx, value) in values.into_iter().enumerate() {
                 memory.write_byte(idx, value);
-                assert_eq!(memory.read_byte(idx), value, "Error reading byte at {}", idx);
+                assert_eq!(
+                    memory.read_byte(idx),
+                    value,
+                    "Error reading byte at {}",
+                    idx
+                );
             }
         }
 
@@ -532,8 +559,13 @@ mod tests {
             let values = [1u32, 2u32, 3u32, 4u32];
             memory.reserve_words(values.len());
             for (idx, value) in values.into_iter().enumerate() {
-                memory.write_word(idx*4, value);
-                assert_eq!(memory.read_word(idx*4), value, "Error reading byte at {}", idx);
+                memory.write_word(idx * 4, value);
+                assert_eq!(
+                    memory.read_word(idx * 4),
+                    value,
+                    "Error reading byte at {}",
+                    idx
+                );
             }
         }
 
@@ -564,11 +596,6 @@ mod tests {
             assert_eq!(memory.words(), values);
         }
 
-
-
-
-
-
         // Test Machine
         #[test]
         fn machine_test0() {
@@ -595,9 +622,6 @@ mod tests {
             assert!(m.assert_reg(10u32, 1000));
         }
 
-
-
-
         // Test ISA
         // TODO: test more complex cases (negative offsets, sections in different orders than the
         // usual, jumps to non-existing labels, ...)
@@ -621,7 +645,10 @@ mod tests {
             (m, tools)
         }
 
-        fn isa_rvi32_mach_deterministic(code: &str, n_decodes: u32) -> (SimpleMachine, AssemblerTools) {
+        fn isa_rvi32_mach_deterministic(
+            code: &str,
+            n_decodes: u32,
+        ) -> (SimpleMachine, AssemblerTools) {
             let tools = build_code_repr(code);
             let mut m = new_machine_from_tools(&tools);
             for _ in 0..n_decodes {
@@ -637,9 +664,9 @@ mod tests {
                 match m.decode() {
                     Ok(state) => match state {
                         emu::machine::MachineState::Exit(_status) => break,
-                        emu::machine::MachineState::Ok => {},
-                    }
-                    Err(_err)  => break,
+                        emu::machine::MachineState::Ok => {}
+                    },
+                    Err(_err) => break,
                 }
             }
             (m, tools)
@@ -991,9 +1018,6 @@ mod tests {
             assert_eq!(t5, -16);
         }
 
-
-
-
         // Test programs
         #[test]
         fn program_funccall() {
@@ -1091,7 +1115,7 @@ mod tests {
                     .skip 64
             ";
             let n_executions = 28;
-            let (m, _t) = isa_rvi32_mach_deterministic(code, n_executions );
+            let (m, _t) = isa_rvi32_mach_deterministic(code, n_executions);
             let a2 = Register::A2.id() as usize;
             let t3 = Register::T3.id() as usize;
             let sp = Register::SP.id() as usize;
@@ -1217,16 +1241,13 @@ mod tests {
             let f = -12;
             let datasection = t.sections.get(".data").unwrap();
             let varaddr = datasection.address;
-            let regs: Vec<i32> = m.read_memory_words(varaddr, 3)
+            let regs: Vec<i32> = m
+                .read_memory_words(varaddr, 3)
                 .into_iter()
                 .map(|reg| reg as i32)
                 .collect();
-            assert_eq!(regs, vec![3*f, 5*f, 10*f]);
+            assert_eq!(regs, vec![3 * f, 5 * f, 10 * f]);
         }
-
-
-
-
 
         // Test elf R/W
         #[test]
@@ -1240,7 +1261,8 @@ mod tests {
 
             let mut writer = ElfWriter::new();
             writer.set_start_address(0);
-            writer.set_section_data(SectionName::Text, bytes, 4)
+            writer
+                .set_section_data(SectionName::Text, bytes, 4)
                 .expect("error setting text data");
             let write_res = writer.save(filename);
             let rem_res = std::fs::remove_file(filename);
@@ -1260,7 +1282,8 @@ mod tests {
             // Writing temporary ELF file
             let mut writer = ElfWriter::new();
             writer.set_start_address(0);
-            writer.set_section_data(SectionName::Text, bytes, 4)
+            writer
+                .set_section_data(SectionName::Text, bytes, 4)
                 .expect("error setting text data");
             let write_res = writer.save(filename);
             assert!(write_res.is_ok());
@@ -1270,8 +1293,7 @@ mod tests {
             if let Ok(data) = read_io_res {
                 let read_res = ElfReader::new(&data, DataEndianness::Le);
                 assert!(read_res.is_ok());
-            }
-            else {
+            } else {
                 assert!(read_io_res.is_ok());
             }
 
@@ -1296,7 +1318,8 @@ mod tests {
             // Saving the binary code in the ELF format
             let mut writer = ElfWriter::new();
             writer.set_start_address(0);
-            writer.set_section_data(SectionName::Text, bytes_written.clone(), 4)
+            writer
+                .set_section_data(SectionName::Text, bytes_written.clone(), 4)
                 .expect("error setting text data");
             let write_res = writer.save(filename);
             assert!(write_res.is_ok());
@@ -1315,12 +1338,10 @@ mod tests {
                 if let Ok(reader) = read_res {
                     let bytes_read = &reader.section(".text").unwrap().data;
                     assert_eq!(bytes_read, &bytes_written);
-                }
-                else {
+                } else {
                     assert!(read_res.is_ok());
                 }
-            }
-            else {
+            } else {
                 assert!(read_io_res.is_ok());
             }
         }

@@ -170,7 +170,7 @@ impl ArgValue {
             ArgValue::Byte(b)            => Some((*b).try_into().unwrap()),
             ArgValue::Number(n)          => Some(*n),
             ArgValue::Register(register) => Some(register.id().into()),
-            ArgValue::Offset(_abs_addr, _rel_addr)       => {
+            ArgValue::Offset(_abs_addr, _rel_addr) => {
                 todo!();
             },
             _ => None

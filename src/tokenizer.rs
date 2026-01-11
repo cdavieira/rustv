@@ -156,15 +156,18 @@ impl<T: ToGenericToken, C: TokenClassifier<Token = T>> Tokenizer for C {
     type Token = T;
 
     fn parse(&self, tokens: Vec<(String, Position)>) -> Vec<<Self as Tokenizer>::Token>  {
-        let mut lexemes = Vec::new();
         let mut it = PositionedStringStreamReader::new(tokens.into_iter(), (String::from("\n"), Position::new(0, 0, 0)));
+
+        let mut tokens = Vec::new();
+
         while let Some(_) = it.current_token() {
             if let Some(lex) = self.handle_token(&mut it) {
-                lexemes.push(lex);
+                tokens.push(lex);
             }
             it.advance();
         }
-        lexemes
+
+        tokens
     }
 }
 
