@@ -1,47 +1,29 @@
 pub mod gas {
     use crate::lang::{
-        highassembly::ArgValue,
-        highassembly::SectionName,
-        highassembly::KeyValue,
-        highassembly::Register,
-        highassembly::GenericBlock,
-        ext::Extension,
-        ext::RV32I,
-        ext::M,
-        pseudo::Pseudo,
+        directive::Directive, directive::DirectiveInstruction, ext::Extension, ext::M, ext::RV32I,
+        highassembly::ArgValue, highassembly::GenericBlock, highassembly::KeyValue,
+        highassembly::Register, highassembly::SectionName, pseudo::Pseudo,
         pseudo::PseudoInstruction,
-        directive::Directive,
-        directive::DirectiveInstruction,
     };
 
     use crate::streamreader::{
-        CharStreamReader,
-        Position,
-        PositionedStringStreamReader,
-        StreamReader,
-        StringStreamReader,
+        CharStreamReader, Position, PositionedStringStreamReader, StreamReader, StringStreamReader,
     };
 
     use crate::lexer::CommonClassifier;
 
     use crate::tokenizer::{
+        GenericToken, ToDirective, ToExtension, ToGenericToken, ToPseudo, ToRegister,
         TokenClassifier,
-        ToPseudo,
-        ToRegister,
-        ToDirective,
-        ToExtension,
-        ToGenericToken,
-        GenericToken,
     };
 
     use crate::parser::{self};
 
     use crate::assembler::{self, AssemblerTools};
 
-
     /* Lexer */
 
-    pub struct Lexer ;
+    pub struct Lexer;
 
     impl CommonClassifier for Lexer {
         fn is_ambiguous(&self, ch: char) -> bool {
@@ -69,7 +51,7 @@ pub mod gas {
         }
 
         fn is_unit(&self, ch: char) -> bool {
-            matches!(ch, ',' | '(' |')')
+            matches!(ch, ',' | '(' | ')')
         }
 
         fn is_comment(&self, ch: char) -> bool {
@@ -100,10 +82,8 @@ pub mod gas {
         }
     }
 
-
-
     /* Tokenizer */
-    pub struct Tokenizer ;
+    pub struct Tokenizer;
 
     #[derive(Debug)]
     pub enum Token {
@@ -125,67 +105,67 @@ pub mod gas {
     }
 
     impl ToRegister for Tokenizer {
-        fn to_register(&self, token: &str) -> Option<Register>  {
+        fn to_register(&self, token: &str) -> Option<Register> {
             match token {
                 "x0" | "zero" => Some(Register::X0),
-                "x1" | "ra"   => Some(Register::X1),
-                "x2" | "sp"   => Some(Register::X2),
-                "x3" | "gp"   => Some(Register::X3),
-                "x4" | "tp"   => Some(Register::X4),
-                "x5" | "t0"   => Some(Register::X5),
-                "x6" | "t1"   => Some(Register::X6),
-                "x7" | "t2"   => Some(Register::X7),
+                "x1" | "ra" => Some(Register::X1),
+                "x2" | "sp" => Some(Register::X2),
+                "x3" | "gp" => Some(Register::X3),
+                "x4" | "tp" => Some(Register::X4),
+                "x5" | "t0" => Some(Register::X5),
+                "x6" | "t1" => Some(Register::X6),
+                "x7" | "t2" => Some(Register::X7),
                 "x8" | "s0" | "fp" => Some(Register::X8),
-                "x9" | "s1"   => Some(Register::X9),
-                "x10" | "a0"  => Some(Register::X10),
-                "x11" | "a1"  => Some(Register::X11),
-                "x12" | "a2"  => Some(Register::X12),
-                "x13" | "a3"  => Some(Register::X13),
-                "x14" | "a4"  => Some(Register::X14),
-                "x15" | "a5"  => Some(Register::X15),
-                "x16" | "a6"  => Some(Register::X16),
-                "x17" | "a7"  => Some(Register::X17),
-                "x18" | "s2"  => Some(Register::X18),
-                "x19" | "s3"  => Some(Register::X19),
-                "x20" | "s4"  => Some(Register::X20),
-                "x21" | "s5"  => Some(Register::X21),
-                "x22" | "s6"  => Some(Register::X22),
-                "x23" | "s7"  => Some(Register::X23),
-                "x24" | "s8"  => Some(Register::X24),
-                "x25" | "s9"  => Some(Register::X25),
+                "x9" | "s1" => Some(Register::X9),
+                "x10" | "a0" => Some(Register::X10),
+                "x11" | "a1" => Some(Register::X11),
+                "x12" | "a2" => Some(Register::X12),
+                "x13" | "a3" => Some(Register::X13),
+                "x14" | "a4" => Some(Register::X14),
+                "x15" | "a5" => Some(Register::X15),
+                "x16" | "a6" => Some(Register::X16),
+                "x17" | "a7" => Some(Register::X17),
+                "x18" | "s2" => Some(Register::X18),
+                "x19" | "s3" => Some(Register::X19),
+                "x20" | "s4" => Some(Register::X20),
+                "x21" | "s5" => Some(Register::X21),
+                "x22" | "s6" => Some(Register::X22),
+                "x23" | "s7" => Some(Register::X23),
+                "x24" | "s8" => Some(Register::X24),
+                "x25" | "s9" => Some(Register::X25),
                 "x26" | "s10" => Some(Register::X26),
                 "x27" | "s11" => Some(Register::X27),
-                "x28" | "t3"  => Some(Register::X28),
-                "x29" | "t4"  => Some(Register::X29),
-                "x30" | "t5"  => Some(Register::X30),
-                "x31" | "t6"  => Some(Register::X31),
+                "x28" | "t3" => Some(Register::X28),
+                "x29" | "t4" => Some(Register::X29),
+                "x30" | "t5" => Some(Register::X30),
+                "x31" | "t6" => Some(Register::X31),
                 "pc" => Some(Register::PC),
-                _ => None
+                _ => None,
             }
         }
     }
 
     impl ToPseudo for Tokenizer {
-        fn to_pseudo(&self, token: &str) -> Option<Box<dyn Pseudo>>  {
+        fn to_pseudo(&self, token: &str) -> Option<Box<dyn Pseudo>> {
             match token {
                 "ret" => Some(Box::new(PseudoInstruction::RET)),
-                "li"  => Some(Box::new(PseudoInstruction::LI)),
-                "mv"  => Some(Box::new(PseudoInstruction::MV)),
-                "la"  => Some(Box::new(PseudoInstruction::LA)),
+                "li" => Some(Box::new(PseudoInstruction::LI)),
+                "mv" => Some(Box::new(PseudoInstruction::MV)),
+                "la" => Some(Box::new(PseudoInstruction::LA)),
                 "nop" => Some(Box::new(PseudoInstruction::NOP)),
-                _ => None
+                _ => None,
             }
         }
     }
 
     impl ToDirective for Tokenizer {
-        fn to_directive(&self, token: &str) -> Option<Box<dyn Directive>>  {
+        fn to_directive(&self, token: &str) -> Option<Box<dyn Directive>> {
             match token {
-                ".byte"  => Some(Box::new(DirectiveInstruction::Byte)),
-                ".word"  => Some(Box::new(DirectiveInstruction::Word)),
+                ".byte" => Some(Box::new(DirectiveInstruction::Byte)),
+                ".word" => Some(Box::new(DirectiveInstruction::Word)),
                 ".ascii" => Some(Box::new(DirectiveInstruction::Ascii)),
-                ".skip"  => Some(Box::new(DirectiveInstruction::Skip)),
-                _ => None
+                ".skip" => Some(Box::new(DirectiveInstruction::Skip)),
+                _ => None,
             }
         }
     }
@@ -193,53 +173,53 @@ pub mod gas {
     impl ToExtension<&str> for Tokenizer {
         fn to_extension(&self, token: &str) -> Option<Box<dyn Extension>> {
             match token {
-                "lui"   => Some(Box::new(RV32I::LUI))  ,
+                "lui" => Some(Box::new(RV32I::LUI)),
                 "auipc" => Some(Box::new(RV32I::AUIPC)),
-                "addi"  => Some(Box::new(RV32I::ADDI)) ,
-                "andi"  => Some(Box::new(RV32I::ANDI)) ,
-                "ori"   => Some(Box::new(RV32I::ORI))  ,
-                "xori"  => Some(Box::new(RV32I::XORI)) ,
-                "add"   => Some(Box::new(RV32I::ADD))  ,
-                "sub"   => Some(Box::new(RV32I::SUB))  ,
-                "and"   => Some(Box::new(RV32I::AND))  ,
-                "or"    => Some(Box::new(RV32I::OR))   ,
-                "xor"   => Some(Box::new(RV32I::XOR))  ,
-                "sll"   => Some(Box::new(RV32I::SLL))  ,
-                "srl"   => Some(Box::new(RV32I::SRL))  ,
-                "sra"   => Some(Box::new(RV32I::SRA))  ,
+                "addi" => Some(Box::new(RV32I::ADDI)),
+                "andi" => Some(Box::new(RV32I::ANDI)),
+                "ori" => Some(Box::new(RV32I::ORI)),
+                "xori" => Some(Box::new(RV32I::XORI)),
+                "add" => Some(Box::new(RV32I::ADD)),
+                "sub" => Some(Box::new(RV32I::SUB)),
+                "and" => Some(Box::new(RV32I::AND)),
+                "or" => Some(Box::new(RV32I::OR)),
+                "xor" => Some(Box::new(RV32I::XOR)),
+                "sll" => Some(Box::new(RV32I::SLL)),
+                "srl" => Some(Box::new(RV32I::SRL)),
+                "sra" => Some(Box::new(RV32I::SRA)),
                 "fence" => Some(Box::new(RV32I::FENCE)),
-                "slti"  => Some(Box::new(RV32I::SLTI)) ,
+                "slti" => Some(Box::new(RV32I::SLTI)),
                 "sltiu" => Some(Box::new(RV32I::SLTIU)),
-                "slli"  => Some(Box::new(RV32I::SLLI)) ,
-                "srli"  => Some(Box::new(RV32I::SRLI)) ,
-                "srai"  => Some(Box::new(RV32I::SRAI)) ,
-                "slt"   => Some(Box::new(RV32I::SLT))  ,
-                "sltu"  => Some(Box::new(RV32I::SLTU)) ,
-                "lw"    => Some(Box::new(RV32I::LW))   ,
-                "lh"    => Some(Box::new(RV32I::LH))   ,
-                "lhu"   => Some(Box::new(RV32I::LHU))  ,
-                "lb"    => Some(Box::new(RV32I::LB))   ,
-                "lbu"   => Some(Box::new(RV32I::LBU))  ,
-                "sw"    => Some(Box::new(RV32I::SW))   ,
-                "sh"    => Some(Box::new(RV32I::SH))   ,
-                "sb"    => Some(Box::new(RV32I::SB))   ,
-                "jal"   => Some(Box::new(RV32I::JAL))  ,
-                "jalr"  => Some(Box::new(RV32I::JALR)) ,
+                "slli" => Some(Box::new(RV32I::SLLI)),
+                "srli" => Some(Box::new(RV32I::SRLI)),
+                "srai" => Some(Box::new(RV32I::SRAI)),
+                "slt" => Some(Box::new(RV32I::SLT)),
+                "sltu" => Some(Box::new(RV32I::SLTU)),
+                "lw" => Some(Box::new(RV32I::LW)),
+                "lh" => Some(Box::new(RV32I::LH)),
+                "lhu" => Some(Box::new(RV32I::LHU)),
+                "lb" => Some(Box::new(RV32I::LB)),
+                "lbu" => Some(Box::new(RV32I::LBU)),
+                "sw" => Some(Box::new(RV32I::SW)),
+                "sh" => Some(Box::new(RV32I::SH)),
+                "sb" => Some(Box::new(RV32I::SB)),
+                "jal" => Some(Box::new(RV32I::JAL)),
+                "jalr" => Some(Box::new(RV32I::JALR)),
                 "ecall" => Some(Box::new(RV32I::ECALL)),
-                "beq"   => Some(Box::new(RV32I::BEQ))  ,
-                "bne"   => Some(Box::new(RV32I::BNE))  ,
-                "blt"   => Some(Box::new(RV32I::BLT))  ,
-                "bltu"  => Some(Box::new(RV32I::BLTU)) ,
-                "bge"   => Some(Box::new(RV32I::BGE))  ,
-                "bgeu"  => Some(Box::new(RV32I::BGEU)) ,
-                "mul"   => Some(Box::new(M::MUL))      ,
-                "mulh"  => Some(Box::new(M::MULH))     ,
-                "mulhu" => Some(Box::new(M::MULHU))    ,
-                "mulhsu"=> Some(Box::new(M::MULHSU))   ,
-                "div"   => Some(Box::new(M::DIV))      ,
-                "divu"  => Some(Box::new(M::DIVU))     ,
-                "rem"   => Some(Box::new(M::REM))      ,
-                "remu"  => Some(Box::new(M::REMU))     ,
+                "beq" => Some(Box::new(RV32I::BEQ)),
+                "bne" => Some(Box::new(RV32I::BNE)),
+                "blt" => Some(Box::new(RV32I::BLT)),
+                "bltu" => Some(Box::new(RV32I::BLTU)),
+                "bge" => Some(Box::new(RV32I::BGE)),
+                "bgeu" => Some(Box::new(RV32I::BGEU)),
+                "mul" => Some(Box::new(M::MUL)),
+                "mulh" => Some(Box::new(M::MULH)),
+                "mulhu" => Some(Box::new(M::MULHU)),
+                "mulhsu" => Some(Box::new(M::MULHSU)),
+                "div" => Some(Box::new(M::DIV)),
+                "divu" => Some(Box::new(M::DIVU)),
+                "rem" => Some(Box::new(M::REM)),
+                "remu" => Some(Box::new(M::REMU)),
                 _ => None,
             }
         }
@@ -252,7 +232,7 @@ pub mod gas {
             ToRegister::is_register(self, token)
         }
 
-        fn is_symbol(&self, token: &str) -> bool{
+        fn is_symbol(&self, token: &str) -> bool {
             matches!(token, "," | "(" | ")" | "+" | "-")
         }
 
@@ -264,7 +244,8 @@ pub mod gas {
             let mut chs = token.chars();
             let f: char = chs.nth(0).unwrap_or(' ');
             let first_ch_check = f.is_ascii_alphabetic() || matches!(f, '_' | '.');
-            let remaining_string_check = chs.all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_'));
+            let remaining_string_check =
+                chs.all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_'));
             first_ch_check && remaining_string_check
         }
 
@@ -294,8 +275,7 @@ pub mod gas {
             let decimal = if token.contains('x') {
                 let hex = token.replace("0x", "");
                 i32::from_str_radix(&hex, 16)
-            }
-            else {
+            } else {
                 token.parse::<i32>()
             };
 
@@ -308,7 +288,8 @@ pub mod gas {
                 return Some(Token::Number(decimal));
             };
             let Some(identifier) = it.advance_if(|next_token| {
-                !TokenClassifier::is_register(self, &next_token.0) && self.is_identifier(&next_token.0)
+                !TokenClassifier::is_register(self, &next_token.0)
+                    && self.is_identifier(&next_token.0)
             }) else {
                 return Some(Token::Number(decimal));
             };
@@ -335,7 +316,7 @@ pub mod gas {
                 ")" => Some(Token::Rpar),
                 "+" => Some(Token::Plus),
                 "-" => Some(Token::Minus),
-                _ => None
+                _ => None,
             }
         }
 
@@ -344,10 +325,8 @@ pub mod gas {
                 return None;
             };
             match self.to_extension(&token.0) {
-                Some(e) => {
-                    Some(Token::Op(e, token.1))
-                },
-                None => None
+                Some(e) => Some(Token::Op(e, token.1)),
+                None => None,
             }
         }
 
@@ -371,8 +350,7 @@ pub mod gas {
             };
             if let Some(d) = ToDirective::to_directive(self, &token.0) {
                 Some(Token::AssemblyDirective(d, token.1))
-            }
-            else {
+            } else {
                 None
             }
         }
@@ -381,7 +359,8 @@ pub mod gas {
             let Some(token) = it.current_token_ref() else {
                 return None;
             };
-            let Some(reg) = ToRegister::to_register(self, token.0.trim().to_lowercase().as_str()) else {
+            let Some(reg) = ToRegister::to_register(self, token.0.trim().to_lowercase().as_str())
+            else {
                 return None;
             };
             Some(Token::Reg(reg))
@@ -393,11 +372,9 @@ pub mod gas {
             };
             if let Some(p) = ToPseudo::to_pseudo(self, &token.0) {
                 Some(Token::Pseudo(p, token.1))
-            }
-            else if &token.0 == ".globl" {
+            } else if &token.0 == ".globl" {
                 Some(Token::LinkerDirective(token.0.to_string(), token.1))
-            }
-            else {
+            } else {
                 None
             }
         }
@@ -406,46 +383,63 @@ pub mod gas {
             let Some(token) = it.current_token_ref() else {
                 return None;
             };
-            Some(Token::Label(token.0.trim_end_matches(':').to_string(), token.1))
+            Some(Token::Label(
+                token.0.trim_end_matches(':').to_string(),
+                token.1,
+            ))
         }
     }
 
     impl ToGenericToken for Token {
         fn to_generic_token(self) -> Option<GenericToken> {
             match self {
-                Token::Plus                 => None,
-                Token::Minus                => None,
-                Token::Lpar                 => None,
-                Token::Rpar                 => None,
-                Token::Comma                => None,
-                Token::Op(extension, pos)   => Some(GenericToken::KeyToken(KeyValue::Op(extension), pos)),
-                Token::Pseudo(pseudo, pos)  => Some(GenericToken::KeyToken(KeyValue::Pseudo(pseudo), pos)),
-                Token::Label(label, pos)    => Some(GenericToken::KeyToken(KeyValue::Label(label), pos)),
-                Token::AssemblyDirective(directive, pos) =>
-                    Some(GenericToken::KeyToken(KeyValue::AssemblyDirective(directive), pos)),
-                Token::Reg(register)        => Some(GenericToken::ArgToken(ArgValue::Register(register))),
-                Token::Name(name, off)      => Some(GenericToken::ArgToken(ArgValue::Use(name, off))),
-                Token::Str(literal)         => Some(GenericToken::ArgToken(ArgValue::Literal(literal))),
-                Token::Number(n)            => Some(GenericToken::ArgToken(ArgValue::Number(n))),
-                Token::Section(sec, pos)    => {
-                    match sec.as_str() {
-                        "text" => Some(GenericToken::KeyToken(KeyValue::Section(SectionName::Text), pos)),
-                        "data" => Some(GenericToken::KeyToken(KeyValue::Section(SectionName::Data), pos)),
-                        "bss"  => Some(GenericToken::KeyToken(KeyValue::Section(SectionName::Bss), pos)),
-                        other  => Some(GenericToken::KeyToken(KeyValue::Section(SectionName::Custom(other.to_string())), pos)),
-                    }
+                Token::Plus => None,
+                Token::Minus => None,
+                Token::Lpar => None,
+                Token::Rpar => None,
+                Token::Comma => None,
+                Token::Op(extension, pos) => {
+                    Some(GenericToken::KeyToken(KeyValue::Op(extension), pos))
+                }
+                Token::Pseudo(pseudo, pos) => {
+                    Some(GenericToken::KeyToken(KeyValue::Pseudo(pseudo), pos))
+                }
+                Token::Label(label, pos) => {
+                    Some(GenericToken::KeyToken(KeyValue::Label(label), pos))
+                }
+                Token::AssemblyDirective(directive, pos) => Some(GenericToken::KeyToken(
+                    KeyValue::AssemblyDirective(directive),
+                    pos,
+                )),
+                Token::Reg(register) => Some(GenericToken::ArgToken(ArgValue::Register(register))),
+                Token::Name(name, off) => Some(GenericToken::ArgToken(ArgValue::Use(name, off))),
+                Token::Str(literal) => Some(GenericToken::ArgToken(ArgValue::Literal(literal))),
+                Token::Number(n) => Some(GenericToken::ArgToken(ArgValue::Number(n))),
+                Token::Section(sec, pos) => match sec.as_str() {
+                    "text" => Some(GenericToken::KeyToken(
+                        KeyValue::Section(SectionName::Text),
+                        pos,
+                    )),
+                    "data" => Some(GenericToken::KeyToken(
+                        KeyValue::Section(SectionName::Data),
+                        pos,
+                    )),
+                    "bss" => Some(GenericToken::KeyToken(
+                        KeyValue::Section(SectionName::Bss),
+                        pos,
+                    )),
+                    other => Some(GenericToken::KeyToken(
+                        KeyValue::Section(SectionName::Custom(other.to_string())),
+                        pos,
+                    )),
                 },
-                Token::LinkerDirective(s, pos) => {
-                    match s.as_str() {
-                        ".globl" => Some(GenericToken::KeyToken(KeyValue::LinkerDirective(s), pos)),
-                        _        => None,
-                    }
+                Token::LinkerDirective(s, pos) => match s.as_str() {
+                    ".globl" => Some(GenericToken::KeyToken(KeyValue::LinkerDirective(s), pos)),
+                    _ => None,
                 },
             }
         }
     }
-
-
 
     /* Parser */
 
@@ -460,10 +454,7 @@ pub mod gas {
         }
     }
 
-
-
     // /* Assembler */
-
     pub struct Assembler;
 
     impl assembler::Assembler for Assembler {
@@ -473,9 +464,6 @@ pub mod gas {
             assembler::assemble(instruction)
         }
     }
-
-
-
 
     /* Loader */
 }

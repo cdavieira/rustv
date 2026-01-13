@@ -36,7 +36,7 @@ examine_text_section(){
 	${CROSS_OBJDUMP} -d $1
 }
 
-gdb(){
+run_gdb(){
 	exit_if_empty "$1" "Missing executable"
 	${GDB} -x ${GDB_SCRIPT} $1
 }
@@ -76,7 +76,7 @@ case "$1" in
 	"link")      link $2 $3 ;;
 	"stub")      run_stub   ;;
 	"decoder")   run_decoder $2 ;;
-	"gdb")       gdb $2 ;;
+	"gdb")       run_gdb $2 ;;
 	"readelf")   examine_elf $2 ;;
 	"objdump")   examine_text_section $2 ;;
 	"emu_elf")   emu_from_elf $2 ;;

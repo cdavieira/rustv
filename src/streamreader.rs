@@ -26,7 +26,7 @@ impl Position {
 pub trait StreamReader<T: PartialEq> {
     fn delimiter(&self) -> T;
 
-    fn advance(&mut self) -> () ;
+    fn advance(&mut self) -> ();
     fn advance_and_read(&mut self) -> Option<T> {
         self.advance();
         self.current_token()
@@ -43,18 +43,17 @@ pub trait StreamReader<T: PartialEq> {
 
         if f(&next_token) {
             self.advance_and_read()
-        }
-        else {
+        } else {
             None
         }
     }
 
-    fn current_token(&self) -> Option<T> ;
-    fn current_token_ref(&self) -> &Option<T> ;
-    fn current_position(&self) -> Option<Position> ;
+    fn current_token(&self) -> Option<T>;
+    fn current_token_ref(&self) -> &Option<T>;
+    fn current_position(&self) -> Option<Position>;
 
-    fn next_token(&mut self) -> Option<T> ;
-    fn next_token_ref(&mut self) -> Option<&T> ;
+    fn next_token(&mut self) -> Option<T>;
+    fn next_token_ref(&mut self) -> Option<&T>;
     fn next_position(&mut self) -> Option<Position> {
         let current_position = self.current_position();
         let current_token = self.current_token();
@@ -64,16 +63,17 @@ pub trait StreamReader<T: PartialEq> {
                 let new_line = current_token == self.delimiter();
                 let seq = current_position.seq + 1;
                 let row = current_position.row + if new_line { 1 } else { 0 };
-                let col = if new_line { 0 } else { current_position.col + 1 };
+                let col = if new_line {
+                    0
+                } else {
+                    current_position.col + 1
+                };
                 Some(Position::new(seq, row, col))
-            },
+            }
             _ => None,
         }
     }
 }
-
-
-
 
 use std::iter::Peekable;
 
@@ -96,7 +96,11 @@ where
     pub fn new(i: I, delimiter: T) -> Self {
         let mut it = i.peekable();
         let token = it.next();
-        let position = if token.is_none() { None } else { Some(Position::new(0, 0, 0)) };
+        let position = if token.is_none() {
+            None
+        } else {
+            Some(Position::new(0, 0, 0))
+        };
         GenericStreamReader {
             it,
             token,
@@ -124,7 +128,7 @@ where
         self.token.clone()
     }
 
-    fn current_token_ref(&self) -> &Option<T>  {
+    fn current_token_ref(&self) -> &Option<T> {
         &self.token
     }
 
@@ -136,17 +140,14 @@ where
         self.it.peek().cloned()
     }
 
-    fn next_token_ref(&mut self) -> Option<&T>  {
+    fn next_token_ref(&mut self) -> Option<&T> {
         self.it.peek()
     }
 }
-
-
-
-
 
 use std::str::Chars;
 use std::vec::IntoIter;
 pub type CharStreamReader<'a> = GenericStreamReader<char, Chars<'a>>;
 pub type StringStreamReader<'a> = GenericStreamReader<String, IntoIter<String>>;
-pub type PositionedStringStreamReader<'a> = GenericStreamReader<(String, Position), IntoIter<(String, Position)>>;
+pub type PositionedStringStreamReader<'a> =
+    GenericStreamReader<(String, Position), IntoIter<(String, Position)>>;

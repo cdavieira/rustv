@@ -1,7 +1,4 @@
-use object::elf::{
-    R_RISCV_PCREL_HI20,
-    R_RISCV_PCREL_LO12_I,
-};
+use object::elf::{R_RISCV_PCREL_HI20, R_RISCV_PCREL_LO12_I};
 use object::{
     Architecture,
     BinaryFormat,
@@ -14,21 +11,15 @@ use object::{
 
 use object::write::{
     self,
-    SectionId,
-    SymbolId,
     Relocation,
     // RelocationKind,
+    SectionId,
+    SymbolId,
 };
 
 use std::collections::hash_map::HashMap;
 
 use crate::lang::highassembly::SectionName;
-use crate::obj::dwarfwriter::add_debug_information;
-
-
-
-
-
 
 // Result
 
@@ -36,7 +27,7 @@ use crate::obj::dwarfwriter::add_debug_information;
 pub enum ElfWriterError {
     Build(write::Error),
     IO(std::io::Error),
-    WrongSection(String)
+    WrongSection(String),
 }
 
 impl std::fmt::Display for ElfWriterError {
@@ -59,10 +50,6 @@ impl From<std::io::Error> for ElfWriterError {
 
 pub type Result<T> = std::result::Result<T, ElfWriterError>;
 
-
-
-
-
 // ElfWriter
 
 pub struct ElfWriter<'a> {
@@ -75,30 +62,36 @@ pub struct ElfWriter<'a> {
 
 impl<'a> ElfWriter<'a> {
     pub fn new() -> Self {
-        let mut obj = write::Object::new(
-            BinaryFormat::Elf,
-            Architecture::Riscv32,
-            Endianness::Little
-        );
+        let mut obj =
+            write::Object::new(BinaryFormat::Elf, Architecture::Riscv32, Endianness::Little);
         let text = obj.add_section(Vec::new(), b".text".to_vec(), SectionKind::Text);
         let data = obj.add_section(Vec::new(), b".data".to_vec(), SectionKind::Data);
-        let bss  = obj.add_section(Vec::new(), b".bss".to_vec(), SectionKind::UninitializedData);
+        let bss = obj.add_section(Vec::new(), b".bss".to_vec(), SectionKind::UninitializedData);
         let symbol_ids = HashMap::new();
-        ElfWriter { obj, text, data, bss, symbol_ids, }
+        ElfWriter {
+            obj,
+            text,
+            data,
+            bss,
+            symbol_ids,
+        }
     }
 
     pub fn set_section_data(
         &mut self,
         section_name: SectionName,
         data: Vec<u8>,
-        align: u64
-    ) -> Result<()>
-    {
+        align: u64,
+    ) -> Result<()> {
         let secid = match section_name {
             SectionName::Text => self.text,
             SectionName::Data => self.data,
-            SectionName::Bss  => self.bss,
-            _ => return Err(ElfWriterError::WrongSection(String::from("Can't data to custom sections yet")))
+            SectionName::Bss => self.bss,
+            _ => {
+                return Err(ElfWriterError::WrongSection(String::from(
+                    "Can't data to custom sections yet",
+                )));
+            }
         };
         self.obj.section_mut(secid).set_data(data, align);
         Ok(())
@@ -123,16 +116,11 @@ impl<'a> ElfWriter<'a> {
         section_name: SectionName,
         rel_addr_to_sec_start: u64,
         name: &str,
-        len: u64
-    )
-    {
+        len: u64,
+    ) {
         let (kind, section) = match section_name {
-            SectionName::Text => {
-                (write::SymbolKind::Label, self.text)
-            },
-            SectionName::Data => {
-                (write::SymbolKind::Data, self.data)
-            },
+            SectionName::Text => (write::SymbolKind::Label, self.text),
+            SectionName::Data => (write::SymbolKind::Data, self.data),
             _ => panic!("Can't add symbol to this type of section"),
         };
 
@@ -161,8 +149,7 @@ impl<'a> ElfWriter<'a> {
         text_section_off: u64,
         symbol_addend: i32,
         idx: usize,
-    ) -> Result<()>
-    {
+    ) -> Result<()> {
         create_ext_symbol_relocatable_reference(
             &mut self.obj,
             self.text,
@@ -170,7 +157,7 @@ impl<'a> ElfWriter<'a> {
             &self.symbol_ids,
             symbol_name,
             symbol_addend,
-            idx
+            idx,
         )
     }
 
@@ -181,7 +168,6 @@ impl<'a> ElfWriter<'a> {
     }
 }
 
-
 fn create_ext_symbol_relocatable_reference<'a>(
     obj: &mut write::Object<'a>,
     text_section_id: SectionId,
@@ -190,8 +176,7 @@ fn create_ext_symbol_relocatable_reference<'a>(
     symbol_name: &str,
     symbol_addend: i32,
     tmpidx: usize,
-) -> Result<()>
-{
+) -> Result<()> {
     let symbol_id = symbol_ids
         .get(symbol_name)
         .expect("Symbol id not found when creating relocation");
@@ -220,14 +205,18 @@ fn create_ext_symbol_relocatable_reference<'a>(
         offset: hi_off,
         symbol: *symbol_id,
         addend: symbol_addend as i64,
-        flags: write::RelocationFlags::Elf { r_type: R_RISCV_PCREL_HI20 },
+        flags: write::RelocationFlags::Elf {
+            r_type: R_RISCV_PCREL_HI20,
+        },
     };
 
     let symbol_lo_relocation = Relocation {
         offset: lo_off,
         symbol: tmp_label_id,
         addend: symbol_addend as i64,
-        flags: write::RelocationFlags::Elf { r_type: R_RISCV_PCREL_LO12_I },
+        flags: write::RelocationFlags::Elf {
+            r_type: R_RISCV_PCREL_LO12_I,
+        },
     };
 
     obj.add_relocation(text_section_id, symbol_hi_relocation)

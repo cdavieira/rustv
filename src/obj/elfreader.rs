@@ -1,22 +1,14 @@
 use std::collections::HashMap;
 
-use object::read::elf::ElfFile32;
-use object::{
-    self,
-    Endianness,
-    Object,
-    ObjectSection,
-    ObjectSymbol,
-};
 use object::read;
+use object::read::elf::ElfFile32;
+use object::{self, Endianness, Object, ObjectSection, ObjectSymbol};
 
 use crate::assembler::{self, AssemblerTools};
-use crate::lang::highassembly::{self,};
+use crate::lang::highassembly::{self};
+use crate::lang::lowassembly::{self, DataEndianness};
 use crate::streamreader::Position;
 use crate::utils::swap_chunk_endianness;
-use crate::lang::lowassembly::{self, DataEndianness};
-
-
 
 // Error
 
@@ -38,8 +30,6 @@ impl From<read::Error> for ElfReaderError {
 }
 
 pub type Result<T> = std::result::Result<T, ElfReaderError>;
-
-
 
 // ElfReader
 
@@ -76,19 +66,14 @@ pub struct ElfReader<'a> {
 }
 
 impl<'a> ElfReader<'a> {
-    pub fn new(
-        data: &'a Vec<u8>,
-        desired_endian: DataEndianness
-    ) -> Result<ElfReader<'a>>
-    {
+    pub fn new(data: &'a Vec<u8>, desired_endian: DataEndianness) -> Result<ElfReader<'a>> {
         let elf = read::elf::ElfFile32::parse(data.as_slice())?;
         let section_table = build_section_table(&elf, &desired_endian);
-        let symbol_table  = build_symbol_table(&elf);
+        let symbol_table = build_symbol_table(&elf);
         let relocation_table = build_relocation_table(&elf);
         let pc = if let Some(start) = elf.symbol_by_name("_start") {
             start.address() as usize
-        }
-        else {
+        } else {
             0
         };
         Ok(ElfReader {
@@ -109,7 +94,8 @@ impl<'a> ElfReader<'a> {
     }
 
     pub fn tools(&self) -> AssemblerTools {
-        let sections: HashMap<String, assembler::Section> = self.section_table
+        let sections: HashMap<String, assembler::Section> = self
+            .section_table
             .iter()
             .map(|pair| {
                 let name = highassembly::SectionName::from_default_name(&pair.1.name);
@@ -121,7 +107,8 @@ impl<'a> ElfReader<'a> {
             })
             .collect();
 
-        let symbols: HashMap<String, assembler::Symbol> = self.symbol_table
+        let symbols: HashMap<String, assembler::Symbol> = self
+            .symbol_table
             .iter()
             .map(|pair| {
                 let section = highassembly::SectionName::from_default_name(&pair.1.section);
@@ -144,13 +131,10 @@ impl<'a> ElfReader<'a> {
                 let rel = assembler::RelocationEntry {
                     id: idx,
                     address: pair.1.offset as usize,
-                    addend: pair.1.addend
+                    addend: pair.1.addend,
                 };
                 let relname = pair.0.clone();
-                relocations
-                    .entry(relname)
-                    .or_insert(Vec::new())
-                    .push(rel);
+                relocations.entry(relname).or_insert(Vec::new()).push(rel);
                 // if relocations.contains_key(&relname) {
                 //     relocations.insert(relname, vec![rel]);
                 // }
@@ -160,7 +144,9 @@ impl<'a> ElfReader<'a> {
                 // }
             });
 
-        let blocks: Vec<_> = self.elf.sections()
+        let blocks: Vec<_> = self
+            .elf
+            .sections()
             .map(|section| {
                 let name = section.name().unwrap();
                 let name = highassembly::SectionName::from_default_name(name);
@@ -168,13 +154,15 @@ impl<'a> ElfReader<'a> {
                 let data = section.data().unwrap();
                 let data = DataEndianness::build_words_from_bytes(&data, DataEndianness::Le);
                 let alignment = section.align() as usize;
-                let instructions = data.into_iter().enumerate().map(|(idx, word)|
-                    lowassembly::EncodedData {
+                let instructions = data
+                    .into_iter()
+                    .enumerate()
+                    .map(|(idx, word)| lowassembly::EncodedData {
                         data: vec![word],
                         alignment,
                         file_pos: Position::new(idx, idx, 0),
-                    }
-                ).collect();
+                    })
+                    .collect();
                 lowassembly::PositionedEncodedBlock {
                     addr,
                     name,
@@ -208,11 +196,10 @@ fn build_section_table<'a>(
             let align: usize = section.align().try_into().unwrap();
             let data: Vec<u8> = if endian == desired_endian {
                 data.to_vec()
-            } else { 
+            } else {
                 if align > 1 {
                     swap_chunk_endianness(data, align)
-                }
-                else {
+                } else {
                     data.to_vec()
                 }
             };
@@ -222,10 +209,7 @@ fn build_section_table<'a>(
                 align,
                 data,
             };
-            section_table.insert(
-                section.name().unwrap().to_string(),
-                s
-            );
+            section_table.insert(section.name().unwrap().to_string(), s);
         }
     }
     section_table
@@ -256,10 +240,7 @@ fn build_symbol_table<'a>(elf: &ElfFile32<'a>) -> HashMap<String, ElfSymbol> {
                     length,
                     scope,
                 };
-                symbol_table.insert(
-                    s.name.clone(),
-                    s,
-                );
+                symbol_table.insert(s.name.clone(), s);
             }
         }
     }
@@ -285,11 +266,8 @@ fn build_relocation_table<'a>(elf: &ElfFile32<'a>) -> HashMap<String, ElfRelocat
                         offset,
                         addend: addend as i32,
                     };
-                    relocation_table.insert(
-                        r.name.clone(),
-                        r
-                    );
-                },
+                    relocation_table.insert(r.name.clone(), r);
+                }
                 read::RelocationTarget::Section(_section_index) => panic!(),
                 read::RelocationTarget::Absolute => panic!(),
                 _ => panic!(),
