@@ -1,0 +1,30 @@
+ Montador
+
+ cargo build --release
+ ./target/release/rustv --elf-dbg ./examples/selection-sort.s
+ bat examples/selection-sort.s
+
+
+Emulador
+./target/release/rustv --debugger
+
+
+
+Depurador
+gdb main --quiet
+gdb> remote target :9999
+gdb> load
+gdb> b _start
+gdb> b loop_end
+gdb> list .
+gdb> c
+gdb> si
+gdb> info registers
+gdb> info address myvector
+gdb> x/3x 0x110f0
+gdb> c
+gdb> x/3x 0x110f0
+
+
+
+

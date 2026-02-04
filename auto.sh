@@ -6,6 +6,7 @@ CROSS_OBJDUMP="${CROSSPREFIX}objdump"
 CROSS_READELF="${CROSSPREFIX}readelf"
 CROSS_GDB="${CROSSPREFIX}gdb"
 
+RUSTV="./target/release/rustv"
 GDB="gdb"
 CARGO="cargo"
 
@@ -47,7 +48,8 @@ run_elf(){
 }
 
 run_stub(){
-	${CARGO} run -- --debugger
+	#${CARGO} run -- --debugger
+	${RUSTV} --debugger
 }
 
 run_decoder(){

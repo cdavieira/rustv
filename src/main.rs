@@ -1,10 +1,12 @@
-pub mod tokenizer;
+use rustv::utils::emulate_from_elf;
+
+pub mod assembler;
+pub mod lexer;
+pub mod parser;
 pub mod streamreader;
 pub mod syntax;
-pub mod lexer;
+pub mod tokenizer;
 pub mod utils;
-pub mod parser;
-pub mod assembler;
 pub mod emu {
     pub mod cpu;
     pub mod debugger;
@@ -19,27 +21,27 @@ pub mod lang {
     pub mod pseudo;
 }
 pub mod obj {
+    pub mod dwarfwriter;
     pub mod elfreader;
     pub mod elfwriter;
-    pub mod dwarfwriter;
 }
 
 fn main() {
     let arg_buffer: Vec<String> = std::env::args().collect();
-    let args: Vec<&str> =  arg_buffer.iter().map(|arg| arg.as_str()).collect();
+    let args: Vec<&str> = arg_buffer.iter().map(|arg| arg.as_str()).collect();
     let arglen = args.len();
 
-    let show_usage     = arglen > 1 && matches!(args[1], "--help"     | "-h") || arglen == 1;
-    let start_stub     = arglen > 1 && matches!(args[1], "--debugger" | "-d");
-    let assemble_code  = arglen > 2 && matches!(args[1], "--assemble" | "-a");
-    let build_code     = arglen > 2 && matches!(args[1], "--build"    | "-b");
-    let write_elf      = arglen > 2 && matches!(args[1], "--elf"      | "-e");
-    let decode_binary  = arglen > 2 && matches!(args[1], "--decode-bin"     );
-    let decode_text    = arglen > 2 && matches!(args[1], "--decode-text"    );
-    let write_elf_dbg  = arglen > 2 && matches!(args[1], "--elf-dbg"        );
-    let run_from_elf   = arglen > 2 && matches!(args[1], "--run-elf"        );
-    let run_from_tools = arglen > 2 && matches!(args[1], "--run-tools"      );
-    let run_from_raw   = arglen > 2 && matches!(args[1], "--run-raw"        );
+    let show_usage = arglen > 1 && matches!(args[1], "--help" | "-h") || arglen == 1;
+    let start_stub = arglen > 1 && matches!(args[1], "--debugger" | "-d");
+    let assemble_code = arglen > 2 && matches!(args[1], "--assemble" | "-a");
+    let build_code = arglen > 2 && matches!(args[1], "--build" | "-b");
+    let write_elf = arglen > 2 && matches!(args[1], "--elf" | "-e");
+    let decode_binary = arglen > 2 && matches!(args[1], "--decode-bin");
+    let decode_text = arglen > 2 && matches!(args[1], "--decode-text");
+    let write_elf_dbg = arglen > 2 && matches!(args[1], "--elf-dbg");
+    let run_from_elf = arglen > 2 && matches!(args[1], "--run-elf");
+    let run_from_tools = arglen > 2 && matches!(args[1], "--run-tools");
+    let run_from_raw = arglen > 2 && matches!(args[1], "--run-raw");
 
     if show_usage {
         usage();
@@ -74,15 +76,18 @@ fn main() {
         // let data = words_to_bytes_be(&data);
         // print_bytes_hex(&data);
 
-        return ;
+        return;
     }
 
     if start_stub {
-        let memsize = 1024*1024;
-        let port    = 9999u16;
+        let memsize = 1024 * 1024;
+        let port = args
+            .get(2)
+            .map_or(Some(9999u16), |p| p.parse().map_or(None, |v| Some(v)))
+            .unwrap();
 
-        use env_logger::Env;
-        env_logger::Builder::from_env(Env::default().default_filter_or("trace")).init();
+        // use env_logger::Env;
+        // env_logger::Builder::from_env(Env::default().default_filter_or("trace")).init();
 
         use crate::utils::wait_for_new_debugger_at_port;
         let riscv32_dbg = wait_for_new_debugger_at_port(memsize, port);
@@ -90,7 +95,7 @@ fn main() {
         riscv32_dbg.custom_gdb_event_loop_thread();
         // riscv32_dbg.default_gdb_event_loop_thread();
 
-        return ;
+        return;
     }
 
     if write_elf {
@@ -122,8 +127,8 @@ fn main() {
     }
 
     if decode_binary {
-        use crate::lang::ext::InstructionFormat;
         use crate::lang::ext::Immediate;
+        use crate::lang::ext::InstructionFormat;
 
         let n = args[2].trim().replace("0x", "");
 
@@ -142,9 +147,9 @@ fn main() {
             _ => 0,
         };
 
-        println!("Immediate: {:x}", imm);
+        println!("Immediate: 0x{:x}", imm);
 
-        return ;
+        return;
     }
 
     if decode_text {
@@ -156,7 +161,7 @@ fn main() {
 
         println!("0x{:08x}", res);
 
-        return ;
+        return;
     }
 
     if write_elf_dbg {
@@ -184,49 +189,41 @@ fn main() {
             eprintln!("Error: something went wrong :/")
         }
 
-        return ;
+        return;
     }
 
     if run_from_elf {
         // Read ELF and execute the Machine (text + data)
-        use crate::emu::machine::Machine as _;
-
         let inputfile = args[2];
 
-        let mut m = utils::new_machine_from_elf(inputfile);
+        let machine = utils::emulate_from_elf(inputfile);
 
-        while let Ok(_) = m.decode() {
-        }
+        print_registers(&machine);
 
-        print_registers(&m);
-
-        return ;
+        return;
     }
 
     if run_from_tools {
         // Read code and instantiate Machine from parser tools
+        use crate::emu::machine::Machine as _;
         use crate::utils::build_code_repr;
         use crate::utils::new_machine_from_tools;
-        use crate::emu::machine::Machine as _;
 
         let inputfile = args[2];
 
-        let data = std::fs::read(inputfile)
-            .expect("Failed reading elf file");
+        let data = std::fs::read(inputfile).expect("Failed reading elf file");
 
-        let code = String::from_utf8(data)
-            .expect("Failed converting bytes to string");
+        let code = String::from_utf8(data).expect("Failed converting bytes to string");
 
         let tools = build_code_repr(&code);
 
         let mut m = new_machine_from_tools(&tools);
 
-        while let Ok(_) = m.decode() {
-        }
+        while let Ok(_) = m.decode() {}
 
         print_registers(&m);
 
-        return ;
+        return;
     }
 
     if run_from_raw {
@@ -234,29 +231,26 @@ fn main() {
         //
         // This mode supports only executing code found in the text section, therefore the use of
         // variables/functions and so on is forbidden and might cause the program to crash
-        use crate::utils::encode_to_words;
-        use crate::lang::lowassembly::DataEndianness;
-        use crate::emu::machine::SimpleMachine;
         use crate::emu::machine::Machine as _;
+        use crate::emu::machine::SimpleMachine;
+        use crate::lang::lowassembly::DataEndianness;
+        use crate::utils::encode_to_words;
 
         let inputfile = args[2];
 
-        let data = std::fs::read(inputfile)
-            .expect("Failed reading elf file");
+        let data = std::fs::read(inputfile).expect("Failed reading elf file");
 
-        let code = String::from_utf8(data)
-            .expect("Failed converting bytes to string");
+        let code = String::from_utf8(data).expect("Failed converting bytes to string");
 
         let words = encode_to_words(&code);
 
         let mut m = SimpleMachine::from_words(&words, DataEndianness::Be);
 
-        while let Ok(_) = m.decode() {
-        }
+        while let Ok(_) = m.decode() {}
 
         print_registers(&m);
 
-        return ;
+        return;
     }
 }
 

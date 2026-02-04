@@ -140,7 +140,7 @@ pub fn new_machine_from_tools(tools: &AssemblerTools) -> SimpleMachine {
 pub fn new_machine_from_elf(filename: &str) -> SimpleMachine {
     let data = std::fs::read(filename).expect("Failed reading elf file");
 
-    let reader = elfreader::ElfReader::new(&data, DataEndianness::Be)
+    let reader = elfreader::ElfReader::new(&data, DataEndianness::Le)
         .expect("Failed instantiating elf file reader");
 
     let textsec = reader.section(".text").unwrap();
@@ -175,7 +175,7 @@ pub fn new_machine_from_elf(filename: &str) -> SimpleMachine {
 
     let pc = reader.pc();
 
-    let mut m = SimpleMachine::from_bytes_size(memsize, DataEndianness::Be);
+    let mut m = SimpleMachine::from_bytes_size(memsize, DataEndianness::Le);
 
     m.write_memory_bytes(text_start, textdata);
     if has_data_section {
@@ -194,6 +194,18 @@ pub fn new_machine_from_bytes(text_bytes: &Vec<u8>) -> SimpleMachine {
 pub fn new_machine_from_words(text_words: &Vec<u32>) -> SimpleMachine {
     // print_bytes_hex(text_bytes);
     SimpleMachine::from_words(text_words, DataEndianness::Be)
+}
+
+pub fn emulate_from_elf(inputfile: &str) -> SimpleMachine {
+    let mut machine = new_machine_from_elf(inputfile);
+
+    loop {
+        let Ok(_) = machine.decode() else {
+            break;
+        };
+    }
+
+    machine
 }
 
 pub fn wait_for_new_debugger_at_port<'a>(

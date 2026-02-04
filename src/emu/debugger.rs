@@ -1,53 +1,25 @@
-use std::io::{
-    self,
-    Read,
-};
-use std::net::{
-    SocketAddr,
-    TcpListener,
-    TcpStream
-};
+use std::io::{self, Read};
 use std::marker::PhantomData;
-
+use std::net::{SocketAddr, TcpListener, TcpStream};
 
 use gdbstub::common::Signal;
-use gdbstub::target::ext::memory_map::MemoryMap;
-use gdbstub::target::{
-    Target,
-    TargetResult
-};
+use gdbstub::stub::state_machine::GdbStubStateMachine;
 use gdbstub::target::ext::base::BaseOps;
 use gdbstub::target::ext::base::singlethread::{
-    SingleThreadResumeOps,
-    SingleThreadSingleStepOps
+    SingleThreadBase, SingleThreadResume, SingleThreadSingleStep,
 };
-use gdbstub::target::ext::base::singlethread::{
-    SingleThreadBase,
-    SingleThreadResume,
-    SingleThreadSingleStep
-};
-use gdbstub::target::ext::breakpoints::{
-    Breakpoints,
-    SwBreakpoint
-};
-use gdbstub::target::ext::breakpoints::{
-    BreakpointsOps,
-    SwBreakpointOps
-};
-use gdbstub::stub::state_machine::GdbStubStateMachine;
-
+use gdbstub::target::ext::base::singlethread::{SingleThreadResumeOps, SingleThreadSingleStepOps};
+use gdbstub::target::ext::breakpoints::{Breakpoints, SwBreakpoint};
+use gdbstub::target::ext::breakpoints::{BreakpointsOps, SwBreakpointOps};
+use gdbstub::target::ext::memory_map::MemoryMap;
+use gdbstub::target::{Target, TargetResult};
 
 use gdbstub::conn::{Connection, ConnectionExt};
-use gdbstub::stub::{run_blocking, DisconnectReason, GdbStub};
 use gdbstub::stub::SingleThreadStopReason;
-
+use gdbstub::stub::{DisconnectReason, GdbStub, run_blocking};
 
 use crate::emu::machine::Machine;
 use crate::lang::lowassembly::DataEndianness;
-
-
-
-
 
 /// TCP based Stub
 pub struct SimpleGdbStub<'a, T: Machine> {
@@ -59,7 +31,6 @@ pub struct SimpleGdbStub<'a, T: Machine> {
 
     // GdbStug
     stub: GdbStub<'a, SimpleTarget<T>, TcpStream>,
-
     // Loop
     // _
 }
@@ -74,15 +45,10 @@ impl<'a, T: Machine> SimpleGdbStub<'a, T> {
         let target = SimpleTarget::from_words(mem);
         let (stream, _addr) = wait_for_gdb_connection(port)?;
         let stub = GdbStub::new(stream);
-        Ok(
-            SimpleGdbStub {
-                target,
-                stub,
-            }
-        )
+        Ok(SimpleGdbStub { target, stub })
     }
 
-    pub fn custom_gdb_event_loop_thread(mut self){
+    pub fn custom_gdb_event_loop_thread(mut self) {
         match self.stub.run_state_machine(&mut self.target) {
             Ok(sm_ok) => {
                 let mut handle_res = custom_handle_machine_state(sm_ok, &mut self.target);
@@ -96,8 +62,11 @@ impl<'a, T: Machine> SimpleGdbStub<'a, T> {
         }
     }
 
-    pub fn default_gdb_event_loop_thread(mut self){
-        match self.stub.run_blocking::<SimpleGdbBlockingEventLoop<T>>(&mut self.target) {
+    pub fn default_gdb_event_loop_thread(mut self) {
+        match self
+            .stub
+            .run_blocking::<SimpleGdbBlockingEventLoop<T>>(&mut self.target)
+        {
             Ok(disconnect_reason) => match disconnect_reason {
                 DisconnectReason::Disconnect => {
                     println!("Client disconnected")
@@ -129,10 +98,6 @@ impl<'a, T: Machine> SimpleGdbStub<'a, T> {
     }
 }
 
-
-
-
-
 // Connection
 
 /// Blocks until a GDB client connects via TCP.
@@ -148,11 +113,6 @@ fn wait_for_gdb_connection(port: u16) -> io::Result<(TcpStream, SocketAddr)> {
     println!("  gdb> x/1xw 0x10074");
     sock.accept()
 }
-
-
-
-
-
 
 // Target
 
@@ -188,20 +148,20 @@ impl<T: Machine> Target for SimpleTarget<T> {
     type Arch = gdbstub_arch::riscv::Riscv32;
 
     #[inline(always)]
-    fn base_ops(&mut self) -> BaseOps<'_, Self::Arch, Self::Error>
-    {
+    fn base_ops(&mut self) -> BaseOps<'_, Self::Arch, Self::Error> {
         BaseOps::SingleThread(self)
     }
 
     // opt-in to support for setting/removing breakpoints
     #[inline(always)]
-    fn support_breakpoints(&mut self) -> Option<BreakpointsOps<'_, Self>>
-    {
+    fn support_breakpoints(&mut self) -> Option<BreakpointsOps<'_, Self>> {
         Some(self)
     }
 
     #[inline(always)]
-    fn support_memory_map(&mut self) -> Option<gdbstub::target::ext::memory_map::MemoryMapOps<'_, Self>> {
+    fn support_memory_map(
+        &mut self,
+    ) -> Option<gdbstub::target::ext::memory_map::MemoryMapOps<'_, Self>> {
         Some(self)
     }
 }
@@ -210,11 +170,10 @@ impl<T: Machine> SingleThreadBase for SimpleTarget<T> {
     fn read_registers(
         &mut self,
         regs: &mut gdbstub_arch::riscv::reg::RiscvCoreRegs<u32>,
-    ) -> TargetResult<(), Self>
-    { 
+    ) -> TargetResult<(), Self> {
         let myregs = self.machine.read_registers();
         let gps = &myregs[..32];
-        let pc  = &myregs[32];
+        let pc = &myregs[32];
         for (idx, reg) in gps.iter().enumerate() {
             regs.x[idx] = (*reg).into();
         }
@@ -225,8 +184,7 @@ impl<T: Machine> SingleThreadBase for SimpleTarget<T> {
     fn write_registers(
         &mut self,
         regs: &gdbstub_arch::riscv::reg::RiscvCoreRegs<u32>,
-    ) -> TargetResult<(), Self>
-    { 
+    ) -> TargetResult<(), Self> {
         let gprs = regs.x.to_vec();
         let pc: usize = regs.pc.try_into().unwrap();
         self.machine.write_registers(gprs, pc);
@@ -235,35 +193,28 @@ impl<T: Machine> SingleThreadBase for SimpleTarget<T> {
 
     // TODO: passing 4 as the alignment will later on cause problems. The easiest way to deal with
     // this is to switch the memory endian to match that of gdb (LittleEndian).
-    fn read_addrs(
-        &mut self,
-        start_addr: u32,
-        data: &mut [u8],
-    ) -> TargetResult<usize, Self>
-    {
+    fn read_addrs(&mut self, start_addr: u32, data: &mut [u8]) -> TargetResult<usize, Self> {
         let start_addr: usize = start_addr.try_into().unwrap();
         let data_size = data.len();
         let mem_size = self.machine.bytes_count();
         if start_addr < mem_size {
             let free_mem_size = mem_size - start_addr;
-            let bytes_size = if data_size < free_mem_size { data_size } else { free_mem_size };
+            let bytes_size = if data_size < free_mem_size {
+                data_size
+            } else {
+                free_mem_size
+            };
             let bytes = self.machine.read_memory_bytes(start_addr, bytes_size, 4);
             for (idx, byte) in bytes.into_iter().enumerate() {
                 data[idx] = byte;
             }
             Ok(bytes_size)
-        }
-        else {
+        } else {
             Ok(0usize)
         }
     }
 
-    fn write_addrs(
-        &mut self,
-        start_addr: u32,
-        data: &[u8],
-    ) -> TargetResult<(), Self>
-    {
+    fn write_addrs(&mut self, start_addr: u32, data: &[u8]) -> TargetResult<(), Self> {
         let start: usize = start_addr.try_into().unwrap();
         self.machine.write_memory_bytes(start, data);
         Ok(())
@@ -277,10 +228,7 @@ impl<T: Machine> SingleThreadBase for SimpleTarget<T> {
 }
 
 impl<T: Machine> SingleThreadResume for SimpleTarget<T> {
-    fn resume(
-        &mut self,
-        _signal: Option<Signal>,
-    ) -> Result<(), Self::Error> {
+    fn resume(&mut self, _signal: Option<Signal>) -> Result<(), Self::Error> {
         self.state = TargetState::Running;
         Ok(())
     }
@@ -289,9 +237,7 @@ impl<T: Machine> SingleThreadResume for SimpleTarget<T> {
     // single-step resume as well
 
     #[inline(always)]
-    fn support_single_step(
-        &mut self
-    ) -> Option<SingleThreadSingleStepOps<'_, Self>> {
+    fn support_single_step(&mut self) -> Option<SingleThreadSingleStepOps<'_, Self>> {
         Some(self)
     }
 
@@ -299,11 +245,7 @@ impl<T: Machine> SingleThreadResume for SimpleTarget<T> {
 }
 
 impl<T: Machine> SingleThreadSingleStep for SimpleTarget<T> {
-    fn step(
-        &mut self,
-        _signal: Option<Signal>,
-    ) -> Result<(), Self::Error>
-    {
+    fn step(&mut self, _signal: Option<Signal>) -> Result<(), Self::Error> {
         self.state = TargetState::Stepping;
         Ok(())
     }
@@ -312,25 +254,19 @@ impl<T: Machine> SingleThreadSingleStep for SimpleTarget<T> {
 impl<T: Machine> Breakpoints for SimpleTarget<T> {
     // there are several kinds of breakpoints - this target uses software breakpoints
     #[inline(always)]
-    fn support_sw_breakpoint(&mut self) -> Option<SwBreakpointOps<'_, Self>>
-    {
+    fn support_sw_breakpoint(&mut self) -> Option<SwBreakpointOps<'_, Self>> {
         Some(self)
     }
-    
+
     // support_hw_breakpoint
 }
 
 impl<T: Machine> SwBreakpoint for SimpleTarget<T> {
-    fn add_sw_breakpoint(
-        &mut self,
-        addr: u32,
-        kind: usize,
-    ) -> TargetResult<bool, Self>
-    {
+    fn add_sw_breakpoint(&mut self, addr: u32, kind: usize) -> TargetResult<bool, Self> {
         // According to the docs found in 'gdbstub_arch::riscv::Riscv32', kind is the 'size' to be
         // used by this breakpoint (whatever that means)
-        println!("Trying to add a sw breakpoint at {} {}", addr, kind);
-        println!("But next pc is probably going to be {}", self.machine.predict_next_pc());
+        // println!("Trying to add a sw breakpoint at {} {}", addr, kind);
+        // println!("But next pc is probably going to be {}", self.machine.predict_next_pc());
         let next_addr = self.machine.predict_next_pc();
 
         // we add both the predicted address by machine and the address sent by gdb to handle
@@ -355,22 +291,12 @@ impl<T: Machine> SwBreakpoint for SimpleTarget<T> {
         Ok(true)
     }
 
-    fn remove_sw_breakpoint(
-        &mut self,
-        addr: u32,
-        kind: usize,
-    ) -> TargetResult<bool, Self>
-    {
+    fn remove_sw_breakpoint(&mut self, addr: u32, kind: usize) -> TargetResult<bool, Self> {
         // println!("Trying to rm a sw breakpoint at {} {}", addr, kind);
-        if let Some(pair) = self.breakpoints
-            .iter()
-            .enumerate()
-            .find(|pair| {
-                    let b = pair.1;
-                    b.0 == addr && b.1 == kind
-                }
-            )
-        {
+        if let Some(pair) = self.breakpoints.iter().enumerate().find(|pair| {
+            let b = pair.1;
+            b.0 == addr && b.1 == kind
+        }) {
             self.breakpoints.remove(pair.0);
         }
         Ok(true)
@@ -388,11 +314,14 @@ impl<T: Machine> MemoryMap for SimpleTarget<T> {
         // since GDB may request partial reads.
 
         let memory_size_bytes = self.machine.bytes_count();
-        let xml = format!("
+        let xml = format!(
+            "
 <memory-map>
   <memory type=\"ram\" start=\"0x00000000\" length=\"0x{:08x}\" permissions=\"rwx\"/>
 </memory-map>
-", memory_size_bytes);
+",
+            memory_size_bytes
+        );
 
         let xml_bytes = xml.as_bytes();
 
@@ -407,11 +336,6 @@ impl<T: Machine> MemoryMap for SimpleTarget<T> {
         Ok(n)
     }
 }
-
-
-
-
-
 
 // Loop
 
@@ -477,7 +401,8 @@ impl<T: Machine> run_blocking::BlockingEventLoop for SimpleGdbBlockingEventLoop<
                 Ok(0) => {
                     let _ = conn.set_nonblocking(false);
                     return Err(run_blocking::WaitForStopReasonError::Connection(
-                        std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "connection closed").into()
+                        std::io::Error::new(std::io::ErrorKind::UnexpectedEof, "connection closed")
+                            .into(),
                     ));
                 }
                 Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
@@ -500,8 +425,10 @@ impl<T: Machine> run_blocking::BlockingEventLoop for SimpleGdbBlockingEventLoop<
 
                     match state {
                         crate::emu::machine::MachineState::Exit(s) => {
-                            return Ok(run_blocking::Event::TargetStopped(SingleThreadStopReason::Exited(s as u8)));
-                        },
+                            return Ok(run_blocking::Event::TargetStopped(
+                                SingleThreadStopReason::Exited(s as u8),
+                            ));
+                        }
 
                         crate::emu::machine::MachineState::Ok => {
                             let pc_after = target.machine.read_pc();
@@ -509,12 +436,16 @@ impl<T: Machine> run_blocking::BlockingEventLoop for SimpleGdbBlockingEventLoop<
                             // if we hit a breakpoint, report SwBreak; else DoneStep
                             if target.breakpoints.iter().any(|b| b.0 == pc_after) {
                                 target.state = TargetState::Idle;
-                                return Ok(run_blocking::Event::TargetStopped(SingleThreadStopReason::SwBreak(())));
+                                return Ok(run_blocking::Event::TargetStopped(
+                                    SingleThreadStopReason::SwBreak(()),
+                                ));
                             } else {
                                 target.state = TargetState::Idle;
-                                return Ok(run_blocking::Event::TargetStopped(SingleThreadStopReason::DoneStep));
+                                return Ok(run_blocking::Event::TargetStopped(
+                                    SingleThreadStopReason::DoneStep,
+                                ));
                             }
-                        },
+                        }
                     }
                 }
 
@@ -526,17 +457,21 @@ impl<T: Machine> run_blocking::BlockingEventLoop for SimpleGdbBlockingEventLoop<
 
                     match state {
                         crate::emu::machine::MachineState::Exit(s) => {
-                            return Ok(run_blocking::Event::TargetStopped(SingleThreadStopReason::Exited(s as u8)));
-                        },
+                            return Ok(run_blocking::Event::TargetStopped(
+                                SingleThreadStopReason::Exited(s as u8),
+                            ));
+                        }
 
                         crate::emu::machine::MachineState::Ok => {
                             let pc = target.machine.read_pc();
                             if target.breakpoints.iter().any(|b| b.0 == pc) {
                                 target.state = TargetState::Idle;
-                                return Ok(run_blocking::Event::TargetStopped(SingleThreadStopReason::SwBreak(())));
+                                return Ok(run_blocking::Event::TargetStopped(
+                                    SingleThreadStopReason::SwBreak(()),
+                                ));
                             }
                             // continue the loop (we'll check incoming data every iteration)
-                        },
+                        }
                     }
                 }
 
@@ -544,7 +479,6 @@ impl<T: Machine> run_blocking::BlockingEventLoop for SimpleGdbBlockingEventLoop<
                     // nothing to do: sleep a bit to avoid burning CPU
                     std::thread::sleep(std::time::Duration::from_millis(1));
                 }
-
             }
         }
     }
@@ -564,11 +498,12 @@ impl<T: Machine> run_blocking::BlockingEventLoop for SimpleGdbBlockingEventLoop<
 
 fn custom_handle_machine_state<'a, T: Machine>(
     stub_sm: GdbStubStateMachine<'a, SimpleTarget<T>, TcpStream>,
-    target: &mut SimpleTarget<T>
-) -> Result<GdbStubStateMachine<'a, SimpleTarget<T>, TcpStream>, ()>
-{
+    target: &mut SimpleTarget<T>,
+) -> Result<GdbStubStateMachine<'a, SimpleTarget<T>, TcpStream>, ()> {
     match stub_sm {
-        gdbstub::stub::state_machine::GdbStubStateMachine::Idle(mut gdb_stub_state_machine_inner) => {
+        gdbstub::stub::state_machine::GdbStubStateMachine::Idle(
+            mut gdb_stub_state_machine_inner,
+        ) => {
             let read_result = ConnectionExt::read(gdb_stub_state_machine_inner.borrow_conn());
             match read_result {
                 Ok(byte) => {
@@ -577,20 +512,22 @@ fn custom_handle_machine_state<'a, T: Machine>(
                         Ok(stub_ok) => {
                             // println!("Stub Ok");
                             Ok(stub_ok)
-                        },
+                        }
                         Err(_stub_err) => {
                             // println!("Stub Err: {:?}", stub_err);
                             Err(())
                         }
                     }
-                },
+                }
                 Err(_err) => {
                     // println!("Error in idle {:?}", err);
                     Err(())
                 }
             }
-        },
-        gdbstub::stub::state_machine::GdbStubStateMachine::Running(mut gdb_stub_state_machine_inner) => {
+        }
+        gdbstub::stub::state_machine::GdbStubStateMachine::Running(
+            mut gdb_stub_state_machine_inner,
+        ) => {
             use run_blocking::Event as BlockingEventLoopEvent;
             use run_blocking::WaitForStopReasonError;
 
@@ -603,8 +540,7 @@ fn custom_handle_machine_state<'a, T: Machine>(
                     let gdb_res = gdb_stub_state_machine_inner.report_stop(target, stop_reason);
                     if let Ok(gdb_ok) = gdb_res {
                         Ok(gdb_ok)
-                    }
-                    else {
+                    } else {
                         Err(())
                     }
                 }
@@ -613,8 +549,7 @@ fn custom_handle_machine_state<'a, T: Machine>(
                     let gdb_res = gdb_stub_state_machine_inner.incoming_data(target, byte);
                     if let Ok(gdb_ok) = gdb_res {
                         Ok(gdb_ok)
-                    }
-                    else {
+                    } else {
                         Err(())
                     }
                 }
@@ -628,12 +563,12 @@ fn custom_handle_machine_state<'a, T: Machine>(
                     Err(())
                 }
             }
-        },
-        gdbstub::stub::state_machine::GdbStubStateMachine::CtrlCInterrupt(_gdb_stub_state_machine_inner) => {
-            Err(())
-        },
-        gdbstub::stub::state_machine::GdbStubStateMachine::Disconnected(_gdb_stub_state_machine_inner) => {
-            Err(())
         }
+        gdbstub::stub::state_machine::GdbStubStateMachine::CtrlCInterrupt(
+            _gdb_stub_state_machine_inner,
+        ) => Err(()),
+        gdbstub::stub::state_machine::GdbStubStateMachine::Disconnected(
+            _gdb_stub_state_machine_inner,
+        ) => Err(()),
     }
 }

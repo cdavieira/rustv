@@ -4,17 +4,11 @@
 // * low level details (such as binary encoding/representation)
 
 use crate::{
-    lang::{
-        directive::Directive,
-        ext::Extension,
-        highassembly::SectionName,
-    }, streamreader::Position,
+    lang::{directive::Directive, ext::Extension, highassembly::SectionName},
+    streamreader::Position,
 };
 
 use super::ext::instruction_to_binary;
-
-
-
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum DataEndianness {
@@ -31,9 +25,8 @@ impl DataEndianness {
         bytes
             .chunks(4)
             .map(|chunk| {
-                let word_bytes: [u8; 4] = chunk
-                    .try_into()
-                    .expect("Error encoding data for directive");
+                let word_bytes: [u8; 4] =
+                    chunk.try_into().expect("Error encoding data for directive");
                 callback(word_bytes)
             })
             .collect()
@@ -53,42 +46,40 @@ impl DataEndianness {
         }
     }
 
-    pub fn modify_bytes_to_word(bytes: [u8; 4], source: DataEndianness, target: DataEndianness) -> u32 {
+    pub fn modify_bytes_to_word(
+        bytes: [u8; 4],
+        source: DataEndianness,
+        target: DataEndianness,
+    ) -> u32 {
         match source {
             DataEndianness::Le => {
                 let val = u32::from_le_bytes(bytes);
                 if target == DataEndianness::Le {
                     val
-                }
-                else {
+                } else {
                     u32::to_be(val)
                 }
-            },
+            }
             DataEndianness::Be => {
                 let val = u32::from_be_bytes(bytes);
                 if target == DataEndianness::Be {
                     val
-                }
-                else {
+                } else {
                     u32::to_le(val)
                 }
-            },
+            }
         }
     }
 
     pub fn modify_bytes(bytes: [u8; 4], source: DataEndianness, target: DataEndianness) -> [u8; 4] {
         if source == target {
             bytes
-        }
-        else {
+        } else {
             let conv = [bytes[3], bytes[2], bytes[1], bytes[0]];
             conv
         }
     }
 }
-
-
-
 
 #[derive(Debug)]
 pub struct EncodedData {
@@ -96,10 +87,6 @@ pub struct EncodedData {
     pub data: Vec<u32>,
     pub alignment: usize,
 }
-
-
-
-
 
 #[derive(Debug)]
 pub enum EncodableKey {
@@ -118,20 +105,28 @@ impl EncodableLine {
     pub fn encode(self) -> EncodedData {
         match self.key {
             EncodableKey::Op(op) => {
-                let data = vec![instruction_to_binary(&op, &self.args)];
+                let bin = instruction_to_binary(&op, &self.args);
+                let data = match bin {
+                    Ok(bin_inst) => vec![bin_inst],
+                    Err(e) => {
+                        panic!(
+                            "Error at line {} column {}: {}",
+                            self.file_pos.row(),
+                            self.file_pos.col(),
+                            e
+                        );
+                    }
+                };
                 EncodedData {
                     file_pos: self.file_pos,
                     data,
                     alignment: 4,
                 }
-            },
+            }
             EncodableKey::Directive(d) => {
                 let alignment = d.datatype().alignment();
                 let data: Vec<u32> = {
-                    let args: Vec<u32> = self.args
-                        .into_iter()
-                        .map(|arg| arg as u32)
-                        .collect();
+                    let args: Vec<u32> = self.args.into_iter().map(|arg| arg as u32).collect();
                     args
                 };
                 EncodedData {
@@ -139,34 +134,26 @@ impl EncodableLine {
                     data,
                     alignment,
                 }
-            },
+            }
         }
     }
 }
-
-
-
-
 
 pub struct PositionedEncodableLine {
     pub addr: usize,
     pub line: EncodableLine,
 }
 
-
-
-
-
 #[derive(Debug)]
 pub struct PositionedEncodableBlock {
     pub addr: usize,
     pub name: SectionName,
-    pub instructions: Vec<EncodableLine>
+    pub instructions: Vec<EncodableLine>,
 }
 
 #[derive(Debug)]
 pub struct PositionedEncodedBlock {
     pub addr: usize,
     pub name: SectionName,
-    pub instructions: Vec<EncodedData>
+    pub instructions: Vec<EncodedData>,
 }
